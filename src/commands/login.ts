@@ -121,3 +121,10 @@ export const login = async (
 
   sys.exit(0);
 };
+
+export const loginArgs = (yargs: yargs.Argv<{}>) =>
+  yargs.positional("tenant", {
+    demandOption: true,
+    type: "string",
+    describe: "Your P0 tenant ID",
+  });

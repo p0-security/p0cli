@@ -31,6 +31,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const FIRESTORE = getFirestore(app);
+export const auth = getAuth();
 
 export const IDENTITY_FILE_PATH = path.join(
   os.homedir(),
@@ -49,8 +50,8 @@ export const authenticate = async () => {
     creds.accessToken
   );
 
-  const auth = getAuth();
   auth.tenantId = storedCredential.tenantId;
+
   const userCredential = await signInWithCredential(auth, googleCredential);
 
   return userCredential.user;
