@@ -1,22 +1,28 @@
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { login } from "./commands/login";
+import { login, loginArgs } from "./commands/login";
+import { request, requestArgs } from "./commands/request";
+
+const VERSION = "0.1.0";
 
 export const main = () =>
   yargs(hideBin(process.argv))
-    .command(
-      "login [tenant]",
+    .scriptName("p0cli")
+    .command<{ tenant: string }>(
+      "login <tenant>",
       "Login to p0 using a web browser",
-      (yargs) =>
-        yargs.positional("tenant", {
-          demandOption: true,
-          type: "string",
-          describe: "Your P0 tenant ID",
-        }),
+      loginArgs,
       login
     )
+    .command<{}>(
+      "request <resource> [...arguments]",
+      "Manually request permissions on a resource",
+      requestArgs,
+      request
+    )
     .strict()
+    .version(VERSION)
     .demandCommand(1).argv;
 
 if (require.main === module) {
