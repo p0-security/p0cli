@@ -8,15 +8,14 @@ const VERSION = "0.1.0";
 
 export const main = () =>
   yargs(hideBin(process.argv))
-    .scriptName("p0cli")
     .command<{ tenant: string }>(
       "login <tenant>",
       "Login to p0 using a web browser",
       loginArgs,
       login
     )
-    .command<{}>(
-      "request <resource> [...arguments]",
+    .command<{ arguments: string[] }>(
+      "request [arguments..]",
       "Manually request permissions on a resource",
       requestArgs,
       request

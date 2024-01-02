@@ -34,7 +34,7 @@ type TokenErrorResponse = {
 };
 
 const tokenUrl = (tenantSlug: string) =>
-  `http://localhost:8081/o/${tenantSlug}/token`;
+  `http://localhost:8088/o/${tenantSlug}/auth/token`;
 
 const oauthDFGetCode = async (tenantSlug: string) => {
   const params = new URLSearchParams();
@@ -96,7 +96,7 @@ export const login = async (
   `);
 
   // No need to await the browser process
-  open(url);
+  void open(url);
 
   console.log(`Waiting for authorization ...`);
 
@@ -110,9 +110,13 @@ export const login = async (
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir);
   }
-  fs.writeFileSync(path.join(dir, "identity.json"), JSON.stringify(tokenData), {
-    mode: "600",
-  });
+  fs.writeFileSync(
+    path.join(dir, "identity.json"),
+    JSON.stringify({ ...tokenData, tenant: args.tenant }),
+    {
+      mode: "600",
+    }
+  );
 
   // validate auth
   await authenticate();

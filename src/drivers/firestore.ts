@@ -40,8 +40,11 @@ export const IDENTITY_FILE_PATH = path.join(
 );
 
 export const authenticate = async () => {
-  const storedCredential: { authCredential: AuthCredential; tenantId: string } =
-    JSON.parse(fs.readFileSync(IDENTITY_FILE_PATH).toString());
+  const storedCredential: {
+    authCredential: AuthCredential;
+    tenantId: string;
+    tenant: string;
+  } = JSON.parse(fs.readFileSync(IDENTITY_FILE_PATH).toString());
   const creds = OAuthProvider.credentialFromJSON(
     storedCredential.authCredential
   );
@@ -54,7 +57,7 @@ export const authenticate = async () => {
 
   const userCredential = await signInWithCredential(auth, googleCredential);
 
-  return userCredential.user;
+  return { userCredential, storedCredential };
 };
 
 export const collection = <T>(path: string, ...pathSegments: string[]) => {
