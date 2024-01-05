@@ -90,7 +90,7 @@ export const login = async (
 
     ${url}
 
-  When prompted, please enter the following code:
+Before authorizing, confirm that this code is displayed:
 
     ${codeData.user_code}
   `);
@@ -127,8 +127,8 @@ export const login = async (
 };
 
 export const loginArgs = (yargs: yargs.Argv<{}>) =>
-  yargs.positional("tenant", {
+  yargs.positional("account", {
     demandOption: true,
     type: "string",
-    describe: "Your P0 tenant ID",
+    describe: "Your P0 account ID",
   });
