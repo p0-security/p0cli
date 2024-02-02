@@ -1,28 +1,21 @@
+import { awsCommand } from "./commands/aws";
+import { loginCommand } from "./commands/login";
+import { requestCommand } from "./commands/request";
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { login, loginArgs } from "./commands/login";
-import { request, requestArgs } from "./commands/request";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
-export const main = () =>
-  yargs(hideBin(process.argv))
-    .command<{ tenant: string }>(
-      "login <tenant>",
-      "Login to p0 using a web browser",
-      loginArgs,
-      login
-    )
-    .command<{ arguments: string[] }>(
-      "request [arguments..]",
-      "Manually request permissions on a resource",
-      requestArgs,
-      request
-    )
+export const main = () => {
+  const commands = [awsCommand, loginCommand, requestCommand];
+  commands
+    .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
     .strict()
     .version(VERSION)
-    .demandCommand(1).argv;
+    .demandCommand(1)
+    .parse();
+};
 
 if (require.main === module) {
   try {

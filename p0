@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-deprecation
 
 const originalEmit = process.emit;
 process.emit = function (name, data, ...args) {

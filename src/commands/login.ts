@@ -1,11 +1,14 @@
-import yargs from "yargs";
+import { validateResponse } from "../common/fetch";
+import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
+import { doc, guard } from "../drivers/firestore";
+import { oktaLogin } from "../plugins/okta/login";
+import { sleep } from "../util";
+import { getDoc } from "firebase/firestore";
+import * as fs from "fs/promises";
 import open from "open";
-import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { sys } from "typescript";
-import { sleep } from "../util";
-import { authenticate } from "../drivers/firestore";
+import yargs from "yargs";
 
 // cf. https://www.oauth.com/oauth2-servers/device-flow/
 
@@ -14,24 +17,12 @@ const CLIENT_ID = "p0cli_6e522d700f09981af7814c8b98b021f9";
 
 const GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
-interface CodeData {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  interval: number;
-  expires_in: number;
-}
-
-type TokenErrorResponse = {
-  error:
-    | "missing parameter"
-    | "not found"
-    | "bad grant type"
-    | "slow_down"
-    | "authorization_pending"
-    | "access_denied"
-    | "expired_token";
+const pluginLoginMap = {
+  okta: oktaLogin,
 };
+const isPluginLoginKey = (
+  key: string | undefined
+): key is keyof typeof pluginLoginMap => !!key && key in pluginLoginMap;
 
 const tokenUrl = (tenantSlug: string) =>
   `http://localhost:8088/o/${tenantSlug}/auth/token`;
@@ -46,12 +37,12 @@ const oauthDFGetCode = async (tenantSlug: string) => {
   if (response.status !== 200) {
     throw `could not start login: ${await response.text()}`;
   }
-  return (await response.json()) as CodeData;
+  return (await response.json()) as AuthorizeResponse;
 };
 
 const oauthDFGetToken = async (
   tenantSlug: string,
-  codeData: CodeData
+  codeData: AuthorizeResponse
 ): Promise<object> => {
   const params = new URLSearchParams();
   params.append("client_id", CLIENT_ID);
@@ -76,17 +67,68 @@ const oauthDFGetToken = async (
           throw error;
       }
     default:
-      throw await response.text();
+      await validateResponse(response);
+      return {}; // unreachable;
   }
 };
 
 export const login = async (
-  args: yargs.ArgumentsCamelCase<{ tenant: string }>
+  args: { org: string },
+  options?: { skipAuthenticate?: boolean }
 ) => {
-  const codeData = await oauthDFGetCode(args.tenant);
+  try {
+    const orgDoc = await getDoc<Omit<OrgData, "slug">, object>(
+      doc(`orgs/${args.org}`)
+    );
+    const orgData = orgDoc.data();
+    if (!orgData) {
+      console.error("Could not find organization");
+      return sys.exit(1);
+    }
+    const orgWithSlug: OrgData = { ...orgData, slug: args.org };
+
+    const plugin = orgWithSlug?.ssoProvider;
+    const loginFn = isPluginLoginKey(plugin)
+      ? pluginLoginMap[plugin]
+      : genericLogin;
+    const tokenResponse = await loginFn(orgWithSlug);
+    await writeIdentity(orgWithSlug, tokenResponse);
+
+    // validate auth
+    if (!options?.skipAuthenticate) await authenticate();
+
+    console.error(`You are now logged in, and can use the p0 CLI.`);
+  } catch (error: any) {
+    console.dir(error, { depth: null });
+  }
+};
+
+const writeIdentity = async (org: OrgData, credential: TokenResponse) => {
+  const expires_at = Date.now() * 1e-3 + credential.expires_in - 1; // Add 1 second safety margin
+  console.error(`Saving authorization to ${IDENTITY_FILE_PATH}.`);
+  const dir = path.dirname(IDENTITY_FILE_PATH);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    IDENTITY_FILE_PATH,
+    JSON.stringify(
+      {
+        credential: { ...credential, expires_at },
+        org,
+      },
+      null,
+      2
+    ),
+    {
+      mode: "600",
+    }
+  );
+};
+
+const genericLogin = async (org: OrgData) => {
+  const codeData = await oauthDFGetCode(org.slug);
   const url = codeData.verification_uri;
 
-  console.log(`Opening a web browser at the following location:
+  console.error(`Opening a web browser at the following location:
 
     ${url}
 
@@ -98,37 +140,24 @@ Before authorizing, confirm that this code is displayed:
   // No need to await the browser process
   void open(url);
 
-  console.log(`Waiting for authorization ...`);
+  console.error(`Waiting for authorization ...`);
 
-  const tokenData = await oauthDFGetToken(args.tenant, codeData);
+  const tokenData = await oauthDFGetToken(org.slug, codeData);
 
-  console.log(`Authorized.`);
+  console.error(`Authorized.`);
 
-  console.log(`Saving authorization to ~/.p0cli/identity.json.`);
-
-  const dir = path.join(os.homedir(), ".p0cli");
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir);
-  }
-  fs.writeFileSync(
-    path.join(dir, "identity.json"),
-    JSON.stringify({ ...tokenData, tenant: args.tenant }),
-    {
-      mode: "600",
-    }
-  );
-
-  // validate auth
-  await authenticate();
-
-  console.log(`You are now logged in, and can use p0cli.`);
-
-  sys.exit(0);
+  return tokenData as TokenResponse;
 };
 
-export const loginArgs = (yargs: yargs.Argv<{}>) =>
-  yargs.positional("account", {
-    demandOption: true,
-    type: "string",
-    describe: "Your P0 account ID",
-  });
+export const loginCommand = (yargs: yargs.Argv) =>
+  yargs.command<{ org: string }>(
+    "login <org>",
+    "Log in to p0 using a web browser",
+    (yargs) =>
+      yargs.positional("org", {
+        demandOption: true,
+        type: "string",
+        describe: "Your P0 organization ID",
+      }),
+    guard(login)
+  );
