@@ -1,7 +1,7 @@
-import { addDoc } from "firebase/firestore";
 import * as firestore from "../drivers/firestore";
 import { auth } from "../drivers/firestore";
 import { readLine } from "../util";
+import { addDoc } from "firebase/firestore";
 
 // TODO: Restructure permission-request table
 // TODO: Use IDP data for principal

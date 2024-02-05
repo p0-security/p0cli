@@ -1,7 +1,8 @@
-import yargs from "yargs";
-import { authenticate, doc } from "../drivers/firestore";
+import { authenticate } from "../drivers/auth";
+import { doc, guard } from "../drivers/firestore";
 import { Unsubscribe, onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
+import yargs from "yargs";
 
 // TODO: Use structured exchange
 const ID_PATTERN = /Created a new access request \(ID `([^`]+)`\)/;
@@ -17,7 +18,7 @@ const isCompletedStatus = (
 ): status is keyof typeof COMPLETED_REQUEST_STATUSES =>
   status in COMPLETED_REQUEST_STATUSES;
 
-export const requestArgs = (yargs: yargs.Argv<{}>) =>
+const requestArgs = <T>(yargs: yargs.Argv<T>) =>
   yargs
     .parserConfiguration({ "unknown-options-as-args": true })
     .option("wait", {
@@ -31,6 +32,14 @@ export const requestArgs = (yargs: yargs.Argv<{}>) =>
       string: true,
       default: [] as string[],
     });
+
+export const requestCommand = (yargs: yargs.Argv) =>
+  yargs.command<{ arguments: string[] }>(
+    "request [arguments..]",
+    "Manually request permissions on a resource",
+    requestArgs,
+    guard(request)
+  );
 
 const requestUrl = (tenant: string) =>
   `http://localhost:8088/o/${tenant}/command/`;
@@ -61,12 +70,12 @@ const waitForRequest = async (tenantId: string, requestId: string) => {
   });
 };
 
-export const request = async (
+const request = async (
   args: yargs.ArgumentsCamelCase<{ arguments: string[]; wait?: boolean }>
 ) => {
-  const { userCredential, storedCredential } = await authenticate();
+  const { userCredential, identity } = await authenticate();
   const token = await userCredential.user.getIdToken();
-  const response = await fetch(requestUrl(storedCredential.tenant), {
+  const response = await fetch(requestUrl(identity.org.slug), {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
