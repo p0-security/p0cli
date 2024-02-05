@@ -1,82 +1,19 @@
-import { validateResponse } from "../common/fetch";
 import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { googleLogin } from "../plugins/google/login";
 import { oktaLogin } from "../plugins/okta/login";
-import {
-  AuthorizeResponse,
-  TokenErrorResponse,
-  TokenResponse,
-} from "../types/oidc";
+import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
-import { sleep } from "../util";
 import { getDoc } from "firebase/firestore";
 import * as fs from "fs/promises";
-import open from "open";
 import * as path from "path";
-import { sys } from "typescript";
 import yargs from "yargs";
-
-// cf. https://www.oauth.com/oauth2-servers/device-flow/
-
-// TODO: Generate at install time
-const CLIENT_ID = "p0cli_6e522d700f09981af7814c8b98b021f9";
-
-const GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 const pluginLoginMap: Record<string, (org: OrgData) => Promise<TokenResponse>> =
   {
     google: googleLogin,
     okta: oktaLogin,
   };
-
-const tokenUrl = (tenantSlug: string) =>
-  `http://localhost:8088/o/${tenantSlug}/auth/token`;
-
-const oauthDFGetCode = async (tenantSlug: string) => {
-  const params = new URLSearchParams();
-  params.append("client_id", CLIENT_ID);
-  const response = await fetch(tokenUrl(tenantSlug), {
-    method: "POST",
-    body: params,
-  });
-  if (response.status !== 200) {
-    throw `could not start login: ${await response.text()}`;
-  }
-  return (await response.json()) as AuthorizeResponse;
-};
-
-const oauthDFGetToken = async (
-  tenantSlug: string,
-  codeData: AuthorizeResponse
-): Promise<object> => {
-  const params = new URLSearchParams();
-  params.append("client_id", CLIENT_ID);
-  params.append("device_code", codeData.device_code);
-  params.append("grant_type", GRANT_TYPE);
-  const response = await fetch(tokenUrl(tenantSlug), {
-    method: "POST",
-    body: params,
-  });
-  switch (response.status) {
-    case 200:
-      const data = await response.json();
-      return data as object;
-    case 400:
-      const error = ((await response.json()) as TokenErrorResponse).error;
-      switch (error) {
-        case "slow_down":
-        case "authorization_pending":
-          await sleep(codeData.interval);
-          return oauthDFGetToken(tenantSlug, codeData);
-        default:
-          throw error;
-      }
-    default:
-      await validateResponse(response);
-      return {}; // unreachable;
-  }
-};
 
 export const login = async (
   args: { org: string },
@@ -88,13 +25,15 @@ export const login = async (
     );
     const orgData = orgDoc.data();
     if (!orgData) {
-      console.error("Could not find organization");
-      return sys.exit(1);
+      throw "Could not find organization";
     }
     const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
     const plugin = orgWithSlug?.ssoProvider;
-    const loginFn = pluginLoginMap[plugin] ?? genericLogin;
+    const loginFn = pluginLoginMap[plugin];
+
+    if (!loginFn) throw "Unsupported login for your organization";
+
     const tokenResponse = await loginFn(orgWithSlug);
     await writeIdentity(orgWithSlug, tokenResponse);
 
@@ -126,31 +65,6 @@ const writeIdentity = async (org: OrgData, credential: TokenResponse) => {
       mode: "600",
     }
   );
-};
-
-const genericLogin = async (org: OrgData) => {
-  const codeData = await oauthDFGetCode(org.slug);
-  const url = codeData.verification_uri;
-
-  console.error(`Opening a web browser at the following location:
-
-    ${url}
-
-Before authorizing, confirm that this code is displayed:
-
-    ${codeData.user_code}
-  `);
-
-  // No need to await the browser process
-  void open(url);
-
-  console.error(`Waiting for authorization ...`);
-
-  const tokenData = await oauthDFGetToken(org.slug, codeData);
-
-  console.error(`Authorized.`);
-
-  return tokenData as TokenResponse;
 };
 
 export const loginCommand = (yargs: yargs.Argv) =>
