@@ -11,13 +11,14 @@ import { identity, uniq } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
 
-export const sts = (yargs: yargs.Argv<{ account: string | undefined }>) =>
+export const role = (yargs: yargs.Argv<{ account: string | undefined }>) =>
   yargs.command("role", "Interact with AWS roles", (yargs) =>
     yargs
       .command(
         "ls",
         "List available AWS roles",
         identity,
+        // TODO: select based on uidLocation
         guard(oktaAwsListRoles)
       )
       .command(
@@ -29,6 +30,7 @@ export const sts = (yargs: yargs.Argv<{ account: string | undefined }>) =>
             demandOption: true,
             describe: "An AWS role name",
           }),
+        // TODO: select based on uidLocation
         guard(oktaAwsAssumeRole)
       )
       .demandCommand(1)
@@ -101,6 +103,7 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
   const { account, samlResponse } = await initOktaSaml(args.account);
   const samlText = Buffer.from(samlResponse, "base64").toString("ascii");
   const samlObject = parseXml(samlText);
+  console.dir(samlObject, { depth: null });
   const samlAttributes =
     samlObject["saml2p:Response"]["saml2:Assertion"][
       "saml2:AttributeStatement"
