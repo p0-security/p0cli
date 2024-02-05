@@ -1,7 +1,14 @@
 import { validateResponse } from "../common/fetch";
 import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
+import { googleLogin } from "../plugins/google/login";
 import { oktaLogin } from "../plugins/okta/login";
+import {
+  AuthorizeResponse,
+  TokenErrorResponse,
+  TokenResponse,
+} from "../types/oidc";
+import { OrgData } from "../types/org";
 import { sleep } from "../util";
 import { getDoc } from "firebase/firestore";
 import * as fs from "fs/promises";
@@ -17,12 +24,11 @@ const CLIENT_ID = "p0cli_6e522d700f09981af7814c8b98b021f9";
 
 const GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
-const pluginLoginMap = {
-  okta: oktaLogin,
-};
-const isPluginLoginKey = (
-  key: string | undefined
-): key is keyof typeof pluginLoginMap => !!key && key in pluginLoginMap;
+const pluginLoginMap: Record<string, (org: OrgData) => Promise<TokenResponse>> =
+  {
+    google: googleLogin,
+    okta: oktaLogin,
+  };
 
 const tokenUrl = (tenantSlug: string) =>
   `http://localhost:8088/o/${tenantSlug}/auth/token`;
@@ -88,14 +94,12 @@ export const login = async (
     const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
     const plugin = orgWithSlug?.ssoProvider;
-    const loginFn = isPluginLoginKey(plugin)
-      ? pluginLoginMap[plugin]
-      : genericLogin;
+    const loginFn = pluginLoginMap[plugin] ?? genericLogin;
     const tokenResponse = await loginFn(orgWithSlug);
     await writeIdentity(orgWithSlug, tokenResponse);
 
     // validate auth
-    if (!options?.skipAuthenticate) await authenticate();
+    if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
 
     console.error(`You are now logged in, and can use the p0 CLI.`);
   } catch (error: any) {

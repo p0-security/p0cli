@@ -1,5 +1,5 @@
 /** Publicly readable organization data */
-type OrgData = {
+export type OrgData = {
   clientId: string;
   providerId: string;
   providerDomain?: string;

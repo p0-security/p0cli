@@ -1,4 +1,15 @@
-type AuthorizeResponse = {
+export type AuthorizeRequest = {
+  client_id: string;
+  code_challenge: string;
+  code_challenge_method: "plain" | "S256";
+  redirect_uri: string;
+  response_type: "code";
+  scope: string;
+  state?: string;
+  login_hint?: string;
+};
+
+export type AuthorizeResponse = {
   device_code: string;
   user_code: string;
   verification_uri: string;
@@ -8,7 +19,7 @@ type AuthorizeResponse = {
   interval: number;
 };
 
-type TokenResponse = {
+export type TokenResponse = {
   access_token: string;
   id_token: string;
   token_type: string;
@@ -19,7 +30,7 @@ type TokenResponse = {
   expiry: string;
 };
 
-type TokenErrorResponse = {
+export type TokenErrorResponse = {
   error:
     | "missing parameter"
     | "not found"

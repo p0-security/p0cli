@@ -1,7 +1,11 @@
 import { login } from "../commands/login";
 import { Identity } from "../types/identity";
 import { auth } from "./firestore";
-import { OAuthProvider, signInWithCredential } from "firebase/auth";
+import {
+  OAuthProvider,
+  SignInMethod,
+  signInWithCredential,
+} from "firebase/auth";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -12,11 +16,14 @@ export const IDENTITY_FILE_PATH = path.join(
   "identity.json"
 );
 
-export const loadCredentials = async () => {
+export const loadCredentials = async (options?: { noRefresh?: boolean }) => {
   try {
     const buffer = await fs.readFile(IDENTITY_FILE_PATH);
     const identity: Identity = JSON.parse(buffer.toString());
-    if (identity.credential.expires_at < Date.now() * 1e-3) {
+    if (
+      !options?.noRefresh &&
+      identity.credential.expires_at < Date.now() * 1e-3
+    ) {
       await login({ org: identity.org.slug }, { skipAuthenticate: true });
       console.error("\u200B"); // Force a new line
     }
@@ -29,9 +36,14 @@ export const loadCredentials = async () => {
   }
 };
 
-export const authenticate = async () => {
-  const identity = await loadCredentials();
-  const provider = new OAuthProvider(identity.org.providerId);
+export const authenticate = async (options?: { noRefresh?: boolean }) => {
+  const identity = await loadCredentials(options);
+  // TODO: Move to map lookup
+  const provider = new OAuthProvider(
+    identity.org.ssoProvider === "google"
+      ? SignInMethod.GOOGLE
+      : identity.org.providerId
+  );
   const credential = provider.credential({
     accessToken: identity.credential.access_token,
     idToken: identity.credential.id_token,

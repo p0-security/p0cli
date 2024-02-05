@@ -1,16 +1,13 @@
+import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { application } from "../../common/mime";
 import { Identity } from "../../types/identity";
+import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
+import { OrgData } from "../../types/org";
 import { sleep } from "../../util";
 import { AwsOktaSamlUidLocation } from "../aws/types";
 import { JSDOM } from "jsdom";
 import { omit } from "lodash";
 import open from "open";
-
-const OIDC_HEADERS = {
-  Accept: application.JSON,
-  "Content-Type": application.X_WWW_FORM_URLENCODED,
-};
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
