@@ -1,3 +1,4 @@
+import { config } from "./env";
 import { initializeApp } from "firebase/app";
 import { getAuth, OAuthProvider, signInWithCredential } from "firebase/auth";
 import {
@@ -10,14 +11,7 @@ import {
 } from "firebase/firestore";
 
 // Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyC9A5VXSwDDS-Vp4WH_UIanEqJvv_7XdlQ",
-  authDomain: "p0-gcp-project.firebaseapp.com",
-  projectId: "p0-gcp-project",
-  storageBucket: "p0-gcp-project.appspot.com",
-  messagingSenderId: "398809717501",
-  appId: "1:398809717501:web:6dd1cab893b2faeb06fc94",
-};
+const firebaseConfig = config.fs;
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

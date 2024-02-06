@@ -1,4 +1,5 @@
 import { authenticate } from "../drivers/auth";
+import { config } from "../drivers/env";
 import { doc, guard } from "../drivers/firestore";
 import { Unsubscribe, onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
@@ -41,8 +42,7 @@ export const requestCommand = (yargs: yargs.Argv) =>
     guard(request)
   );
 
-const requestUrl = (tenant: string) =>
-  `http://localhost:8088/o/${tenant}/command/`;
+const requestUrl = (tenant: string) => `${config.appUrl}/o/${tenant}/command/`;
 
 const waitForRequest = async (tenantId: string, requestId: string) => {
   return new Promise<number>((resolve) => {
