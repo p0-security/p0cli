@@ -1,4 +1,3 @@
-import { loadCredentials } from "./auth";
 import { initializeApp } from "firebase/app";
 import { getAuth, OAuthProvider, signInWithCredential } from "firebase/auth";
 import {

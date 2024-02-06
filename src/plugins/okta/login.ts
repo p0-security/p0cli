@@ -28,7 +28,7 @@ const authorize = async (org: OrgData) => {
     headers: OIDC_HEADERS,
     body: urlEncode({
       client_id: org.clientId,
-      scope: "openid email profile okta.apps.sso okta.apps.read",
+      scope: "openid email profile okta.apps.sso",
     }),
   };
   validateProviderDomain(org);
