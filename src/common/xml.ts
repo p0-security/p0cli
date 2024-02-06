@@ -14,7 +14,7 @@ const elementToObject = (el: XmlElement): any => {
           ? elementToObject(items[0]!)
           : items.map(elementToObject)
     );
-    Object.assign(object, { _attributes: el.attributes });
+    Object.assign(object, { _attributes: { ...el.attributes } });
     return object;
   }
   return el.text.trim();

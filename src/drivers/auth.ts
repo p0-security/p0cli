@@ -38,17 +38,18 @@ export const loadCredentials = async (options?: { noRefresh?: boolean }) => {
 
 export const authenticate = async (options?: { noRefresh?: boolean }) => {
   const identity = await loadCredentials(options);
+  const { credential } = identity;
   // TODO: Move to map lookup
   const provider = new OAuthProvider(
     identity.org.ssoProvider === "google"
       ? SignInMethod.GOOGLE
       : identity.org.providerId
   );
-  const credential = provider.credential({
-    accessToken: identity.credential.access_token,
-    idToken: identity.credential.id_token,
+  const firebaseCredential = provider.credential({
+    accessToken: credential.access_token,
+    idToken: credential.id_token,
   });
   auth.tenantId = identity.org.tenantId;
-  const userCredential = await signInWithCredential(auth, credential);
+  const userCredential = await signInWithCredential(auth, firebaseCredential);
   return { userCredential, identity };
 };

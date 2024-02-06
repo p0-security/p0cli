@@ -1,7 +1,7 @@
-import { sts } from "./sts";
+import { role } from "./role";
 import yargs from "yargs";
 
-const awsCommands = [sts];
+const awsCommands = [role];
 
 const awsArgs = (yargs: yargs.Argv) => {
   const base = yargs
