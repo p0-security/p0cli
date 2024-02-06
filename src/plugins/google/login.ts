@@ -1,6 +1,7 @@
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
+import { config } from "../../drivers/env";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
 
@@ -15,17 +16,11 @@ const GOOGLE_OIDC_REDIRECT_PORT = 52700;
 const GOOGLE_OIDC_REDIRECT_URL = `http://127.0.0.1:${GOOGLE_OIDC_REDIRECT_PORT}`;
 const PKCE_LENGTH = 128;
 
-const GOOGLE_OIDC_CLIENT_ID =
-  "398809717501-j4j8ldjicsspidl4ecj6nj1oomo9eda1.apps.googleusercontent.com";
-// Despite the name, this is not actually "secret" in any sense of the word.
-// Instead, the client is protected by requiring PKCE and defining the redirect URIs.
-const GOOGLE_OIDC_CLIENT_SECRET = "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";
-
 const requestAuth = async () => {
   const pkceChallenge = (await import("pkce-challenge")).default as any;
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const authBody: AuthorizeRequest = {
-    client_id: GOOGLE_OIDC_CLIENT_ID,
+    client_id: config.google.clientId,
     code_challenge: pkce.code_challenge,
     code_challenge_method: "S256",
     redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
@@ -41,8 +36,8 @@ const requestToken = async (
   pkce: { code_challenge: string; code_verifier: string }
 ) => {
   const body = {
-    client_id: GOOGLE_OIDC_CLIENT_ID,
-    client_secret: GOOGLE_OIDC_CLIENT_SECRET,
+    client_id: config.google.clientId,
+    client_secret: config.google.clientSecret,
     code,
     code_verifier: pkce.code_verifier,
     grant_type: "authorization_code",
