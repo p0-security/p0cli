@@ -13,6 +13,7 @@ const pluginLoginMap: Record<string, (org: OrgData) => Promise<TokenResponse>> =
   {
     google: googleLogin,
     okta: oktaLogin,
+    "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
   };
 
 export const login = async (
