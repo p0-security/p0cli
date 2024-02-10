@@ -1,4 +1,5 @@
 import { parseXml } from "../../../common/xml";
+import { authenticate } from "../../../drivers/auth";
 import { guard } from "../../../drivers/firestore";
 import { assumeRoleWithSaml } from "../../../plugins/aws/assumeRole";
 import { getAwsConfig } from "../../../plugins/aws/config";
@@ -7,7 +8,8 @@ import {
   AwsOktaSamlUidLocation,
 } from "../../../plugins/aws/types";
 import { getSamlResponse } from "../../../plugins/okta/login";
-import { identity, uniq } from "lodash";
+import { Authn } from "../../../types/identity";
+import { flatten, identity, uniq } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -46,10 +48,13 @@ const isOktaSamlConfig = (
  * If no account is passed, and the organization only has one account configured,
  * assumes that account.
  */
-const initOktaSaml = async (account: string | undefined) => {
-  const { identity, config } = await getAwsConfig(account);
+export const initOktaSaml = async (
+  authn: Authn,
+  account: string | undefined
+) => {
+  const { identity, config } = await getAwsConfig(authn, account);
   if (!isOktaSamlConfig(config))
-    throw `Account ${account} is not configured for Okta SAML login.`;
+    throw `Account ${config.account.description} is not configured for Okta SAML login.`;
   const samlResponse = await getSamlResponse(identity, config.uidLocation);
   return {
     samlResponse,
@@ -70,8 +75,12 @@ const initOktaSaml = async (account: string | undefined) => {
  * - The requested role is assigned to the user in Okta
  */
 const oktaAwsAssumeRole = async (args: { account?: string; role: string }) => {
-  const { account, config, samlResponse } = await initOktaSaml(args.account);
-  const stsXml = await assumeRoleWithSaml({
+  const authn = await authenticate();
+  const { account, config, samlResponse } = await initOktaSaml(
+    authn,
+    args.account
+  );
+  const awsCredential = await assumeRoleWithSaml({
     account,
     role: args.role,
     saml: {
@@ -79,15 +88,14 @@ const oktaAwsAssumeRole = async (args: { account?: string; role: string }) => {
       response: samlResponse,
     },
   });
-  const stsObject = parseXml(stsXml);
-  const stsCredentials =
-    stsObject.AssumeRoleWithSAMLResponse.AssumeRoleWithSAMLResult.Credentials;
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) console.error("Execute the following commands:\n");
   const indent = isTty ? "  " : "";
-  console.log(`${indent}export AWS_ACCESS_KEY_ID=${stsCredentials.AccessKeyId}
-${indent}export AWS_SECRET_ACCESS_KEY=${stsCredentials.SecretAccessKey}
-${indent}export AWS_SESSION_TOKEN=${stsCredentials.SessionToken}`);
+  console.log(
+    Object.entries(awsCredential)
+      .map(([key, value]) => `${indent}export ${key}=${value}`)
+      .join("\n")
+  );
   if (isTty)
     console.error(`
 Or, populate these environment variables using BASH command substitution:
@@ -100,10 +108,10 @@ Or, populate these environment variables using BASH command substitution:
 
 /** Lists assigned AWS roles for this user on this account */
 const oktaAwsListRoles = async (args: { account?: string }) => {
-  const { account, samlResponse } = await initOktaSaml(args.account);
+  const authn = await authenticate();
+  const { account, samlResponse } = await initOktaSaml(authn, args.account);
   const samlText = Buffer.from(samlResponse, "base64").toString("ascii");
   const samlObject = parseXml(samlText);
-  console.dir(samlObject, { depth: null });
   const samlAttributes =
     samlObject["saml2p:Response"]["saml2:Assertion"][
       "saml2:AttributeStatement"
@@ -114,9 +122,9 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
   );
   // Format:
   //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/SSOAmazonS3FullAccess'
-  const arns = (roleAttribute?.["saml2:AttributeValue"] as string[])?.map(
-    (r) => r.split(",")[1]!
-  );
+  const arns = (
+    flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
+  )?.map((r) => r.split(",")[1]!);
   const roles = arns
     .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
     .map((r) => r.split("/")[1]!);
