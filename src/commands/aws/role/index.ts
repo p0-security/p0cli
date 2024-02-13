@@ -121,13 +121,13 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
       a._attributes.Name === "https://aws.amazon.com/SAML/Attributes/Role"
   );
   // Format:
-  //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/SSOAmazonS3FullAccess'
+  //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
   const arns = (
     flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
   )?.map((r) => r.split(",")[1]!);
   const roles = arns
     .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
-    .map((r) => r.split("/")[1]!);
+    .map((r) => r.split("/").slice(1).join("/")!);
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) console.error(`Your available roles for account ${account}:`);
   if (!roles?.length) {
