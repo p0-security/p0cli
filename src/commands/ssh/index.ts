@@ -1,5 +1,6 @@
 import { authenticate } from "../../drivers/auth";
 import { doc, guard } from "../../drivers/firestore";
+import { AWS_API_VERSION } from "../../plugins/aws/api";
 import { assumeRoleWithSaml } from "../../plugins/aws/assumeRole";
 import { AwsCredentials } from "../../plugins/aws/types";
 import { Authn } from "../../types/identity";
@@ -12,6 +13,7 @@ import {
 import { sleep } from "../../util";
 import { initOktaSaml } from "../aws/role";
 import { request } from "../request";
+import { SSMClient, StartSessionCommand } from "@aws-sdk/client-ssm";
 import { onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import { spawn } from "node-pty";
@@ -19,7 +21,17 @@ import yargs from "yargs";
 
 const prefix = "arn:aws:ssm:us-west-2:391052057035:managed-instance/";
 
+/** Maximum amount of time to wait after access is approved to wait for access
+ *  to be configured
+ */
 const GRANT_TIMEOUT_MILLIS = 60e3;
+
+/** Maximum amount of time to wait after access is configured in AWS to wait
+ *  for access to propagate through AWS
+ */
+const ACCESS_TIMEOUT_MILLIS = 5e3;
+/** Polling interval for the above check */
+const ACCESS_CHECK_INTERVAL_MILLIS = 200;
 
 const INSTANCE_ARN_PATTERN =
   /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
@@ -32,6 +44,13 @@ type AwsSsh = {
     arn: string;
   };
   type: "session";
+};
+
+type SsmArgs = {
+  instance: string;
+  region: string;
+  requestId: string;
+  credential: AwsCredentials;
 };
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -81,12 +100,39 @@ const waitForProvisioning = async (authn: Authn, requestId: string) => {
   return result;
 };
 
-const spawnSsm = async (args: {
-  instance: string;
-  region: string;
-  requestId: string;
-  credential: AwsCredentials;
-}) =>
+const waitForAccess = async (args: SsmArgs) => {
+  const start = Date.now();
+  let lastError: any = undefined;
+  const client = new SSMClient({
+    apiVersion: AWS_API_VERSION,
+    region: args.region,
+    credentials: {
+      accessKeyId: args.credential.AWS_ACCESS_KEY_ID,
+      secretAccessKey: args.credential.AWS_SECRET_ACCESS_KEY,
+      sessionToken: args.credential.AWS_SESSION_TOKEN,
+    },
+  });
+  while (Date.now() - start < ACCESS_TIMEOUT_MILLIS) {
+    try {
+      // We don't use this response for anything; we just need this to succeed
+      await client.send(
+        new StartSessionCommand({
+          Target: args.instance,
+          Reason: "Test connectivity",
+        })
+      );
+      return;
+    } catch (error: any) {
+      if (error.__type === "AccessDeniedException") {
+        lastError = error;
+        await sleep(ACCESS_CHECK_INTERVAL_MILLIS);
+      } else throw error;
+    }
+  }
+  throw lastError;
+};
+
+const spawnSsm = async (args: SsmArgs) =>
   new Promise((resolve, _reject) => {
     const cols = process.stdout.columns ?? 80;
     const rows = process.stdout.rows ?? 50;
@@ -147,12 +193,14 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
       response: samlResponse,
     },
   });
-  await spawnSsm({
+  const args = {
     instance: instance!,
     region: region!,
     requestId: request.id,
     credential: bastionCredential,
-  });
+  };
+  await waitForAccess(args);
+  await spawnSsm(args);
 };
 
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
@@ -174,8 +222,5 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
     return;
   }
   const requestData = await waitForProvisioning(authn, requestId);
-  // TODO: replace with retries / access detection
-  await sleep(2e3);
-  // console.log(requestData);
   await ssm(authn, { ...requestData, id: requestId });
 };
