@@ -13,6 +13,7 @@ import { sleep } from "../../util";
 import { initOktaSaml } from "../aws/role";
 import { request } from "../request";
 import { onSnapshot } from "firebase/firestore";
+import { pick } from "lodash";
 import { spawn } from "node-pty";
 import yargs from "yargs";
 
@@ -155,11 +156,12 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
   });
 };
 
-const ssh = async (args: { instance: string }) => {
+const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   const arn = `${prefix}${args.instance}`;
   const authn = await authenticate();
   const requestId = await request(
     {
+      ...pick(args, "$0", "_"),
       arguments: ["ssh", "session", arn],
       wait: true,
     },

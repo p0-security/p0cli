@@ -4,6 +4,7 @@ import { doc, guard } from "../drivers/firestore";
 import { Authn } from "../types/identity";
 import { Request } from "../types/request";
 import { Unsubscribe, onSnapshot } from "firebase/firestore";
+import * as path from "node:path";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -74,10 +75,10 @@ const waitForRequest = async (tenantId: string, requestId: string) =>
   });
 
 export const request = async (
-  args: {
+  args: yargs.ArgumentsCamelCase<{
     arguments: string[];
     wait?: boolean;
-  },
+  }>,
   authn?: Authn
 ): Promise<string | undefined> => {
   const { userCredential, identity } = authn ?? (await authenticate());
@@ -88,7 +89,10 @@ export const request = async (
       authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ argv: ["request", ...args.arguments] }),
+    body: JSON.stringify({
+      argv: ["request", ...args.arguments],
+      scriptName: path.basename(args.$0),
+    }),
   });
   const text = await response.text();
   const data = JSON.parse(text);

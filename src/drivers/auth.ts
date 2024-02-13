@@ -16,7 +16,9 @@ export const IDENTITY_FILE_PATH = path.join(
   "identity.json"
 );
 
-export const loadCredentials = async (options?: { noRefresh?: boolean }) => {
+export const loadCredentials = async (options?: {
+  noRefresh?: boolean;
+}): Promise<Identity> => {
   try {
     const buffer = await fs.readFile(IDENTITY_FILE_PATH);
     const identity: Identity = JSON.parse(buffer.toString());
@@ -26,6 +28,7 @@ export const loadCredentials = async (options?: { noRefresh?: boolean }) => {
     ) {
       await login({ org: identity.org.slug }, { skipAuthenticate: true });
       console.error("\u200B"); // Force a new line
+      return loadCredentials({ noRefresh: true });
     }
     return identity;
   } catch (error: any) {
