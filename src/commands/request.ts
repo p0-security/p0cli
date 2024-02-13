@@ -2,6 +2,7 @@ import { authenticate } from "../drivers/auth";
 import { config } from "../drivers/env";
 import { doc, guard } from "../drivers/firestore";
 import { Unsubscribe, onSnapshot } from "firebase/firestore";
+import * as path from "node:path";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -81,7 +82,10 @@ const request = async (
       authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ argv: ["request", ...args.arguments] }),
+    body: JSON.stringify({
+      argv: ["request", ...args.arguments],
+      scriptName: path.basename(args.$0),
+    }),
   });
   try {
     const data = await response.json();
