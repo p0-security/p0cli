@@ -1,6 +1,31 @@
 import { urlEncode, validateResponse } from "../../common/fetch";
+import { parseXml } from "../../common/xml";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
+import { AwsCredentials } from "./types";
+import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+
+const roleArn = (args: { account: string; role: string }) =>
+  `${arnPrefix(args.account)}:role/${args.role}`;
+
+const stsAssume = async (
+  params: Record<string, string>
+): Promise<AwsCredentials> => {
+  const url = `https://sts.amazonaws.com?${urlEncode(params)}`;
+  const response = await fetch(url, {
+    method: "GET",
+  });
+  await validateResponse(response);
+  const stsXml = await response.text();
+  const stsObject = parseXml(stsXml);
+  const stsCredentials =
+    stsObject.AssumeRoleWithSAMLResponse.AssumeRoleWithSAMLResult.Credentials;
+  return {
+    AWS_ACCESS_KEY_ID: stsCredentials.AccessKeyId,
+    AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
+    AWS_SESSION_TOKEN: stsCredentials.SessionToken,
+  };
+};
 
 /** Assumes an AWS role via SAML login */
 export const assumeRoleWithSaml = async (args: {
@@ -14,21 +39,16 @@ export const assumeRoleWithSaml = async (args: {
     /** A base64-encoded SAML response document */
     response: string;
   };
-}) => {
-  const params = urlEncode({
+}): Promise<AwsCredentials> => {
+  const params = {
     Version: AWS_API_VERSION,
     Action: "AssumeRoleWithSAML",
-    RoleArn: `${arnPrefix(args.account)}:role/${args.role}`,
+    RoleArn: roleArn(args),
     PrincipalArn: `${arnPrefix(args.account)}:saml-provider/${
       args.saml.providerName
     }`,
     // Note that, despite the name, AWS actually expects a SAML Response
     SAMLAssertion: args.saml.response,
-  });
-  const url = `https://sts.amazonaws.com?${params}`;
-  const response = await fetch(url, {
-    method: "GET",
-  });
-  await validateResponse(response);
-  return await response.text();
+  };
+  return await stsAssume(params);
 };

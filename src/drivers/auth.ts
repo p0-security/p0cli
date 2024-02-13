@@ -1,5 +1,5 @@
 import { login } from "../commands/login";
-import { Identity } from "../types/identity";
+import { Authn, Identity } from "../types/identity";
 import { auth } from "./firestore";
 import {
   OAuthProvider,
@@ -39,7 +39,9 @@ export const loadCredentials = async (options?: {
   }
 };
 
-export const authenticate = async (options?: { noRefresh?: boolean }) => {
+export const authenticate = async (options?: {
+  noRefresh?: boolean;
+}): Promise<Authn> => {
   const identity = await loadCredentials(options);
   const { credential } = identity;
   // TODO: Move to map lookup

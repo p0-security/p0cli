@@ -20,31 +20,26 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  try {
-    const orgDoc = await getDoc<Omit<OrgData, "slug">, object>(
-      doc(`orgs/${args.org}`)
-    );
-    const orgData = orgDoc.data();
-    if (!orgData) {
-      throw "Could not find organization";
-    }
-    const orgWithSlug: OrgData = { ...orgData, slug: args.org };
+  const orgDoc = await getDoc<Omit<OrgData, "slug">, object>(
+    doc(`orgs/${args.org}`)
+  );
+  const orgData = orgDoc.data();
+  if (!orgData) throw "Could not find organization";
 
-    const plugin = orgWithSlug?.ssoProvider;
-    const loginFn = pluginLoginMap[plugin];
+  const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
-    if (!loginFn) throw "Unsupported login for your organization";
+  const plugin = orgWithSlug?.ssoProvider;
+  const loginFn = pluginLoginMap[plugin];
 
-    const tokenResponse = await loginFn(orgWithSlug);
-    await writeIdentity(orgWithSlug, tokenResponse);
+  if (!loginFn) throw "Unsupported login for your organization";
 
-    // validate auth
-    if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
+  const tokenResponse = await loginFn(orgWithSlug);
+  await writeIdentity(orgWithSlug, tokenResponse);
 
-    console.error(`You are now logged in, and can use the p0 CLI.`);
-  } catch (error: any) {
-    console.dir(error, { depth: null });
-  }
+  // validate auth
+  if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
+
+  console.error(`You are now logged in, and can use the p0 CLI.`);
 };
 
 const writeIdentity = async (org: OrgData, credential: TokenResponse) => {

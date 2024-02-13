@@ -1,11 +1,13 @@
-import { authenticate, loadCredentials } from "../../drivers/auth";
 import { doc } from "../../drivers/firestore";
+import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
 import { getDoc } from "firebase/firestore";
 
-export const getAwsConfig = async (account: string | undefined) => {
-  const identity = await loadCredentials();
-  await authenticate();
+export const getAwsConfig = async (
+  authn: Authn,
+  account: string | undefined
+) => {
+  const { identity } = authn;
   const snapshot = await getDoc<AwsConfig, object>(
     doc(`o/${identity.org.tenantId}/integrations/aws`)
   );
