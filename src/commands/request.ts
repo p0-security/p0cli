@@ -97,7 +97,7 @@ export const request = async (
     sys.exit(1);
     return undefined;
   } else if ("ok" in data && "message" in data && data.ok) {
-    console.log(data.message);
+    console.error(data.message);
     const idMatch = data.message.match(ID_PATTERN);
     if (!idMatch) throw "P0 application did not return a request ID";
     const [, requestId] = idMatch;

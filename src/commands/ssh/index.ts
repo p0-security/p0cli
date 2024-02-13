@@ -119,6 +119,7 @@ const spawnSsm = async (args: {
       child.write(d.toString("utf-8"))
     );
     process.stdin.resume();
+    // TODO: separate stdout / stderr
     const outListener = child.onData((d) => process.stdout.write(d));
     const exitListener = child.onExit((code) => {
       process.stdin.setRawMode(false);
@@ -126,7 +127,7 @@ const spawnSsm = async (args: {
       stdinListener.destroy();
       outListener.dispose();
       exitListener.dispose();
-      console.log("SSH session terminated");
+      console.error("SSH session terminated");
       resolve(code);
     });
   });
@@ -166,7 +167,7 @@ const ssh = async (args: { instance: string }) => {
   );
   // Hard code for testing only
   // const requestId = "CJm7LNRbRtg1ca7da6k4";
-  console.log("Waiting for access to be provisioned");
+  console.error("Waiting for access to be provisioned");
   if (!requestId) {
     console.error("Did not receive access ID from server");
     return;
