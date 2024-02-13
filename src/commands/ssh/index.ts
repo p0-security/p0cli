@@ -98,8 +98,8 @@ const spawnSsm = async (args: {
         "start-session",
         "--target",
         args.instance,
-        "--document-name",
-        ssmDocumentArn(args.requestId),
+        // "--document-name",
+        // ssmDocumentArn(args.requestId),
       ],
       {
         env: {
@@ -147,7 +147,6 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
       response: samlResponse,
     },
   });
-
   await spawnSsm({
     instance: instance!,
     region: region!,
@@ -168,13 +167,15 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
     authn
   );
   // Hard code for testing only
-  // const requestId = "CJm7LNRbRtg1ca7da6k4";
+  // const requestId = "v0SMHf4BbbGj6NOQrdjx";
   console.error("Waiting for access to be provisioned");
   if (!requestId) {
     console.error("Did not receive access ID from server");
     return;
   }
   const requestData = await waitForProvisioning(authn, requestId);
+  // TODO: replace with retries / access detection
+  await sleep(2e3);
   // console.log(requestData);
   await ssm(authn, { ...requestData, id: requestId });
 };
