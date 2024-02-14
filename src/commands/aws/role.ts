@@ -1,14 +1,12 @@
-import { parseXml } from "../../../common/xml";
-import { authenticate } from "../../../drivers/auth";
-import { guard } from "../../../drivers/firestore";
-import { assumeRoleWithSaml } from "../../../plugins/aws/assumeRole";
-import { getAwsConfig } from "../../../plugins/aws/config";
-import {
-  AwsItemConfig,
-  AwsOktaSamlUidLocation,
-} from "../../../plugins/aws/types";
-import { getSamlResponse } from "../../../plugins/okta/login";
-import { Authn } from "../../../types/identity";
+import { parseXml } from "../../common/xml";
+import { authenticate } from "../../drivers/auth";
+import { guard } from "../../drivers/firestore";
+import { assumeRoleWithSaml } from "../../plugins/aws/assumeRole";
+import { getAwsConfig } from "../../plugins/aws/config";
+import { AwsItemConfig, AwsOktaSamlUidLocation } from "../../plugins/aws/types";
+import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
+import { getSamlResponse } from "../../plugins/okta/login";
+import { Authn } from "../../types/identity";
 import { flatten, identity, uniq } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -76,18 +74,7 @@ export const initOktaSaml = async (
  */
 const oktaAwsAssumeRole = async (args: { account?: string; role: string }) => {
   const authn = await authenticate();
-  const { account, config, samlResponse } = await initOktaSaml(
-    authn,
-    args.account
-  );
-  const awsCredential = await assumeRoleWithSaml({
-    account,
-    role: args.role,
-    saml: {
-      providerName: config.uidLocation.samlProviderName,
-      response: samlResponse,
-    },
-  });
+  const awsCredential = await assumeRoleWithOktaSaml(authn, args);
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) console.error("Execute the following commands:\n");
   const indent = isTty ? "  " : "";

@@ -1,9 +1,9 @@
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { parseXml } from "../../common/xml";
+import { cached } from "../../drivers/auth";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
 import { AwsCredentials } from "./types";
-import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 
 const roleArn = (args: { account: string; role: string }) =>
   `${arnPrefix(args.account)}:role/${args.role}`;
