@@ -16,7 +16,7 @@ import { request } from "../request";
 import { SSMClient, StartSessionCommand } from "@aws-sdk/client-ssm";
 import { onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
-import { spawn } from "node-pty";
+import { spawn } from "node:child_process";
 import yargs from "yargs";
 
 const prefix = "arn:aws:ssm:us-west-2:391052057035:managed-instance/";
@@ -132,10 +132,8 @@ const waitForAccess = async (args: SsmArgs) => {
   throw lastError;
 };
 
-const spawnSsm = async (args: SsmArgs) =>
+const spawnSsmNode = async (args: SsmArgs) =>
   new Promise((resolve, _reject) => {
-    const cols = process.stdout.columns ?? 80;
-    const rows = process.stdout.rows ?? 50;
     const child = spawn(
       "/usr/bin/env",
       [
@@ -153,27 +151,12 @@ const spawnSsm = async (args: SsmArgs) =>
           ...args.credential,
           AWS_DEFAULT_REGION: args.region,
         },
-        rows,
-        cols,
+        stdio: "inherit",
       }
     );
-    process.stdout.on("resize", () => {
-      child.resize(process.stdout.columns, process.stdout.rows);
-    });
-    process.stdin.setRawMode(true);
-    process.stdin.setEncoding("utf-8");
-    const stdinListener = process.stdin.on("data", (d) =>
-      child.write(d.toString("utf-8"))
-    );
-    process.stdin.resume();
-    // TODO: separate stdout / stderr
-    const outListener = child.onData((d) => process.stdout.write(d));
-    const exitListener = child.onExit((code) => {
-      process.stdin.setRawMode(false);
-      process.stdin.resume();
-      stdinListener.destroy();
-      outListener.dispose();
-      exitListener.dispose();
+
+    const exitListener = child.on("exit", (code) => {
+      exitListener.unref();
       console.error("SSH session terminated");
       resolve(code);
     });
@@ -200,7 +183,7 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
     credential: bastionCredential,
   };
   await waitForAccess(args);
-  await spawnSsm(args);
+  await spawnSsmNode(args);
 };
 
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
@@ -215,8 +198,6 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
     authn,
     { message: "approval-required" }
   );
-  // Hard code for testing only
-  // const requestId = "v0SMHf4BbbGj6NOQrdjx";
   if (!response) {
     console.error("Did not receive access ID from server");
     return;
