@@ -8,14 +8,28 @@ import * as path from "node:path";
 import { sys } from "typescript";
 import yargs from "yargs";
 
-// TODO: Use structured exchange
-const ID_PATTERN = /Created a new access <.*\/([^/|]+)\|request>/;
+type OkCommandResponse = {
+  ok: true;
+  message: string;
+  id: string;
+  isPreexisting: string;
+};
+type ErrorCommandResponse = { error: string };
+type CommandResponse = OkCommandResponse | ErrorCommandResponse;
+
 const WAIT_TIMEOUT = 300e3;
 
+const APPROVED = { message: "Your request was approved", code: 0 };
+const DENIED = { message: "Your request was denied", code: 2 };
+const ERRORED = { message: "Your request encountered an error", code: 1 };
+
 const COMPLETED_REQUEST_STATUSES = {
-  APPROVED: { message: "Your request was approved", code: 0 },
-  DENIED: { message: "Your request was denied", code: 2 },
-  ERRORED: { message: "Your request encountered an error", code: 1 },
+  APPROVED,
+  APPROVED_NOTIFIED: APPROVED,
+  DONE: APPROVED,
+  DONE_NOTIFIED: APPROVED,
+  DENIED,
+  ERRORED,
 };
 const isCompletedStatus = (
   status: any
@@ -47,9 +61,14 @@ export const requestCommand = (yargs: yargs.Argv) =>
 
 const requestUrl = (tenant: string) => `${config.appUrl}/o/${tenant}/command/`;
 
-const waitForRequest = async (tenantId: string, requestId: string) =>
+const waitForRequest = async (
+  tenantId: string,
+  requestId: string,
+  logMessage: boolean
+) =>
   await new Promise<number>((resolve) => {
-    console.log("Will wait up to 5 minutes for this request to complete...");
+    if (logMessage)
+      console.log("Will wait up to 5 minutes for this request to complete...");
     let unsubscribe: Unsubscribe | undefined;
     let cancel: NodeJS.Timeout | undefined;
     unsubscribe = onSnapshot<Request, object>(
@@ -62,7 +81,7 @@ const waitForRequest = async (tenantId: string, requestId: string) =>
           if (cancel) clearTimeout(cancel);
           unsubscribe?.();
           const { message, code } = COMPLETED_REQUEST_STATUSES[status];
-          console.log(message);
+          if (code !== 0 || logMessage) console.log(message);
           resolve(code);
         }
       }
@@ -79,8 +98,11 @@ export const request = async (
     arguments: string[];
     wait?: boolean;
   }>,
-  authn?: Authn
-): Promise<string | undefined> => {
+  authn?: Authn,
+  options?: {
+    message?: "all" | "approval-required" | "none";
+  }
+): Promise<OkCommandResponse | undefined> => {
   const { userCredential, identity } = authn ?? (await authenticate());
   const token = await userCredential.user.getIdToken();
   const response = await fetch(requestUrl(identity.org.slug), {
@@ -95,26 +117,29 @@ export const request = async (
     }),
   });
   const text = await response.text();
-  const data = JSON.parse(text);
+  const data = JSON.parse(text) as CommandResponse;
   if ("error" in data) {
     console.error(data.error);
     sys.exit(1);
     return undefined;
   } else if ("ok" in data && "message" in data && data.ok) {
-    console.error(data.message);
-    const idMatch = data.message.match(ID_PATTERN);
-    if (!idMatch) throw "P0 application did not return a request ID";
-    const [, requestId] = idMatch;
-    if (args.wait && requestId && userCredential.user.tenantId) {
+    const logMessage =
+      !options?.message ||
+      options?.message === "all" ||
+      (options?.message === "approval-required" && !data.isPreexisting);
+    if (logMessage) console.error(data.message);
+    const { id } = data;
+    if (args.wait && id && userCredential.user.tenantId) {
       const code = await waitForRequest(
         userCredential.user.tenantId,
-        requestId
+        id,
+        logMessage
       );
       if (code) {
         sys.exit(code);
         return undefined;
       }
-      return requestId;
+      return data;
     } else return undefined;
   } else {
     throw data;

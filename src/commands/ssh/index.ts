@@ -206,21 +206,23 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   const arn = `${prefix}${args.instance}`;
   const authn = await authenticate();
-  const requestId = await request(
+  const response = await request(
     {
       ...pick(args, "$0", "_"),
       arguments: ["ssh", "session", arn],
       wait: true,
     },
-    authn
+    authn,
+    { message: "approval-required" }
   );
   // Hard code for testing only
   // const requestId = "v0SMHf4BbbGj6NOQrdjx";
-  console.error("Waiting for access to be provisioned");
-  if (!requestId) {
+  if (!response) {
     console.error("Did not receive access ID from server");
     return;
   }
-  const requestData = await waitForProvisioning(authn, requestId);
-  await ssm(authn, { ...requestData, id: requestId });
+  const { id, isPreexisting } = response;
+  if (!isPreexisting) console.error("Waiting for access to be provisioned");
+  const requestData = await waitForProvisioning(authn, id);
+  await ssm(authn, { ...requestData, id });
 };
