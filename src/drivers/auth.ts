@@ -16,6 +16,42 @@ export const IDENTITY_FILE_PATH = path.join(
   "identity.json"
 );
 
+export const cached = async <T>(
+  name: string,
+  loader: () => Promise<T>,
+  options: { duration: number }
+) => {
+  const loc = path.join(
+    path.dirname(IDENTITY_FILE_PATH),
+    "cache",
+    `${name}.json`
+  );
+
+  const loadCache = async () => {
+    const data = await loader();
+    if (!data) throw `Could not load credentials for "${name}"`;
+    await fs.mkdir(path.dirname(loc), { recursive: true, mode: "700" });
+    await fs.writeFile(loc, JSON.stringify(data), { mode: "600" });
+    return data;
+  };
+
+  try {
+    const stat = await fs.stat(loc);
+    if (stat.mtime.getTime() < Date.now() - options.duration) {
+      await fs.rm(loc);
+      return await loadCache();
+    }
+    const data = await fs.readFile(loc);
+    return JSON.parse(data.toString("utf-8"));
+  } catch (error: any) {
+    if (error?.code !== "ENOENT")
+      console.error(
+        `Could not load credentials "${name}" from cache: ${error.message ?? error}`
+      );
+    return await loadCache();
+  }
+};
+
 export const loadCredentials = async (options?: {
   noRefresh?: boolean;
 }): Promise<Identity> => {
@@ -44,6 +80,7 @@ export const authenticate = async (options?: {
 }): Promise<Authn> => {
   const identity = await loadCredentials(options);
   const { credential } = identity;
+
   // TODO: Move to map lookup
   const provider = new OAuthProvider(
     identity.org.ssoProvider === "google"
@@ -56,5 +93,6 @@ export const authenticate = async (options?: {
   });
   auth.tenantId = identity.org.tenantId;
   const userCredential = await signInWithCredential(auth, firebaseCredential);
+
   return { userCredential, identity };
 };

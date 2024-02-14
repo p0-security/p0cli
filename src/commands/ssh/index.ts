@@ -3,6 +3,7 @@ import { doc, guard } from "../../drivers/firestore";
 import { AWS_API_VERSION } from "../../plugins/aws/api";
 import { assumeRoleWithSaml } from "../../plugins/aws/assumeRole";
 import { AwsCredentials } from "../../plugins/aws/types";
+import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
 import {
   DENIED_STATUSES,
@@ -167,20 +168,15 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
 
-  const { config, samlResponse } = await initOktaSaml(authn, account);
-  const bastionCredential = await assumeRoleWithSaml({
-    account: account!,
+  const credential = await assumeRoleWithOktaSaml(authn, {
+    account,
     role: request.generatedRoles[0]!.role,
-    saml: {
-      providerName: config.uidLocation.samlProviderName,
-      response: samlResponse,
-    },
   });
   const args = {
     instance: instance!,
     region: region!,
     requestId: request.id,
-    credential: bastionCredential,
+    credential,
   };
   await waitForAccess(args);
   await spawnSsmNode(args);
