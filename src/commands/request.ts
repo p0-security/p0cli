@@ -12,7 +12,8 @@ type OkCommandResponse = {
   ok: true;
   message: string;
   id: string;
-  isPreexisting: string;
+  isPreexisting: boolean;
+  isPersistent: boolean;
 };
 type ErrorCommandResponse = { error: string };
 type CommandResponse = OkCommandResponse | ErrorCommandResponse;
@@ -126,7 +127,7 @@ export const request = async (
     const logMessage =
       !options?.message ||
       options?.message === "all" ||
-      (options?.message === "approval-required" && !data.isPreexisting);
+      (options?.message === "approval-required" && !data.isPreexisting && !data.isPersistent);
     if (logMessage) console.error(data.message);
     const { id } = data;
     if (args.wait && id && userCredential.user.tenantId) {
