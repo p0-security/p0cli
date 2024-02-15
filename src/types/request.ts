@@ -11,6 +11,9 @@ export type Request<T = object> = {
   generatedRoles: {
     role: string;
   }[];
+  generated: {
+    documentName: string;
+  }
   permission: T;
   principal: string;
 };
