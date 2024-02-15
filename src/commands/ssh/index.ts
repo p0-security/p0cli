@@ -30,7 +30,7 @@ const GRANT_TIMEOUT_MILLIS = 60e3;
 /** Maximum amount of time to wait after access is configured in AWS to wait
  *  for access to propagate through AWS
  */
-const ACCESS_TIMEOUT_MILLIS = 5e3;
+const ACCESS_TIMEOUT_MILLIS = 30e3;
 /** Polling interval for the above check */
 const ACCESS_CHECK_INTERVAL_MILLIS = 200;
 
