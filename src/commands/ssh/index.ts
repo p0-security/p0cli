@@ -20,7 +20,7 @@ import { pick } from "lodash";
 import { spawn } from "node:child_process";
 import yargs from "yargs";
 
-const prefix = "arn:aws:ssm:us-west-2:391052057035:managed-instance/";
+const awsRequestPrefix = "AWS:";
 
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
@@ -195,12 +195,12 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
 };
 
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
-  const arn = `${prefix}${args.instance}`;
+  // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: ["ssh", "session", arn],
+      arguments: ["ssh", "session", args.instance, "--provider", "aws"],
       wait: true,
     },
     authn,
