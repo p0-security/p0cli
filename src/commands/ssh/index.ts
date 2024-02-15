@@ -196,12 +196,11 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
 
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
-  const arn = args.instance.startsWith("arn:aws:") ? args.instance :`${awsRequestPrefix}${args.instance}`;
   const authn = await authenticate();
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: ["ssh", "session", arn],
+      arguments: ["ssh", "session", args.instance, "--provider", "aws"],
       wait: true,
     },
     authn,
