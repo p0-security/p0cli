@@ -14,7 +14,7 @@ import {
 import { sleep } from "../../util";
 import { initOktaSaml } from "../aws/role";
 import { request } from "../request";
-import { SSMClient, StartSessionCommand } from "@aws-sdk/client-ssm";
+import { SSMClient, StartSessionCommand, StartSessionCommandInput } from "@aws-sdk/client-ssm";
 import { onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import { spawn } from "node:child_process";
@@ -51,6 +51,7 @@ type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
+  documentName: string;
   credential: AwsCredentials;
 };
 
@@ -113,16 +114,20 @@ const waitForAccess = async (args: SsmArgs) => {
       sessionToken: args.credential.AWS_SESSION_TOKEN,
     },
   });
+  const commandInput: StartSessionCommandInput = {
+    Target: args.instance,
+    DocumentName: args.documentName
+  }
   while (Date.now() - start < ACCESS_TIMEOUT_MILLIS) {
     try {
       // We don't use this response for anything; we just need this to succeed
       await client.send(
         new StartSessionCommand({
-          Target: args.instance,
+          ...commandInput,
           Reason: "Test connectivity",
         })
       );
-      return;
+      return commandInput;
     } catch (error: any) {
       if (error.__type === "AccessDeniedException") {
         lastError = error;
@@ -133,8 +138,14 @@ const waitForAccess = async (args: SsmArgs) => {
   throw lastError;
 };
 
-const spawnSsmNode = async (args: SsmArgs) =>
-  new Promise((resolve, _reject) => {
+const spawnSsmNode = async (
+    args: Pick<SsmArgs, "region" | "credential">,
+    commandInput: StartSessionCommandInput) =>
+  new Promise((resolve, reject) => {
+    if (!commandInput.Target || !commandInput.DocumentName) {
+      reject("Command input is missing required fields: Target, DocumentName");
+      return;
+    }
     const child = spawn(
       "/usr/bin/env",
       [
@@ -142,9 +153,9 @@ const spawnSsmNode = async (args: SsmArgs) =>
         "ssm",
         "start-session",
         "--target",
-        args.instance,
-        // "--document-name",
-        // ssmDocumentArn(args.requestId),
+        commandInput.Target,
+        "--document-name",
+        commandInput.DocumentName
       ],
       {
         env: {
@@ -175,11 +186,12 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
   const args = {
     instance: instance!,
     region: region!,
+    documentName: request.generated.documentName,
     requestId: request.id,
     credential,
   };
-  await waitForAccess(args);
-  await spawnSsmNode(args);
+  const commandInput = await waitForAccess(args);
+  await spawnSsmNode(args, commandInput);
 };
 
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
