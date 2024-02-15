@@ -1,22 +1,19 @@
+import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
-import { config } from "../drivers/env";
 import { doc, guard } from "../drivers/firestore";
 import { Authn } from "../types/identity";
 import { Request } from "../types/request";
 import { Unsubscribe, onSnapshot } from "firebase/firestore";
-import * as path from "node:path";
 import { sys } from "typescript";
 import yargs from "yargs";
 
-type OkCommandResponse = {
+type RequestResponse = {
   ok: true;
   message: string;
   id: string;
   isPreexisting: boolean;
   isPersistent: boolean;
 };
-type ErrorCommandResponse = { error: string };
-type CommandResponse = OkCommandResponse | ErrorCommandResponse;
 
 const WAIT_TIMEOUT = 300e3;
 
@@ -60,8 +57,6 @@ export const requestCommand = (yargs: yargs.Argv) =>
     guard(request)
   );
 
-const requestUrl = (tenant: string) => `${config.appUrl}/o/${tenant}/command/`;
-
 const waitForRequest = async (
   tenantId: string,
   requestId: string,
@@ -103,31 +98,21 @@ export const request = async (
   options?: {
     message?: "all" | "approval-required" | "none";
   }
-): Promise<OkCommandResponse | undefined> => {
-  const { userCredential, identity } = authn ?? (await authenticate());
-  const token = await userCredential.user.getIdToken();
-  const response = await fetch(requestUrl(identity.org.slug), {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      argv: ["request", ...args.arguments],
-      scriptName: path.basename(args.$0),
-    }),
-  });
-  const text = await response.text();
-  const data = JSON.parse(text) as CommandResponse;
-  if ("error" in data) {
-    console.error(data.error);
-    sys.exit(1);
-    return undefined;
-  } else if ("ok" in data && "message" in data && data.ok) {
+): Promise<RequestResponse | undefined> => {
+  const resolvedAuthn = authn ?? (await authenticate());
+  const { userCredential } = resolvedAuthn;
+  const data = await fetchCommand<RequestResponse>(resolvedAuthn, args, [
+    "request",
+    ...args.arguments,
+  ]);
+
+  if (data && "ok" in data && "message" in data && data.ok) {
     const logMessage =
       !options?.message ||
       options?.message === "all" ||
-      (options?.message === "approval-required" && !data.isPreexisting && !data.isPersistent);
+      (options?.message === "approval-required" &&
+        !data.isPreexisting &&
+        !data.isPersistent);
     if (logMessage) console.error(data.message);
     const { id } = data;
     if (args.wait && id && userCredential.user.tenantId) {

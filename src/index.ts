@@ -1,5 +1,6 @@
 import { awsCommand } from "./commands/aws";
 import { loginCommand } from "./commands/login";
+import { lsCommand } from "./commands/ls";
 import { requestCommand } from "./commands/request";
 import { sshCommand } from "./commands/ssh";
 import { sys } from "typescript";
@@ -9,7 +10,13 @@ import { hideBin } from "yargs/helpers";
 const VERSION = "0.2.0";
 
 export const main = () => {
-  const commands = [awsCommand, loginCommand, requestCommand, sshCommand];
+  const commands = [
+    awsCommand,
+    loginCommand,
+    lsCommand,
+    requestCommand,
+    sshCommand,
+  ];
   commands
     .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
     .strict()
