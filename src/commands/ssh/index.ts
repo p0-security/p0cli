@@ -1,7 +1,6 @@
 import { authenticate } from "../../drivers/auth";
 import { doc, guard } from "../../drivers/firestore";
 import { AWS_API_VERSION } from "../../plugins/aws/api";
-import { assumeRoleWithSaml } from "../../plugins/aws/assumeRole";
 import { AwsCredentials } from "../../plugins/aws/types";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
@@ -12,9 +11,12 @@ import {
   Request,
 } from "../../types/request";
 import { sleep } from "../../util";
-import { initOktaSaml } from "../aws/role";
 import { request } from "../request";
-import { SSMClient, StartSessionCommand, StartSessionCommandInput } from "@aws-sdk/client-ssm";
+import {
+  SSMClient,
+  StartSessionCommand,
+  StartSessionCommandInput,
+} from "@aws-sdk/client-ssm";
 import { onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import { spawn } from "node:child_process";
@@ -116,8 +118,8 @@ const waitForAccess = async (args: SsmArgs) => {
   });
   const commandInput: StartSessionCommandInput = {
     Target: args.instance,
-    DocumentName: args.documentName
-  }
+    DocumentName: args.documentName,
+  };
   while (Date.now() - start < ACCESS_TIMEOUT_MILLIS) {
     try {
       // We don't use this response for anything; we just need this to succeed
@@ -139,8 +141,9 @@ const waitForAccess = async (args: SsmArgs) => {
 };
 
 const spawnSsmNode = async (
-    args: Pick<SsmArgs, "region" | "credential">,
-    commandInput: StartSessionCommandInput) =>
+  args: Pick<SsmArgs, "region" | "credential">,
+  commandInput: StartSessionCommandInput
+) =>
   new Promise((resolve, reject) => {
     if (!commandInput.Target || !commandInput.DocumentName) {
       reject("Command input is missing required fields: Target, DocumentName");
@@ -155,7 +158,7 @@ const spawnSsmNode = async (
         "--target",
         commandInput.Target,
         "--document-name",
-        commandInput.DocumentName
+        commandInput.DocumentName,
       ],
       {
         env: {
