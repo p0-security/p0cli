@@ -22,8 +22,6 @@ import { pick } from "lodash";
 import { spawn } from "node:child_process";
 import yargs from "yargs";
 
-const awsRequestPrefix = "AWS:";
-
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
  */
@@ -38,9 +36,6 @@ const ACCESS_CHECK_INTERVAL_MILLIS = 200;
 
 const INSTANCE_ARN_PATTERN =
   /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
-
-const ssmDocumentArn = (requestId: string) =>
-  `P0SshAsUser-${requestId}-nathan_brahms`;
 
 type AwsSsh = {
   spec: {
@@ -203,7 +198,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: ["ssh", "session", args.instance, "--provider", "aws"],
+      arguments: ["ssh", args.instance, "--provider", "aws"],
       wait: true,
     },
     authn,
