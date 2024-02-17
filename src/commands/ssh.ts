@@ -1,17 +1,17 @@
-import { authenticate } from "../../drivers/auth";
-import { doc, guard } from "../../drivers/firestore";
-import { AWS_API_VERSION } from "../../plugins/aws/api";
-import { AwsCredentials } from "../../plugins/aws/types";
-import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
-import { Authn } from "../../types/identity";
+import { authenticate } from "../drivers/auth";
+import { doc, guard } from "../drivers/firestore";
+import { AWS_API_VERSION } from "../plugins/aws/api";
+import { AwsCredentials } from "../plugins/aws/types";
+import { assumeRoleWithOktaSaml } from "../plugins/okta/aws";
+import { Authn } from "../types/identity";
 import {
   DENIED_STATUSES,
   DONE_STATUSES,
   ERROR_STATUSES,
   Request,
-} from "../../types/request";
-import { sleep } from "../../util";
-import { request } from "../request";
+} from "../types/request";
+import { sleep } from "../util";
+import { request } from "./request";
 import {
   SSMClient,
   StartSessionCommand,
@@ -19,8 +19,20 @@ import {
 } from "@aws-sdk/client-ssm";
 import { onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
-import { spawn } from "node:child_process";
+import { ChildProcessByStdio, spawn } from "node:child_process";
+import { Readable } from "node:stream";
 import yargs from "yargs";
+
+/** Matches the error message that AWS SSM prints when access is not propagated */
+// Note that the resource will randomly be either the SSM document or the EC2 instance
+const UNPROVISIONED_ACCESS_MESSAGE =
+  /An error occurred \(AccessDeniedException\) when calling the StartSession operation\: User\: arn\:aws\:sts\:\:.*\:assumed-role\/P0GrantsRole.* is not authorized to perform\: ssm\:StartSession on resource\: arn\:aws\:.*\:.*\:.* because no identity-based policy allows the ssm\:StartSession action/;
+/** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
+ *  in the process's stderr
+ */
+const UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS = 5e3;
+/** Maximum number of attempts to start an SSM session */
+const MAX_SSM_RETRIES = 30;
 
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
@@ -64,6 +76,8 @@ export const sshCommand = (yargs: yargs.Argv) =>
     guard(ssh)
   );
 
+// TODO: Move this to a shared utility
+/** Waits until P0 grants access for a request */
 const waitForProvisioning = async (authn: Authn, requestId: string) => {
   let cancel: NodeJS.Timeout | undefined = undefined;
   const result = await new Promise<Request<AwsSsh>>((resolve, reject) => {
@@ -99,7 +113,8 @@ const waitForProvisioning = async (authn: Authn, requestId: string) => {
   return result;
 };
 
-const waitForAccess = async (args: SsmArgs) => {
+/** Polls AWS until `ssm:StartSession` succeeds, or {@link ACCESS_TIMEOUT_MILLIS} passes */
+const waitForSsmAccess = async (args: SsmArgs) => {
   const start = Date.now();
   let lastError: any = undefined;
   const client = new SSMClient({
@@ -135,43 +150,112 @@ const waitForAccess = async (args: SsmArgs) => {
   throw lastError;
 };
 
+/** Checks if access has propagated through AWS to the SSM agent
+ *
+ * AWS takes about 8 minutes to fully resolve access after it is granted. During
+ * this time, calls to `aws ssm start-session` will fail randomly with an
+ * access denied exception.
+ *
+ * This function checks AWS to see if this exception is printed to the SSM
+ * error output within the first 5 seconds of startup. If it is, the returned
+ * `isAccessPropagated()` function will return false. When this occurs, the
+ * consumer of this function should retry the AWS SSM session.
+ *
+ * Note that this function requires interception of the AWS SSM stderr stream.
+ * This works because AWS SSM wraps the session in a single-stream pty, so we
+ * do not capture stderr emmitted from the wrapped shell session.
+ */
+const accessPropagationGuard = (
+  child: ChildProcessByStdio<any, any, Readable>
+) => {
+  let isEphemeralAccessDeniedException = false;
+  const beforeStart = Date.now();
+
+  child.stderr.on("data", (chunk) => {
+    const chunkString = chunk.toString("utf-8");
+    const match = chunkString.match(UNPROVISIONED_ACCESS_MESSAGE);
+
+    if (
+      match &&
+      Date.now() <= beforeStart + UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS
+    ) {
+      isEphemeralAccessDeniedException = true;
+      return;
+    }
+
+    console.error(chunkString);
+  });
+
+  return {
+    isAccessPropagated: () => !isEphemeralAccessDeniedException,
+  };
+};
+
+/** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
+ *
+ * Requires `aws ssm` to be installed on the client machine.
+ */
 const spawnSsmNode = async (
   args: Pick<SsmArgs, "region" | "credential">,
-  commandInput: StartSessionCommandInput
-) =>
+  commandInput: StartSessionCommandInput,
+  options?: { attemptsRemaining?: number }
+): Promise<number | null> =>
   new Promise((resolve, reject) => {
     if (!commandInput.Target || !commandInput.DocumentName) {
       reject("Command input is missing required fields: Target, DocumentName");
       return;
     }
-    const child = spawn(
-      "/usr/bin/env",
-      [
-        "aws",
-        "ssm",
-        "start-session",
-        "--target",
-        commandInput.Target,
-        "--document-name",
-        commandInput.DocumentName,
-      ],
-      {
-        env: {
-          ...process.env,
-          ...args.credential,
-          AWS_DEFAULT_REGION: args.region,
-        },
-        stdio: "inherit",
-      }
-    );
+
+    const ssmCommand = [
+      "aws",
+      "ssm",
+      "start-session",
+      "--region",
+      args.region,
+      "--target",
+      commandInput.Target,
+      "--document-name",
+      commandInput.DocumentName,
+    ];
+    const child = spawn("/usr/bin/env", ssmCommand, {
+      env: {
+        ...process.env,
+        ...args.credential,
+      },
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+
+    const { isAccessPropagated } = accessPropagationGuard(child);
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
+
+      // In the case of ephemeral AccessDenied exceptions due to unpropagated
+      // permissions, continually retry access until success
+      if (!isAccessPropagated()) {
+        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSM_RETRIES;
+        if (attemptsRemaining <= 0) {
+          reject(
+            "Access did not propagate through AWS before max retry attempts were exceeded. Please contact support@p0.dev for assistance."
+          );
+          return;
+        }
+        // console.debug("Permissions not yet propagated in AWS; retrying");
+        spawnSsmNode(args, commandInput, {
+          ...(options ?? {}),
+          attemptsRemaining: attemptsRemaining - 1,
+        })
+          .then((code) => resolve(code))
+          .catch(reject);
+        return;
+      }
+
       console.error("SSH session terminated");
       resolve(code);
     });
   });
 
+/** Connect to an SSH backend using AWS Systems Manager (SSM) */
 const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
@@ -188,10 +272,14 @@ const ssm = async (authn: Authn, request: Request<AwsSsh> & { id: string }) => {
     requestId: request.id,
     credential,
   };
-  const commandInput = await waitForAccess(args);
+  const commandInput = await waitForSsmAccess(args);
   await spawnSsmNode(args, commandInput);
 };
 
+/** Connect to an SSH backend
+ *
+ * Implicitly gains access to the SSH resource if required.
+ */
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
