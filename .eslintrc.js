@@ -53,6 +53,7 @@ module.exports = {
     "jest.config.js",
     "public/**",
     "build/**",
+    "__mocks__/**",
     "node_modules/**",
   ],
   overrides: [],
