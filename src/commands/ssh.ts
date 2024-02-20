@@ -1,5 +1,6 @@
 import { authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
+import { print2 } from "../drivers/stdio";
 import { ssm } from "../plugins/aws/ssm";
 import { AwsSsh } from "../plugins/aws/types";
 import { Authn } from "../types/identity";
@@ -91,11 +92,11 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
     { message: "approval-required" }
   );
   if (!response) {
-    console.error("Did not receive access ID from server");
+    print2("Did not receive access ID from server");
     return;
   }
   const { id, isPreexisting } = response;
-  if (!isPreexisting) console.error("Waiting for access to be provisioned");
+  if (!isPreexisting) print2("Waiting for access to be provisioned");
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
   await ssm(authn, { ...requestData, id });
 };

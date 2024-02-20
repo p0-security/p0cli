@@ -1,5 +1,6 @@
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
+import { print2 } from "../../drivers/stdio";
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
@@ -144,7 +145,7 @@ const fetchSamlResponse = async (
 /** Logs in to Okta via OIDC */
 export const oktaLogin = async (org: OrgData) => {
   const authorizeResponse = await authorize(org);
-  console.error(`Please use the opened browser window to continue your P0 login.
+  print2(`Please use the opened browser window to continue your P0 login.
   
 When prompted, confirm that Okta displays this code:
 

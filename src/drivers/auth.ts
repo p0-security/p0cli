@@ -1,6 +1,7 @@
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
 import { auth } from "./firestore";
+import { print2 } from "./stdio";
 import {
   OAuthProvider,
   SignInMethod,
@@ -45,7 +46,7 @@ export const cached = async <T>(
     return JSON.parse(data.toString("utf-8")) as T;
   } catch (error: any) {
     if (error?.code !== "ENOENT")
-      console.error(
+      print2(
         `Could not load credentials "${name}" from cache: ${error.message ?? error}`
       );
     return await loadCache();
@@ -63,7 +64,7 @@ export const loadCredentials = async (options?: {
       identity.credential.expires_at < Date.now() * 1e-3
     ) {
       await login({ org: identity.org.slug }, { skipAuthenticate: true });
-      console.error("\u200B"); // Force a new line
+      print2("\u200B"); // Force a new line
       return loadCredentials({ noRefresh: true });
     }
     return identity;

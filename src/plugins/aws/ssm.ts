@@ -1,3 +1,4 @@
+import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { Request } from "../../types/request";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -5,7 +6,7 @@ import { AwsCredentials, AwsSsh } from "./types";
 import { ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable } from "node:stream";
 
-/** Matches the error message that AWS SSM prints when access is not propagated */
+/** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
   /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
@@ -38,7 +39,7 @@ type SsmArgs = {
  * this time, calls to `aws ssm start-session` will fail randomly with an
  * access denied exception.
  *
- * This function checks AWS to see if this exception is printed to the SSM
+ * This function checks AWS to see if this exception is print1d to the SSM
  * error output within the first 5 seconds of startup. If it is, the returned
  * `isAccessPropagated()` function will return false. When this occurs, the
  * consumer of this function should retry the AWS SSM session.
@@ -65,7 +66,7 @@ const accessPropagationGuard = (
       return;
     }
 
-    console.error(chunkString);
+    print2(chunkString);
   });
 
   return {
@@ -126,7 +127,7 @@ const spawnSsmNode = async (
         return;
       }
 
-      console.error("SSH session terminated");
+      print2("SSH session terminated");
       resolve(code);
     });
   });

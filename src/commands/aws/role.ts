@@ -1,6 +1,7 @@
 import { parseXml } from "../../common/xml";
 import { authenticate } from "../../drivers/auth";
 import { guard } from "../../drivers/firestore";
+import { print1, print2 } from "../../drivers/stdio";
 import { getAwsConfig } from "../../plugins/aws/config";
 import { AwsItemConfig, AwsOktaSamlUidLocation } from "../../plugins/aws/types";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
@@ -75,15 +76,15 @@ const oktaAwsAssumeRole = async (args: { account?: string; role: string }) => {
   const authn = await authenticate();
   const awsCredential = await assumeRoleWithOktaSaml(authn, args);
   const isTty = sys.writeOutputIsTTY?.();
-  if (isTty) console.error("Execute the following commands:\n");
+  if (isTty) print2("Execute the following commands:\n");
   const indent = isTty ? "  " : "";
-  console.log(
+  print1(
     Object.entries(awsCredential)
       .map(([key, value]) => `${indent}export ${key}=${value}`)
       .join("\n")
   );
   if (isTty)
-    console.error(`
+    print2(`
 Or, populate these environment variables using BASH command substitution:
 
   $(p0 aws${args.account ? ` --account ${args.account}` : ""} role assume ${
@@ -115,7 +116,7 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
     .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
     .map((r) => r.split("/").slice(1).join("/"));
   const isTty = sys.writeOutputIsTTY?.();
-  if (isTty) console.error(`Your available roles for account ${account}:`);
+  if (isTty) print2(`Your available roles for account ${account}:`);
   if (!roles?.length) {
     const accounts = uniq(arns.map((a) => a.split(":")[4])).sort();
     throw `No roles found. You have roles on these accounts:\n${accounts.join(
@@ -123,5 +124,5 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
     )}`;
   }
   const indent = isTty ? "  " : "";
-  console.log(roles.map((r) => `${indent}${r}`).join("\n"));
+  print1(roles.map((r) => `${indent}${r}`).join("\n"));
 };

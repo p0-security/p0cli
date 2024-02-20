@@ -1,13 +1,15 @@
 import { fetchCommand } from "../../drivers/api";
+import { print1, print2 } from "../../drivers/stdio";
 import { lsCommand } from "../ls";
 import yargs from "yargs";
 
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
+jest.mock("../../drivers/stdio");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
-const stdout = jest.spyOn(global.console, "log");
-const stderr = jest.spyOn(global.console, "error");
+const mockPrint1 = print1 as jest.Mock;
+const mockPrint2 = print2 as jest.Mock;
 
 describe("ls", () => {
   describe("when valid ls command", () => {
@@ -24,8 +26,8 @@ describe("ls", () => {
 
     it("should print list response", async () => {
       await lsCommand(yargs).parse(command);
-      expect(stderr.mock.calls).toMatchSnapshot();
-      expect(stdout.mock.calls).toMatchSnapshot();
+      expect(mockPrint1.mock.calls).toMatchSnapshot();
+      expect(mockPrint2.mock.calls).toMatchSnapshot();
     });
   });
 

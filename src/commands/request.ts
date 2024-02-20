@@ -1,6 +1,7 @@
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
+import { print2 } from "../drivers/stdio";
 import { Authn } from "../types/identity";
 import { Request, RequestResponse } from "../types/request";
 import { onSnapshot } from "firebase/firestore";
@@ -56,9 +57,7 @@ const waitForRequest = async (
 ) =>
   await new Promise<number>((resolve) => {
     if (logMessage)
-      console.error(
-        "Will wait up to 5 minutes for this request to complete..."
-      );
+      print2("Will wait up to 5 minutes for this request to complete...");
     let cancel: NodeJS.Timeout | undefined = undefined;
     const unsubscribe = onSnapshot<Request, object>(
       doc(`o/${tenantId}/permission-requests/${requestId}`),
@@ -70,14 +69,14 @@ const waitForRequest = async (
           if (cancel) clearTimeout(cancel);
           unsubscribe?.();
           const { message, code } = COMPLETED_REQUEST_STATUSES[status];
-          if (code !== 0 || logMessage) console.error(message);
+          if (code !== 0 || logMessage) print2(message);
           resolve(code);
         }
       }
     );
     cancel = setTimeout(() => {
       unsubscribe?.();
-      console.error("Your request did not complete within 5 minutes.");
+      print2("Your request did not complete within 5 minutes.");
       resolve(4);
     }, WAIT_TIMEOUT);
   });
@@ -106,7 +105,7 @@ export const request = async (
       (options?.message === "approval-required" &&
         !data.isPreexisting &&
         !data.isPersistent);
-    if (logMessage) console.error(data.message);
+    if (logMessage) print2(data.message);
     const { id } = data;
     if (args.wait && id && userCredential.user.tenantId) {
       const code = await waitForRequest(

@@ -1,6 +1,7 @@
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
+import { print2, print1 } from "../drivers/stdio";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
@@ -41,13 +42,13 @@ const ls = async (
   ]);
 
   if (data && "ok" in data && data.ok) {
-    console.error(
+    print2(
       `Showing${
         data.isTruncated ? ` the first ${data.items.length}` : ""
       } ${pluralize(data.arg)}${data.term ? ` matching '${data.term}'` : ""}:`
     );
     for (const item of data.items) {
-      console.log(item);
+      print1(item);
     }
   } else {
     throw data;
