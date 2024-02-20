@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`request when error should print1error message 1`] = `
+exports[`request when error should print error message 1`] = `
 {
   "error": "p0 request
 
@@ -18,7 +18,7 @@ Unknown argument: foo",
 }
 `;
 
-exports[`request when valid request command preexisting=false persistent=false should print1request response 1`] = `
+exports[`request when valid request command preexisting=false persistent=false should print request response 1`] = `
 [
   [
     "a message",
@@ -26,7 +26,7 @@ exports[`request when valid request command preexisting=false persistent=false s
 ]
 `;
 
-exports[`request when valid request command preexisting=false persistent=true should print1request response 1`] = `
+exports[`request when valid request command preexisting=false persistent=true should print request response 1`] = `
 [
   [
     "a message",
@@ -34,7 +34,7 @@ exports[`request when valid request command preexisting=false persistent=true sh
 ]
 `;
 
-exports[`request when valid request command preexisting=true persistent=false should print1request response 1`] = `
+exports[`request when valid request command preexisting=true persistent=false should print request response 1`] = `
 [
   [
     "a message",

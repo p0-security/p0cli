@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`ls when error should print1error message 1`] = `
+exports[`ls when error should print error message 1`] = `
 {
   "error": "p0 ls
 
@@ -16,7 +16,7 @@ Unknown argument: foo",
 }
 `;
 
-exports[`ls when valid ls command should print1list response 1`] = `
+exports[`ls when valid ls command should print list response 1`] = `
 [
   [
     "instance-1",
@@ -27,7 +27,7 @@ exports[`ls when valid ls command should print1list response 1`] = `
 ]
 `;
 
-exports[`ls when valid ls command should print1list response 2`] = `
+exports[`ls when valid ls command should print list response 2`] = `
 [
   [
     "Showing destinations:",
