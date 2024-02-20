@@ -1,7 +1,6 @@
 import { config } from "../drivers/env";
 import { Authn } from "../types/identity";
 import * as path from "node:path";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 const commandUrl = (tenant: string) => `${config.appUrl}/o/${tenant}/command/`;
@@ -26,9 +25,7 @@ export const fetchCommand = async <T>(
   const text = await response.text();
   const data = JSON.parse(text);
   if ("error" in data) {
-    console.error(data.error);
-    sys.exit(1);
-    return undefined;
+    throw data.error;
   }
   return data as T;
 };

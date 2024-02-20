@@ -4,6 +4,7 @@ import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { sshCommand } from "./ssh";
 import { VERSION } from "lodash";
+import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
@@ -26,4 +27,5 @@ export const cli = commands
       console.error(yargs.help());
       console.error(`\n${message}`);
     }
+    sys.exit(1);
   });

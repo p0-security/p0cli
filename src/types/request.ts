@@ -17,3 +17,11 @@ export type Request<T = object> = {
   permission: T;
   principal: string;
 };
+
+export type RequestResponse = {
+  ok: true;
+  message: string;
+  id: string;
+  isPreexisting: boolean;
+  isPersistent: boolean;
+};

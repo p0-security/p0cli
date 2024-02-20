@@ -1,15 +1,11 @@
 import { cli } from "./commands";
-import { sys } from "typescript";
+import { noop } from "lodash";
 
 export const main = () => {
-  void cli.parse();
+  // We can suppress output here, as .fail() already prints errors
+  void (cli.parse() as any).catch(noop);
 };
 
 if (require.main === module) {
-  try {
-    main();
-  } catch (err) {
-    console.error(err);
-    sys.exit(1);
-  }
+  main();
 }
