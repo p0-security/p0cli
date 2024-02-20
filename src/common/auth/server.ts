@@ -6,6 +6,12 @@ import { dirname } from "node:path";
 
 const ROOT_PATH = dirname(require.main!.filename);
 
+/** A small amount of time is necessary prior to shutting down the redirect server to
+ * properly render the redirect-landing page
+ */
+const SERVER_SHUTDOWN_WAIT_MILLIS = 2e3;
+
+/** Waits for an OIDC authorization redirect using a locally mounted server */
 export const withRedirectServer = async <S, T, U>(
   start: (server: http.Server) => Promise<S>,
   complete: (value: S, token: T) => Promise<U>,
@@ -45,7 +51,7 @@ export const withRedirectServer = async <S, T, U>(
     value = await start(server);
     return await redirectPromise;
   } finally {
-    await sleep(2000);
+    await sleep(SERVER_SHUTDOWN_WAIT_MILLIS);
     server.closeAllConnections();
     server.unref();
   }
