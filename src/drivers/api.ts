@@ -1,6 +1,5 @@
 import { config } from "../drivers/env";
 import { Authn } from "../types/identity";
-import { authenticate } from "./auth";
 import * as path from "node:path";
 import { sys } from "typescript";
 import yargs from "yargs";

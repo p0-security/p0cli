@@ -6,11 +6,11 @@ export type OrgData = {
   providerType?: "okta";
   ssoProvider:
     | "azure-oidc"
+    | "google-oidc"
     | "google"
     | "microsoft"
-    | "google-oidc"
-    | "okta"
-    | "oidc-pkce";
+    | "oidc-pkce"
+    | "okta";
   slug: string;
   tenantId: string;
 };

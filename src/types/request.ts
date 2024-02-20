@@ -13,7 +13,7 @@ export type Request<T = object> = {
   }[];
   generated: {
     documentName: string;
-  }
+  };
   permission: T;
   principal: string;
 };

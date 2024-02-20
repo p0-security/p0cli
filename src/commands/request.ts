@@ -3,7 +3,7 @@ import { authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { Authn } from "../types/identity";
 import { Request } from "../types/request";
-import { Unsubscribe, onSnapshot } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -65,9 +65,8 @@ const waitForRequest = async (
   await new Promise<number>((resolve) => {
     if (logMessage)
       console.log("Will wait up to 5 minutes for this request to complete...");
-    let unsubscribe: Unsubscribe | undefined;
-    let cancel: NodeJS.Timeout | undefined;
-    unsubscribe = onSnapshot<Request, object>(
+    let cancel: NodeJS.Timeout | undefined = undefined;
+    const unsubscribe = onSnapshot<Request, object>(
       doc(`o/${tenantId}/permission-requests/${requestId}`),
       (snap) => {
         const data = snap.data();

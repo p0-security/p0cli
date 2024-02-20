@@ -27,7 +27,12 @@ const requestAuth = async () => {
     response_type: "code",
     scope: "openid",
   };
-  open(`${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`);
+  const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
+  open(url).catch(() => {
+    console.error(`Please visit the following URL to continue login:
+
+${url}`);
+  });
   return pkce;
 };
 

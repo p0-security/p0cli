@@ -20,7 +20,7 @@ export const cached = async <T>(
   name: string,
   loader: () => Promise<T>,
   options: { duration: number }
-) => {
+): Promise<T> => {
   const loc = path.join(
     path.dirname(IDENTITY_FILE_PATH),
     "cache",
@@ -42,7 +42,7 @@ export const cached = async <T>(
       return await loadCache();
     }
     const data = await fs.readFile(loc);
-    return JSON.parse(data.toString("utf-8"));
+    return JSON.parse(data.toString("utf-8")) as T;
   } catch (error: any) {
     if (error?.code !== "ENOENT")
       console.error(

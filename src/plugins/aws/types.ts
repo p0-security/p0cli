@@ -11,8 +11,8 @@ export type AwsOktaSamlUidLocation = {
 };
 
 type AwsUidLocation =
-  | { id: "idc"; parentId: string }
   | AwsOktaSamlUidLocation
+  | { id: "idc"; parentId: string }
   | { id: "user_tag"; tagName: string }
   | { id: "username" };
 

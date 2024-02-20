@@ -17,7 +17,6 @@ export const withRedirectServer = async <S, T, U>(
   let redirectResolve: (result: U) => void;
   let redirectReject: (error: any) => void;
   let value: S;
-  let server: http.Server;
   const redirectPromise = new Promise<U>((resolve, reject) => {
     redirectResolve = resolve;
     redirectReject = reject;
@@ -40,7 +39,7 @@ export const withRedirectServer = async <S, T, U>(
 
   app.use(redirectRouter);
 
-  server = app.listen(options?.port ?? 0);
+  const server = app.listen(options?.port ?? 0);
 
   try {
     value = await start(server);

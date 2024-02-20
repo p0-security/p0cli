@@ -17,7 +17,7 @@ export const main = () => {
     requestCommand,
     sshCommand,
   ];
-  commands
+  void commands
     .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
     .strict()
     .version(VERSION)
