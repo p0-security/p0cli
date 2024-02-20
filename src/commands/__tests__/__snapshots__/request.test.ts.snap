@@ -1,0 +1,57 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`request when error should print error message 1`] = `
+{
+  "error": "p0 request
+
+Request access to a resource using P0
+
+Commands:
+  p0 request gcloud             Google Cloud
+
+Options:
+      --help    Show help                                              [boolean]
+      --reason  Reason access is needed                                 [string]
+  -w, --wait    Block until the request is completed                   [boolean]
+
+Unknown argument: foo",
+}
+`;
+
+exports[`request when valid request command preexisting=false persistent=false should print request response 1`] = `
+[
+  [
+    "a message",
+  ],
+]
+`;
+
+exports[`request when valid request command preexisting=false persistent=true should print request response 1`] = `
+[
+  [
+    "a message",
+  ],
+]
+`;
+
+exports[`request when valid request command preexisting=true persistent=false should print request response 1`] = `
+[
+  [
+    "a message",
+  ],
+]
+`;
+
+exports[`request when valid request command should wait for access 1`] = `
+[
+  [
+    "a message",
+  ],
+  [
+    "Will wait up to 5 minutes for this request to complete...",
+  ],
+  [
+    "Your request was approved",
+  ],
+]
+`;

@@ -5,8 +5,8 @@ process.emit = function (name, data, ...args) {
   if (
     name === `warning` &&
     typeof data === `object` &&
-    data.name === `ExperimentalWarning` 
-    && data.message.startsWith(`The Fetch API is an experimental feature.`)
+    data.name === `ExperimentalWarning` &&
+    data.message.startsWith(`The Fetch API is an experimental feature.`)
   ) {
     return false;
   }

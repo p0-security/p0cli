@@ -1,7 +1,6 @@
 import { parseXml } from "../../common/xml";
 import { authenticate } from "../../drivers/auth";
 import { guard } from "../../drivers/firestore";
-import { assumeRoleWithSaml } from "../../plugins/aws/assumeRole";
 import { getAwsConfig } from "../../plugins/aws/config";
 import { AwsItemConfig, AwsOktaSamlUidLocation } from "../../plugins/aws/types";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
@@ -114,7 +113,7 @@ const oktaAwsListRoles = async (args: { account?: string }) => {
   )?.map((r) => r.split(",")[1]!);
   const roles = arns
     .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
-    .map((r) => r.split("/").slice(1).join("/")!);
+    .map((r) => r.split("/").slice(1).join("/"));
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) console.error(`Your available roles for account ${account}:`);
   if (!roles?.length) {

@@ -32,11 +32,11 @@ export type TokenResponse = {
 
 export type TokenErrorResponse = {
   error:
+    | "access_denied"
+    | "authorization_pending"
+    | "bad grant type"
+    | "expired_token"
     | "missing parameter"
     | "not found"
-    | "bad grant type"
-    | "slow_down"
-    | "authorization_pending"
-    | "access_denied"
-    | "expired_token";
+    | "slow_down";
 };

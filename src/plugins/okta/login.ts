@@ -82,14 +82,12 @@ const waitForActivation = async (
   authorize: AuthorizeResponse
 ) => {
   const start = Date.now();
-  while (true) {
-    if (Date.now() - start > authorize.expires_in * 1e3) {
-      throw "Expired awaiting in-browser authorization.";
-    }
+  while (Date.now() - start <= authorize.expires_in * 1e3) {
     const response = await fetchOidcToken(org, authorize);
     if (!response) await sleep(authorize.interval * 1e3);
     else return response;
   }
+  throw "Expired awaiting in-browser authorization.";
 };
 
 /** Exchanges an Okta OIDC SSO token for an Okta app SSO token */

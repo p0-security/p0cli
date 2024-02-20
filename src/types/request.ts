@@ -13,7 +13,15 @@ export type Request<T = object> = {
   }[];
   generated: {
     documentName: string;
-  }
+  };
   permission: T;
   principal: string;
+};
+
+export type RequestResponse = {
+  ok: true;
+  message: string;
+  id: string;
+  isPreexisting: boolean;
+  isPersistent: boolean;
 };

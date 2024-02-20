@@ -1,6 +1,6 @@
 import { config } from "./env";
 import { initializeApp } from "firebase/app";
-import { getAuth, OAuthProvider, signInWithCredential } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import {
   collection as fsCollection,
   CollectionReference,
@@ -39,6 +39,6 @@ export const guard =
     try {
       await cb(args);
     } finally {
-      terminate(FIRESTORE);
+      void terminate(FIRESTORE);
     }
   };

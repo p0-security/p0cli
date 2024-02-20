@@ -1,0 +1,35 @@
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+name: Test
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ^18.6.0
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: |
+          echo dir="$(yarn cache dir)" >> $GITHUB_OUTPUT
+          echo version="$(yarn cache dir)" >> $GITHUB_OUTPUT
+      - uses: actions/cache@v3
+        with:
+          path: |
+            **/node_modules
+            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ steps.yarn-cache-dir-path.outputs.version }}-${{ hashFiles('**/yarn.lock') }}
+      - name: Yarn install
+        run: yarn install
+      - name: Run tests
+        run: yarn jest -w2

@@ -1,6 +1,5 @@
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { parseXml } from "../../common/xml";
-import { cached } from "../../drivers/auth";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
 import { AwsCredentials } from "./types";
