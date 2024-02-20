@@ -1,5 +1,6 @@
 import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
+import { print2 } from "../drivers/stdio";
 import { googleLogin } from "../plugins/google/login";
 import { oktaLogin } from "../plugins/okta/login";
 import { TokenResponse } from "../types/oidc";
@@ -39,12 +40,12 @@ export const login = async (
   // validate auth
   if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
 
-  console.error(`You are now logged in, and can use the p0 CLI.`);
+  print2(`You are now logged in, and can use the p0 CLI.`);
 };
 
 const writeIdentity = async (org: OrgData, credential: TokenResponse) => {
   const expires_at = Date.now() * 1e-3 + credential.expires_in - 1; // Add 1 second safety margin
-  console.error(`Saving authorization to ${IDENTITY_FILE_PATH}.`);
+  print2(`Saving authorization to ${IDENTITY_FILE_PATH}.`);
   const dir = path.dirname(IDENTITY_FILE_PATH);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(

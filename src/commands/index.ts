@@ -1,3 +1,4 @@
+import { print2 } from "../drivers/stdio";
 import { awsCommand } from "./aws";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
@@ -22,10 +23,10 @@ export const cli = commands
   .version(VERSION)
   .demandCommand(1)
   .fail((message, error, yargs) => {
-    if (error) console.error(error);
+    if (error) print2(error);
     else {
-      console.error(yargs.help());
-      console.error(`\n${message}`);
+      print2(yargs.help());
+      print2(`\n${message}`);
     }
     sys.exit(1);
   });

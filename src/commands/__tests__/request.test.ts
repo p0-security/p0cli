@@ -1,4 +1,5 @@
 import { fetchCommand } from "../../drivers/api";
+import { print1, print2 } from "../../drivers/stdio";
 import { RequestResponse } from "../../types/request";
 import { sleep } from "../../util";
 import { requestCommand } from "../request";
@@ -7,10 +8,11 @@ import yargs from "yargs";
 
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
+jest.mock("../../drivers/stdio");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
-const stdout = jest.spyOn(global.console, "log");
-const stderr = jest.spyOn(global.console, "error");
+const mockPrint1 = print1 as jest.Mock;
+const mockPrint2 = print2 as jest.Mock;
 
 describe("request", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -36,11 +38,11 @@ describe("request", () => {
     ])(
       "preexisting=%p persistent=%p",
       (isPreexisting, isPersistent, should) => {
-        it(`should${should ? "" : " not"} print request response`, async () => {
+        it(`should${should ? "" : " not"} print1request response`, async () => {
           mockFetch({ isPreexisting, isPersistent });
           await requestCommand(yargs).parse(command);
-          expect(stderr.mock.calls).toMatchSnapshot();
-          expect(stdout).not.toHaveBeenCalled();
+          expect(mockPrint2.mock.calls).toMatchSnapshot();
+          expect(mockPrint1).not.toHaveBeenCalled();
         });
       }
     );
@@ -54,8 +56,8 @@ describe("request", () => {
         status: "DONE",
       });
       await expect(promise).resolves.toBeDefined();
-      expect(stderr.mock.calls).toMatchSnapshot();
-      expect(stdout).not.toHaveBeenCalled();
+      expect(mockPrint2.mock.calls).toMatchSnapshot();
+      expect(mockPrint1).not.toHaveBeenCalled();
     });
   });
 
@@ -80,7 +82,7 @@ Unknown argument: foo`,
       });
     });
 
-    it("should print error message", async () => {
+    it("should print1error message", async () => {
       let error: any;
       try {
         await requestCommand(yargs)

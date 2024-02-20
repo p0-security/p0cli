@@ -44,8 +44,8 @@ module.exports = {
       { checkIntersections: false },
     ],
     "@typescript-eslint/unbound-method": ["error", { ignoreStatic: true }],
-    // Allow console.log() statements
-    "no-console": "off",
+    // Use `print1` and `print2` instead
+    "no-console": "error",
   },
   ignorePatterns: [
     ".eslintrc.js",

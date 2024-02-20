@@ -2,6 +2,7 @@ import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { config } from "../../drivers/env";
+import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
 
@@ -29,7 +30,7 @@ const requestAuth = async () => {
   };
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
   open(url).catch(() => {
-    console.error(`Please visit the following URL to continue login:
+    print2(`Please visit the following URL to continue login:
 
 ${url}`);
   });
