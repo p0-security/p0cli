@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 /** Matches the error message that AWS SSM prints when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
-  /An error occurred \(AccessDeniedException\) when calling the StartSession operation\: User\: arn\:aws\:sts\:\:.*\:assumed-role\/P0GrantsRole.* is not authorized to perform\: ssm\:StartSession on resource\: arn\:aws\:.*\:.*\:.* because no identity-based policy allows the ssm\:StartSession action/;
+  /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
 
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
@@ -78,7 +78,7 @@ const accessPropagationGuard = (
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Pick<SsmArgs, "region" | "credential" | "documentName" | "instance">,
+  args: Pick<SsmArgs, "credential" | "documentName" | "instance" | "region">,
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
