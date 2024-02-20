@@ -1,14 +1,7 @@
 import { Authn } from "../../types/identity";
 import { Request } from "../../types/request";
-import { sleep } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
-import { AWS_API_VERSION } from "./api";
 import { AwsCredentials, AwsSsh } from "./types";
-import {
-  SSMClient,
-  StartSessionCommand,
-  StartSessionCommandInput,
-} from "@aws-sdk/client-ssm";
 import { ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable } from "node:stream";
 
@@ -16,22 +9,20 @@ import { Readable } from "node:stream";
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
   /An error occurred \(AccessDeniedException\) when calling the StartSession operation\: User\: arn\:aws\:sts\:\:.*\:assumed-role\/P0GrantsRole.* is not authorized to perform\: ssm\:StartSession on resource\: arn\:aws\:.*\:.*\:.* because no identity-based policy allows the ssm\:StartSession action/;
+
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
  */
 const UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS = 5e3;
-/** Maximum number of attempts to start an SSM session */
+
+/** Maximum number of attempts to start an SSM session
+ *
+ * Note that each attempt consumes ~ 1 s.
+ */
 const MAX_SSM_RETRIES = 30;
 
 const INSTANCE_ARN_PATTERN =
   /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
-
-/** Maximum amount of time to wait after access is configured in AWS to wait
- *  for access to propagate through AWS
- */
-const ACCESS_TIMEOUT_MILLIS = 30e3;
-/** Polling interval for the above check */
-const ACCESS_CHECK_INTERVAL_MILLIS = 200;
 
 type SsmArgs = {
   instance: string;
@@ -39,43 +30,6 @@ type SsmArgs = {
   requestId: string;
   documentName: string;
   credential: AwsCredentials;
-};
-
-/** Polls AWS until `ssm:StartSession` succeeds, or {@link ACCESS_TIMEOUT_MILLIS} passes */
-const waitForSsmAccess = async (args: SsmArgs) => {
-  const start = Date.now();
-  let lastError: any = undefined;
-  const client = new SSMClient({
-    apiVersion: AWS_API_VERSION,
-    region: args.region,
-    credentials: {
-      accessKeyId: args.credential.AWS_ACCESS_KEY_ID,
-      secretAccessKey: args.credential.AWS_SECRET_ACCESS_KEY,
-      sessionToken: args.credential.AWS_SESSION_TOKEN,
-    },
-  });
-  const commandInput: StartSessionCommandInput = {
-    Target: args.instance,
-    DocumentName: args.documentName,
-  };
-  while (Date.now() - start < ACCESS_TIMEOUT_MILLIS) {
-    try {
-      // We don't use this response for anything; we just need this to succeed
-      await client.send(
-        new StartSessionCommand({
-          ...commandInput,
-          Reason: "Test connectivity",
-        })
-      );
-      return commandInput;
-    } catch (error: any) {
-      if (error.__type === "AccessDeniedException") {
-        lastError = error;
-        await sleep(ACCESS_CHECK_INTERVAL_MILLIS);
-      } else throw error;
-    }
-  }
-  throw lastError;
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -124,16 +78,10 @@ const accessPropagationGuard = (
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Pick<SsmArgs, "region" | "credential">,
-  commandInput: StartSessionCommandInput,
+  args: Pick<SsmArgs, "region" | "credential" | "documentName" | "instance">,
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    if (!commandInput.Target || !commandInput.DocumentName) {
-      reject("Command input is missing required fields: Target, DocumentName");
-      return;
-    }
-
     const ssmCommand = [
       "aws",
       "ssm",
@@ -141,9 +89,9 @@ const spawnSsmNode = async (
       "--region",
       args.region,
       "--target",
-      commandInput.Target,
+      args.instance,
       "--document-name",
-      commandInput.DocumentName,
+      args.documentName,
     ];
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
@@ -169,7 +117,7 @@ const spawnSsmNode = async (
           return;
         }
         // console.debug("Permissions not yet propagated in AWS; retrying");
-        spawnSsmNode(args, commandInput, {
+        spawnSsmNode(args, {
           ...(options ?? {}),
           attemptsRemaining: attemptsRemaining - 1,
         })
@@ -203,6 +151,5 @@ export const ssm = async (
     requestId: request.id,
     credential,
   };
-  const commandInput = await waitForSsmAccess(args);
-  await spawnSsmNode(args, commandInput);
+  await spawnSsmNode(args);
 };
