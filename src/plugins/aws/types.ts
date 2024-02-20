@@ -30,3 +30,12 @@ export type AwsConfig = {
     items: AwsItemConfig[];
   };
 };
+
+// -- Specific AWS permission types
+
+export type AwsSsh = {
+  spec: {
+    arn: string;
+  };
+  type: "session";
+};

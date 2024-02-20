@@ -8,7 +8,6 @@
   "license": "Proprietary",
   "private": true,
   "dependencies": {
-    "@aws-sdk/client-ssm": "^3.513.0",
     "@rgrove/parse-xml": "^4.1.0",
     "@types/pluralize": "^0.0.33",
     "dotenv": "^16.4.1",
