@@ -47,7 +47,14 @@ module.exports = {
     // Allow console.log() statements
     "no-console": "off",
   },
-  ignorePatterns: [".eslintrc.js", "prettier.config.js", "jest.config.js", "public/**", "build/**", "node_modules/**"],
+  ignorePatterns: [
+    ".eslintrc.js",
+    "prettier.config.js",
+    "jest.config.js",
+    "public/**",
+    "build/**",
+    "node_modules/**",
+  ],
   overrides: [],
   parserOptions: {
     ecmaVersion: "latest",
