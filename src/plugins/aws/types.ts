@@ -34,8 +34,13 @@ export type AwsConfig = {
 // -- Specific AWS permission types
 
 export type AwsSsh = {
-  spec: {
-    arn: string;
+  permission: {
+    spec: {
+      arn: string;
+    };
+    type: "session";
   };
-  type: "session";
+  generated: {
+    documentName: string;
+  };
 };

@@ -6,15 +6,18 @@ export const ERROR_STATUSES = [
   "ERRORED_NOTIFIED",
 ] as const;
 
-export type Request<T = object> = {
+export type PluginRequest = {
+  permission: object;
+  generated?: object;
+};
+
+export type Request<P extends PluginRequest = { permission: object }> = {
   status: string;
   generatedRoles: {
     role: string;
   }[];
-  generated: {
-    documentName: string;
-  };
-  permission: T;
+  generated: P["generated"];
+  permission: P["permission"];
   principal: string;
 };
 
