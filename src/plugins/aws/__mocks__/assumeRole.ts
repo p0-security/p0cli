@@ -1,4 +1,4 @@
-import { AwsCredentials } from "../aws/types";
+import { AwsCredentials } from "../types";
 
 export const assumeRoleWithSaml = async (): Promise<AwsCredentials> => ({
   AWS_ACCESS_KEY_ID: "test-access-key-id",

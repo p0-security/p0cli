@@ -1,5 +1,6 @@
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
+import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
 import { sleep } from "../../util";
 import { requestCommand } from "../request";
@@ -83,14 +84,7 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      let error: any;
-      try {
-        await requestCommand(yargs)
-          .fail((_, err) => (error = err))
-          .parse(command);
-      } catch (thrown: any) {
-        error = thrown;
-      }
+      const error = await failure(requestCommand(yargs), command);
       expect(error).toMatchSnapshot();
     });
   });

@@ -1,15 +1,37 @@
-import { noop } from "lodash";
-
 export const doc = jest.fn();
+
+export const getCollection = jest.fn();
+
+export const getDoc = jest.fn();
 
 export const getFirestore = jest.fn().mockReturnValue({});
 
 let snapshotCallbacks: ((snapshot: object) => void)[] = [];
 
+/** Triggerable mock onSnapshot
+ *
+ * Usage:
+ * ```
+ *   import { onSnapshot } from "firebase/firestore";
+ *
+ *   beforeEach(() => {
+ *     (onSnapshot as any).clear();
+ *   })
+ *
+ *   test(..., () => {
+ *     // call code under test here
+ *     (onSnapshot as any).trigger(data)
+ *   })
+ * ```
+ *
+ * Note that only one `onSnapshot` may be tested at a time.
+ */
 export const onSnapshot = Object.assign(
   jest.fn().mockImplementation((_doc, cb) => {
     snapshotCallbacks.push(cb);
-    return noop;
+    return () => {
+      snapshotCallbacks = [];
+    };
   }),
   {
     clear: (snapshotCallbacks = []),
@@ -20,5 +42,7 @@ export const onSnapshot = Object.assign(
     },
   }
 );
+
+export const query = jest.fn();
 
 export const terminate = jest.fn();
