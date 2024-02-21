@@ -8,6 +8,7 @@ import {
   DENIED_STATUSES,
   DONE_STATUSES,
   ERROR_STATUSES,
+  PluginRequest,
   Request,
 } from "../types/request";
 import { request } from "./request";
@@ -34,14 +35,14 @@ export const sshCommand = (yargs: yargs.Argv) =>
 
 // TODO: Move this to a shared utility
 /** Waits until P0 grants access for a request */
-const waitForProvisioning = async <T extends object>(
+const waitForProvisioning = async <P extends PluginRequest>(
   authn: Authn,
   requestId: string
 ) => {
   let cancel: NodeJS.Timeout | undefined = undefined;
-  const result = await new Promise<Request<T>>((resolve, reject) => {
+  const result = await new Promise<Request<P>>((resolve, reject) => {
     let isResolved = false;
-    const unsubscribe = onSnapshot<Request<T>, object>(
+    const unsubscribe = onSnapshot<Request<P>, object>(
       doc(`o/${authn.identity.org.tenantId}/permission-requests/${requestId}`),
       (snap) => {
         const data = snap.data();
