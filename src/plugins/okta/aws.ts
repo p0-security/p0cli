@@ -1,4 +1,4 @@
-import { initOktaSaml } from "../../commands/aws/role";
+import { initOktaSaml, rolesFromSaml } from "../../commands/aws/role";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
@@ -14,6 +14,9 @@ export const assumeRoleWithOktaSaml = async (
         authn,
         args.account
       );
+      const { roles } = rolesFromSaml(account, samlResponse);
+      if (!roles.includes(args.role))
+        throw `Role not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
       return await assumeRoleWithSaml({
         account,
         role: args.role,

@@ -61,6 +61,29 @@ export const initOktaSaml = async (
   };
 };
 
+/** Extracts all roles from a SAML assertion */
+export const rolesFromSaml = (account: string, saml: string) => {
+  const samlText = Buffer.from(saml, "base64").toString("ascii");
+  const samlObject = parseXml(samlText);
+  const samlAttributes =
+    samlObject["saml2p:Response"]["saml2:Assertion"][
+      "saml2:AttributeStatement"
+    ]["saml2:Attribute"];
+  const roleAttribute = samlAttributes.find(
+    (a: any) =>
+      a._attributes.Name === "https://aws.amazon.com/SAML/Attributes/Role"
+  );
+  // Format:
+  //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
+  const arns = (
+    flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
+  )?.map((r) => r.split(",")[1]!);
+  const roles = arns
+    .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
+    .map((r) => r.split("/").slice(1).join("/"));
+  return { arns, roles };
+};
+
 /** Assumes a role in AWS via Okta SAML federation.
  *
  * Prerequisites:
@@ -97,24 +120,7 @@ Or, populate these environment variables using BASH command substitution:
 const oktaAwsListRoles = async (args: { account?: string }) => {
   const authn = await authenticate();
   const { account, samlResponse } = await initOktaSaml(authn, args.account);
-  const samlText = Buffer.from(samlResponse, "base64").toString("ascii");
-  const samlObject = parseXml(samlText);
-  const samlAttributes =
-    samlObject["saml2p:Response"]["saml2:Assertion"][
-      "saml2:AttributeStatement"
-    ]["saml2:Attribute"];
-  const roleAttribute = samlAttributes.find(
-    (a: any) =>
-      a._attributes.Name === "https://aws.amazon.com/SAML/Attributes/Role"
-  );
-  // Format:
-  //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
-  const arns = (
-    flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
-  )?.map((r) => r.split(",")[1]!);
-  const roles = arns
-    .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
-    .map((r) => r.split("/").slice(1).join("/"));
+  const { arns, roles } = rolesFromSaml(account, samlResponse);
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) print2(`Your available roles for account ${account}:`);
   if (!roles?.length) {
