@@ -41,7 +41,9 @@ export type AwsSsh = {
     type: "session";
   };
   generated: {
-    sessionDocumentName: string;
-    commandDocumentName: string;
+    documentNames: {
+      session: string;
+      command: string;
+    };
   };
 };

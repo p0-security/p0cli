@@ -40,10 +40,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .positional("command", {
           type: "string",
-          describe: "Optional command to run on the remote machine",
+          describe: "Pass command to the shell",
         })
         .positional("arguments", {
-          describe: "Optional arguments to append to the command",
+          describe: "Command arguments",
           array: true,
           string: true,
           default: [] as string[],
@@ -139,7 +139,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     id,
     // the command to run on the remote machine, if any
     command: args.command
-      ? `${args.command} ${args.arguments.join(" ")}`
+      ? `${args.command} ${args.arguments.join(" ")}`.trim()
       : undefined,
   });
 };

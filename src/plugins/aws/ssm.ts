@@ -92,7 +92,6 @@ const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
     "--target",
     args.instance,
   ];
-
   if (args.command) {
     ssmCommand.push("--document-name", args.documentNames.command);
     ssmCommand.push("--parameters", `command=${args.command}`);
@@ -113,7 +112,6 @@ const spawnSsmNode = async (
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
     const ssmCommand = buildSsmCommand(args);
-
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -168,10 +166,7 @@ export const ssm = async (
   const args = {
     instance: instance!,
     region: region!,
-    documentNames: {
-      session: request.generated.sessionDocumentName,
-      command: request.generated.commandDocumentName,
-    },
+    documentNames: request.generated.documentNames,
     requestId: request.id,
     credential,
     command: request.command,
