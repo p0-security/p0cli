@@ -93,7 +93,7 @@ const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
     args.instance,
   ];
 
-  if(args.command) {
+  if (args.command) {
     ssmCommand.push("--document-name", args.documentNames.command);
     ssmCommand.push("--parameters", `command=${args.command}`);
   } else {
@@ -101,7 +101,7 @@ const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
   }
 
   return ssmCommand;
-}
+};
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
@@ -112,8 +112,8 @@ const spawnSsmNode = async (
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = buildSsmCommand(args)
-    
+    const ssmCommand = buildSsmCommand(args);
+
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -155,7 +155,7 @@ const spawnSsmNode = async (
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & { id: string, command?: string}
+  request: Request<AwsSsh> & { id: string; command?: string }
 ) => {
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";

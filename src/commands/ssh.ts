@@ -29,14 +29,16 @@ export const sshCommand = (yargs: yargs.Argv) =>
     "ssh <instance> [command]",
     "SSH into a virtual machine",
     (yargs) =>
-      yargs.positional("instance", {
-        type: "string",
-        demandOption: true,
-      }).option("command", {
-        alias: "c",
-        type: "string",
-        describe: "Command to run on the remote machine",
-      }),
+      yargs
+        .positional("instance", {
+          type: "string",
+          demandOption: true,
+        })
+        .option("command", {
+          alias: "c",
+          type: "string",
+          describe: "Command to run on the remote machine",
+        }),
     guard(ssh)
   );
 
