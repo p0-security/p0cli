@@ -51,7 +51,7 @@ describe("aws role", () => {
         ["assume", "aws role assume Role1"],
       ])("%s", (_, command) => {
         it("should print a friendly error message", async () => {
-          const error = await failure(awsCommand(yargs), command);
+          const error = await failure(awsCommand(yargs()), command);
           expect(error).toMatchInlineSnapshot(
             `"Account 1 (test) is not configured for Okta SAML login."`
           );
@@ -68,17 +68,16 @@ describe("aws role", () => {
       });
       describe("assume", () => {
         it("should assume a role", async () => {
-          await awsCommand(yargs).parse("aws role assume Role1");
-          expect(mockPrint2.mock.calls).toMatchSnapshot();
-          expect(mockPrint1.mock.calls).toMatchSnapshot();
+          await awsCommand(yargs()).parse("aws role assume Role1");
+          expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+          expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
         });
       });
       describe("ls", () => {
-        const command = "aws role ls";
         it("lists roles", async () => {
-          await awsCommand(yargs).parse(command);
-          expect(mockPrint2.mock.calls).toMatchSnapshot();
-          expect(mockPrint1.mock.calls).toMatchSnapshot();
+          await awsCommand(yargs()).parse("aws role ls");
+          expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+          expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
         });
       });
     });

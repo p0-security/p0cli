@@ -12,7 +12,7 @@ import yargs from "yargs";
 /** Logs in the user
  *
  * Currently only supports login to a single organization. Login credentials, together
- * with organization details, are saved to ~/.p0/identity.json.
+ * with organization details, are saved to {@link IDENTITY_FILE_PATH}.
  */
 export const login = async (
   args: { org: string },

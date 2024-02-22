@@ -41,7 +41,7 @@ describe("request", () => {
       (isPreexisting, isPersistent, should) => {
         it(`should${should ? "" : " not"} print request response`, async () => {
           mockFetch({ isPreexisting, isPersistent });
-          await requestCommand(yargs).parse(command);
+          await requestCommand(yargs()).parse(command);
           expect(mockPrint2.mock.calls).toMatchSnapshot();
           expect(mockPrint1).not.toHaveBeenCalled();
         });
@@ -50,7 +50,7 @@ describe("request", () => {
 
     it("should wait for access", async () => {
       mockFetch();
-      const promise = requestCommand(yargs).parse(`${command} --wait`);
+      const promise = requestCommand(yargs()).parse(`${command} --wait`);
       const wait = sleep(10);
       await expect(wait).resolves.toBeUndefined();
       (onSnapshot as any).trigger({
@@ -84,7 +84,7 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      const error = await failure(requestCommand(yargs), command);
+      const error = await failure(requestCommand(yargs()), command);
       expect(error).toMatchSnapshot();
     });
   });

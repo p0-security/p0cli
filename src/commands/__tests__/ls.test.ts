@@ -26,7 +26,7 @@ describe("ls", () => {
     });
 
     it("should print list response", async () => {
-      await lsCommand(yargs).parse(command);
+      await lsCommand(yargs()).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot();
       expect(mockPrint2.mock.calls).toMatchSnapshot();
     });
@@ -52,7 +52,7 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      const error = await failure(lsCommand(yargs), command);
+      const error = await failure(lsCommand(yargs()), command);
       expect(error).toMatchSnapshot();
     });
   });
