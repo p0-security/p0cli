@@ -1,12 +1,23 @@
 {
-  "name": "p0cli",
-  "version": "0.2.0",
+  "name": "@komaldhull/p0cli",
+  "version": "0.2.5",
   "description": "Execute infra CLI commands with P0 grants",
   "main": "index.ts",
-  "repository": "https://github.com/p0-security/p0cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0-security/p0cli.git"
+  },
   "author": "P0 Security",
-  "license": "Proprietary",
-  "private": true,
+  "license": "GPL-3.0-only",
+  "bin": {
+    "p0": "p0"
+  },
+  "files": [
+    "dist",
+    "p0",
+    "README.md",
+    "CONTRIBUTING.md"
+  ],
   "dependencies": {
     "@rgrove/parse-xml": "^4.1.0",
     "@types/pluralize": "^0.0.33",
@@ -42,8 +53,9 @@
     "ts-jest": "^29.1.2"
   },
   "scripts": {
-    "build": "tsc && cp -r public build/",
-    "clean": "rm -rf build/",
-    "p0": "node --no-deprecation ./p0"
+    "build": "tsc && cp -r public dist/",
+    "clean": "rm -rf dist/",
+    "p0": "node --no-deprecation ./p0",
+    "prepublishOnly": "npm run clean && npm run build"
   }
 }

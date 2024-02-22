@@ -4,7 +4,7 @@ import express from "express";
 import http from "node:http";
 import { dirname } from "node:path";
 
-const ROOT_PATH = dirname(require.main!.filename);
+const ROOT_PATH = `${dirname(require.main!.filename)}/dist`;
 
 /** A small amount of time is necessary prior to shutting down the redirect server to
  * properly render the redirect-landing page
@@ -33,7 +33,6 @@ export const withRedirectServer = async <S, T, U>(
     const token = req.query as T;
     complete(value, token)
       .then((result) => {
-        // res.redirect(`${ROOT_PATH}/redirect-landing.html`);
         res.status(200).sendFile(`${ROOT_PATH}/public/redirect-landing.html`);
         redirectResolve(result);
       })
