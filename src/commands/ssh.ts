@@ -139,7 +139,12 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     id,
     // the command to run on the remote machine, if any
     command: args.command
-      ? `${args.command} ${args.arguments.join(" ")}`.trim()
+      ? `${args.command} ${args.arguments.map(shellEscapeArgument).join(" ")}`.trim()
       : undefined,
   });
+};
+
+// Helper function to support double quotes (") in commands such as `p0 ssh <instance>> echo 'hi; "mom"'`
+const shellEscapeArgument = (argument: string) => {
+  return `"${argument.replace('"', '\\"')}"`;
 };
