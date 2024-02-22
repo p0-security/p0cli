@@ -77,6 +77,8 @@ const waitForProvisioning = async <P extends PluginRequest>(
         unsubscribe();
       }
     );
+    // Skip timeout in test; it holds a ref longer than the test lasts
+    if (process.env.NODE_ENV === "test") return;
     cancel = setTimeout(() => {
       if (!isResolved) {
         unsubscribe();

@@ -1,0 +1,26 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ssh ephemeral access should call ssm: stderr 1`] = `
+[
+  [
+    "a message",
+  ],
+  [
+    "Will wait up to 5 minutes for this request to complete...",
+  ],
+  [
+    "Your request was approved",
+  ],
+  [
+    "Waiting for access to be provisioned",
+  ],
+]
+`;
+
+exports[`ssh persistent access should call ssm: stderr 1`] = `
+[
+  [
+    "Waiting for access to be provisioned",
+  ],
+]
+`;
