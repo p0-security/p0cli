@@ -17,7 +17,11 @@ import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-type SshCommandArgs = { instance: string; command?: string };
+type SshCommandArgs = {
+  instance: string;
+  command?: string;
+  arguments: string[];
+};
 
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
@@ -26,7 +30,7 @@ const GRANT_TIMEOUT_MILLIS = 60e3;
 
 export const sshCommand = (yargs: yargs.Argv) =>
   yargs.command<SshCommandArgs>(
-    "ssh <instance> [command]",
+    "ssh <instance> [command [arguments..]]",
     "SSH into a virtual machine",
     (yargs) =>
       yargs
@@ -34,10 +38,15 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "string",
           demandOption: true,
         })
-        .option("command", {
-          alias: "c",
+        .positional("command", {
           type: "string",
-          describe: "Command to run on the remote machine",
+          describe: "Optional command to run on the remote machine",
+        })
+        .positional("arguments", {
+          describe: "Optional arguments to append to the command",
+          array: true,
+          string: true,
+          default: [] as string[],
         }),
     guard(ssh)
   );
@@ -125,5 +134,12 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
-  await ssm(authn, { ...requestData, id, command: args.command });
+  await ssm(authn, {
+    ...requestData,
+    id,
+    // the command to run on the remote machine, if any
+    command: args.command
+      ? `${args.command} ${args.arguments.join(" ")}`
+      : undefined,
+  });
 };
