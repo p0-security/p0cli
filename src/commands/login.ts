@@ -1,8 +1,7 @@
 import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { googleLogin } from "../plugins/google/login";
-import { oktaLogin } from "../plugins/okta/login";
+import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
@@ -10,13 +9,11 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import yargs from "yargs";
 
-const pluginLoginMap: Record<string, (org: OrgData) => Promise<TokenResponse>> =
-  {
-    google: googleLogin,
-    okta: oktaLogin,
-    "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
-  };
-
+/** Logs in the user
+ *
+ * Currently only supports login to a single organization. Login credentials, together
+ * with organization details, are saved to {@link IDENTITY_FILE_PATH}.
+ */
 export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }

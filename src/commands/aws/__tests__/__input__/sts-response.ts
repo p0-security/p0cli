@@ -1,0 +1,24 @@
+export const stsResponse = `<AssumeRoleWithSAMLResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+<AssumeRoleWithSAMLResult>
+  <Audience>https://signin.aws.amazon.com/saml</Audience>
+  <AssumedRoleUser>
+    <AssumedRoleId>ABCDEFGHIJLMNOPQRST:test-user@test.com</AssumedRoleId>
+    <Arn>arn:aws:sts::1:assumed-role/Role1/test-user@test.com</Arn>
+  </AssumedRoleUser>
+  <Credentials>
+    <AccessKeyId>test-access-key</AccessKeyId>
+    <SecretAccessKey>secret-access-key</SecretAccessKey>
+    <SessionToken>session-token</SessionToken>
+    <Expiration>2024-02-22T00:18:21Z</Expiration>
+  </Credentials>
+  <Subject>test-user@test.com</Subject>
+  <NameQualifier>abcdefghijklmnop</NameQualifier>
+  <SourceIdentity>test-user@test.com</SourceIdentity>
+  <PackedPolicySize>2</PackedPolicySize>
+  <SubjectType>unspecified</SubjectType>
+  <Issuer>http://www.okta.com/abc</Issuer>
+</AssumeRoleWithSAMLResult>
+<ResponseMetadata>
+  <RequestId>f5b94ad4-f322-4d7b-b568-84f2ec184cd7</RequestId>
+</ResponseMetadata>
+</AssumeRoleWithSAMLResponse>`;

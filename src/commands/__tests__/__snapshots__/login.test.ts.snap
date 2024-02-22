@@ -1,0 +1,40 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`login organization exists should write the user's identity to the file system 1`] = `
+[
+  [
+    "/path/to/home/.p0",
+    "{
+  "credential": {
+    "access_token": "test-access-token",
+    "id_token": "test-id-token",
+    "token_type": "oidc",
+    "scope": "oidc",
+    "expires_in": 3600,
+    "refresh_token": "test-refresh-token",
+    "device_secret": "test-device-secret",
+    "expires_at": 1600003599
+  },
+  "org": {
+    "slug": "test-org",
+    "tenantId": "test-tenant",
+    "ssoProvider": "google"
+  }
+}",
+    {
+      "mode": "600",
+    },
+  ],
+]
+`;
+
+exports[`login organization exists validates authentication 1`] = `
+[
+  [
+    {
+      "tenantId": "test-tenant",
+    },
+    "test-credential",
+  ],
+]
+`;

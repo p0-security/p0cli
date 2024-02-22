@@ -1,0 +1,44 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`aws role a single installed account with Okta SAML assume should assume a role: stderr 1`] = `
+[
+  [
+    "Execute the following commands:
+",
+  ],
+  [
+    "
+Or, populate these environment variables using BASH command substitution:
+
+  $(p0 aws role assume Role1)
+",
+  ],
+]
+`;
+
+exports[`aws role a single installed account with Okta SAML assume should assume a role: stdout 1`] = `
+[
+  [
+    "  export AWS_ACCESS_KEY_ID=test-access-key
+  export AWS_SECRET_ACCESS_KEY=secret-access-key
+  export AWS_SESSION_TOKEN=session-token",
+  ],
+]
+`;
+
+exports[`aws role a single installed account with Okta SAML ls lists roles: stderr 1`] = `
+[
+  [
+    "Your available roles for account 1:",
+  ],
+]
+`;
+
+exports[`aws role a single installed account with Okta SAML ls lists roles: stdout 1`] = `
+[
+  [
+    "  Role1
+  Role2",
+  ],
+]
+`;

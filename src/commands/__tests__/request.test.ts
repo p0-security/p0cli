@@ -1,5 +1,6 @@
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
+import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
 import { sleep } from "../../util";
 import { requestCommand } from "../request";
@@ -40,7 +41,7 @@ describe("request", () => {
       (isPreexisting, isPersistent, should) => {
         it(`should${should ? "" : " not"} print request response`, async () => {
           mockFetch({ isPreexisting, isPersistent });
-          await requestCommand(yargs).parse(command);
+          await requestCommand(yargs()).parse(command);
           expect(mockPrint2.mock.calls).toMatchSnapshot();
           expect(mockPrint1).not.toHaveBeenCalled();
         });
@@ -49,7 +50,7 @@ describe("request", () => {
 
     it("should wait for access", async () => {
       mockFetch();
-      const promise = requestCommand(yargs).parse(`${command} --wait`);
+      const promise = requestCommand(yargs()).parse(`${command} --wait`);
       const wait = sleep(10);
       await expect(wait).resolves.toBeUndefined();
       (onSnapshot as any).trigger({
@@ -83,14 +84,7 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      let error: any;
-      try {
-        await requestCommand(yargs)
-          .fail((_, err) => (error = err))
-          .parse(command);
-      } catch (thrown: any) {
-        error = thrown;
-      }
+      const error = await failure(requestCommand(yargs()), command);
       expect(error).toMatchSnapshot();
     });
   });

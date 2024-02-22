@@ -1,5 +1,6 @@
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
+import { failure } from "../../testing/yargs";
 import { lsCommand } from "../ls";
 import yargs from "yargs";
 
@@ -25,7 +26,7 @@ describe("ls", () => {
     });
 
     it("should print list response", async () => {
-      await lsCommand(yargs).parse(command);
+      await lsCommand(yargs()).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot();
       expect(mockPrint2.mock.calls).toMatchSnapshot();
     });
@@ -51,14 +52,7 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      let error: any;
-      try {
-        await lsCommand(yargs)
-          .fail((_, err) => (error = err))
-          .parse(command);
-      } catch (thrown: any) {
-        error = thrown;
-      }
+      const error = await failure(lsCommand(yargs()), command);
       expect(error).toMatchSnapshot();
     });
   });
