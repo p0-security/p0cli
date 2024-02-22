@@ -29,8 +29,12 @@ type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
-  documentName: string;
+  documentNames: {
+    session: string;
+    command: string;
+  };
   credential: AwsCredentials;
+  command?: string;
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -74,26 +78,42 @@ const accessPropagationGuard = (
   };
 };
 
+/**
+ * Creates an SSM command to start a session or run a command on an instance.
+ * Selects the appropriate SSM document based on the presence of a command.
+ */
+const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const ssmCommand = [
+    "aws",
+    "ssm",
+    "start-session",
+    "--region",
+    args.region,
+    "--target",
+    args.instance,
+  ];
+
+  if(args.command) {
+    ssmCommand.push("--document-name", args.documentNames.command);
+    ssmCommand.push("--parameters", `command=${args.command}`);
+  } else {
+    ssmCommand.push("--document-name", args.documentNames.session);
+  }
+
+  return ssmCommand;
+}
+
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Pick<SsmArgs, "credential" | "documentName" | "instance" | "region">,
+  args: Omit<SsmArgs, "requestId">,
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      args.region,
-      "--target",
-      args.instance,
-      "--document-name",
-      args.documentName,
-    ];
+    const ssmCommand = buildSsmCommand(args)
+    
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -135,7 +155,7 @@ const spawnSsmNode = async (
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & { id: string }
+  request: Request<AwsSsh> & { id: string, command?: string}
 ) => {
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
@@ -148,9 +168,13 @@ export const ssm = async (
   const args = {
     instance: instance!,
     region: region!,
-    documentName: request.generated.documentName,
+    documentNames: {
+      session: request.generated.sessionDocumentName,
+      command: request.generated.commandDocumentName,
+    },
     requestId: request.id,
     credential,
+    command: request.command,
   };
   await spawnSsmNode(args);
 };
