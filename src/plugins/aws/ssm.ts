@@ -94,11 +94,10 @@ const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
   ];
   if (args.command) {
     ssmCommand.push("--document-name", args.documentNames.command);
-    ssmCommand.push("--parameters", `command=${args.command}`);
+    ssmCommand.push("--parameters", `command='${args.command}'`);
   } else {
     ssmCommand.push("--document-name", args.documentNames.session);
   }
-
   return ssmCommand;
 };
 
