@@ -3,6 +3,7 @@ import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { ssm } from "../plugins/aws/ssm";
 import { AwsSsh } from "../plugins/aws/types";
+import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
 import {
   DENIED_STATUSES,
@@ -12,7 +13,7 @@ import {
   Request,
 } from "../types/request";
 import { request } from "./request";
-import { onSnapshot } from "firebase/firestore";
+import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
@@ -32,6 +33,20 @@ export const sshCommand = (yargs: yargs.Argv) =>
       }),
     guard(ssh)
   );
+
+const validateSshInstall = async (authn: Authn) => {
+  const configDoc = await getDoc<SshConfig, object>(
+    doc(`o/${authn.identity.org.tenantId}/integrations/ssh`)
+  );
+  const items = configDoc
+    .data()
+    ?.workflows?.items.filter(
+      (i) => i.state === "installed" && i.type === "aws"
+    );
+  if (!items?.length) {
+    throw "This organization is not configured for SSH access via the P0 CLI";
+  }
+};
 
 // TODO: Move this to a shared utility
 /** Waits until P0 grants access for a request */
@@ -83,6 +98,7 @@ const waitForProvisioning = async <P extends PluginRequest>(
 const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
+  await validateSshInstall(authn);
   const response = await request(
     {
       ...pick(args, "$0", "_"),
