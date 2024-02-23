@@ -32,6 +32,7 @@ export type SshCommandArgs = {
   command?: string;
   L?: string; // port forwarding option
   arguments: string[];
+  sudo?: boolean;
 };
 
 // Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
@@ -51,6 +52,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .positional("destination", {
           type: "string",
           demandOption: true,
+        })
+        .option("sudo", {
+          type: "boolean",
+          describe: "Elevated access to the instance",
         })
         .positional("command", {
           type: "string",
@@ -146,10 +151,12 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
+  const requestArgs = ["ssh", args.destination, "--provider", "aws"];
+  if (args.sudo || args.command === "sudo") requestArgs.push("--sudo");
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: ["ssh", args.destination, "--provider", "aws"],
+      arguments: requestArgs,
       wait: true,
     },
     authn,
