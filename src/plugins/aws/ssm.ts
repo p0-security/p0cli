@@ -41,6 +41,7 @@ type SsmArgs = {
   requestId: string;
   documentName: string;
   credential: AwsCredentials;
+  command?: string;
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -84,26 +85,36 @@ const accessPropagationGuard = (
   };
 };
 
+const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const ssmCommand = [
+    "aws",
+    "ssm",
+    "start-session",
+    "--region",
+    args.region,
+    "--target",
+    args.instance,
+    "--document-name",
+    args.documentName,
+  ];
+
+  if (args.command && args.command.trim()) {
+    ssmCommand.push("--parameters", `command='${args.command}'`);
+  }
+
+  return ssmCommand;
+};
+
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Pick<SsmArgs, "credential" | "documentName" | "instance" | "region">,
+  args: Omit<SsmArgs, "requestId">,
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      args.region,
-      "--target",
-      args.instance,
-      "--document-name",
-      args.documentName,
-    ];
+    const ssmCommand = createSsmCommand(args);
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -145,7 +156,7 @@ const spawnSsmNode = async (
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & { id: string }
+  request: Request<AwsSsh> & { id: string; command?: string }
 ) => {
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
@@ -161,6 +172,7 @@ export const ssm = async (
     documentName: request.generated.documentName,
     requestId: request.id,
     credential,
+    command: request.command,
   };
   await spawnSsmNode(args);
 };
