@@ -85,6 +85,26 @@ const accessPropagationGuard = (
   };
 };
 
+const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const ssmCommand = [
+    "aws",
+    "ssm",
+    "start-session",
+    "--region",
+    args.region,
+    "--target",
+    args.instance,
+    "--document-name",
+    args.documentName,
+  ];
+
+  if (args.command && args.command.trim()) {
+    ssmCommand.push("--parameters", `command='${args.command}'`);
+  }
+
+  return ssmCommand;
+};
+
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
@@ -94,21 +114,7 @@ const spawnSsmNode = async (
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      args.region,
-      "--target",
-      args.instance,
-      "--document-name",
-      args.documentName,
-      "--parameters",
-      // The empty string avoids the validation in the SSM document that doesn't allow zero-length
-      // parameter values when running the session document.
-      `command='${args.command || " "}'`,
-    ];
+    const ssmCommand = createSsmCommand(args);
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -160,6 +166,7 @@ export const ssm = async (
     account,
     role: request.generatedRoles[0]!.role,
   });
+  console.log("received command", request.command);
   const args = {
     instance: instance!,
     region: region!,
