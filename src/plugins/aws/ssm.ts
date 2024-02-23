@@ -29,10 +29,7 @@ type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
-  documentNames: {
-    session: string;
-    command: string;
-  };
+  documentName: string;
   credential: AwsCredentials;
   command?: string;
 };
@@ -78,29 +75,6 @@ const accessPropagationGuard = (
   };
 };
 
-/**
- * Creates an SSM command to start a session or run a command on an instance.
- * Selects the appropriate SSM document based on the presence of a command.
- */
-const buildSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
-  const ssmCommand = [
-    "aws",
-    "ssm",
-    "start-session",
-    "--region",
-    args.region,
-    "--target",
-    args.instance,
-  ];
-  if (args.command) {
-    ssmCommand.push("--document-name", args.documentNames.command);
-    ssmCommand.push("--parameters", `command='${args.command}'`);
-  } else {
-    ssmCommand.push("--document-name", args.documentNames.session);
-  }
-  return ssmCommand;
-};
-
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
@@ -110,7 +84,21 @@ const spawnSsmNode = async (
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = buildSsmCommand(args);
+    const ssmCommand = [
+      "aws",
+      "ssm",
+      "start-session",
+      "--region",
+      args.region,
+      "--target",
+      args.instance,
+      "--document-name",
+      args.documentName,
+      "--parameters",
+      // The empty string avoids the validation in the SSM document that doesn't allow zero-length
+      // parameter values when running the session document.
+      `command='${args.command || " "}'`,
+    ];
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -165,7 +153,7 @@ export const ssm = async (
   const args = {
     instance: instance!,
     region: region!,
-    documentNames: request.generated.documentNames,
+    documentName: request.generated.documentName,
     requestId: request.id,
     credential,
     command: request.command,
