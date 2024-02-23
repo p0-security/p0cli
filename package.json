@@ -16,7 +16,8 @@
     "dist",
     "p0",
     "README.md",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "COPYING.md"
   ],
   "dependencies": {
     "@rgrove/parse-xml": "^4.1.0",
@@ -41,6 +42,7 @@
     "@types/node": "^18.11.7",
     "@types/yargs": "^17.0.13",
     "@typescript-eslint/eslint-plugin": "^6.4.0",
+    "eslint-plugin-notice": "^0.9.10",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",

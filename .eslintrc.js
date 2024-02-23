@@ -10,6 +10,7 @@ module.exports = {
     "plugin:@typescript-eslint/recommended",
     "prettier",
   ],
+  plugins:["notice"],
   rules: {
     // Allow empty generators
     "require-yield": "off",
@@ -46,6 +47,10 @@ module.exports = {
     "@typescript-eslint/unbound-method": ["error", { ignoreStatic: true }],
     // Use `print1` and `print2` instead
     "no-console": "error",
+    "notice/notice":["error",{
+        "templateFile":"copyright.ts"
+        }]
+
   },
   ignorePatterns: [
     ".eslintrc.js",
