@@ -50,7 +50,7 @@ module.exports = {
     "notice/notice": [
       "error",
       {
-        templateFile: "copyright.ts",
+        templateFile: "copyright.js",
       },
     ],
   },

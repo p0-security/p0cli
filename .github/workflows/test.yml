@@ -31,5 +31,7 @@ jobs:
           key: ${{ runner.os }}-yarn-${{ steps.yarn-cache-dir-path.outputs.version }}-${{ hashFiles('**/yarn.lock') }}
       - name: Yarn install
         run: yarn install
+      - name: Build
+        run: yarn build
       - name: Run tests
         run: yarn jest -w2
