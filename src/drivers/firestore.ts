@@ -1,4 +1,4 @@
-/** Copyright © 2024 P0 Security 
+/** Copyright © 2024-present P0 Security 
 
 This file is part of @p0security/p0cli
 
@@ -8,7 +8,6 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-
 import { config } from "./env";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
