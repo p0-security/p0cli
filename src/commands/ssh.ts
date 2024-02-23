@@ -152,6 +152,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
           .map(
             (argument) =>
               // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'`
+              // because we need to encapsulate command arguments as we pass them along to the remote shell
               `"${argument.replace(/"/g, '\\"')}"`
           )
           .join(" ")}`.trim()
