@@ -8,7 +8,6 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-
 export type AwsCredentials = {
   AWS_ACCESS_KEY_ID: string;
   AWS_SECRET_ACCESS_KEY: string;

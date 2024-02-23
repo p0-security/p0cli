@@ -8,7 +8,6 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-
 export const authenticate = async () => ({
   identity: {
     credential: {
