@@ -54,7 +54,7 @@
   },
   "scripts": {
     "build": "tsc && cp -r public dist/",
-    "clean": "rm -rf dist/",
+    "clean": "rm tsconfig.tsbuildinfo && rm -rf dist/",
     "p0": "node --no-deprecation ./p0",
     "prepublishOnly": "npm run clean && npm run build"
   }
