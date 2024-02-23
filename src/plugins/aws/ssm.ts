@@ -166,7 +166,6 @@ export const ssm = async (
     account,
     role: request.generatedRoles[0]!.role,
   });
-  console.log("received command", request.command);
   const args = {
     instance: instance!,
     region: region!,
