@@ -1,10 +1,21 @@
+/** Copyright © 2024-present P0 Security 
+
+This file is part of @p0security/p0cli
+
+@p0security/p0cli is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+
+@p0security/p0cli is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
+**/
+
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
 import { sleep } from "../../util";
 import express from "express";
 import http from "node:http";
 import { dirname } from "node:path";
 
-const ROOT_PATH = dirname(require.main!.filename);
+const ROOT_PATH = `${dirname(require.main!.filename)}/dist`;
 
 /** A small amount of time is necessary prior to shutting down the redirect server to
  * properly render the redirect-landing page
@@ -33,7 +44,6 @@ export const withRedirectServer = async <S, T, U>(
     const token = req.query as T;
     complete(value, token)
       .then((result) => {
-        // res.redirect(`${ROOT_PATH}/redirect-landing.html`);
         res.status(200).sendFile(`${ROOT_PATH}/public/redirect-landing.html`);
         redirectResolve(result);
       })
