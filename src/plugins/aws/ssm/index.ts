@@ -37,6 +37,9 @@ const MAX_SSM_RETRIES = 30;
 const INSTANCE_ARN_PATTERN =
   /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
 
+/** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
+const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
+
 type SsmArgs = {
   instance: string;
   region: string;
@@ -44,6 +47,7 @@ type SsmArgs = {
   documentName: string;
   credential: AwsCredentials;
   command?: string;
+  forwardPortAddress?: string;
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -88,6 +92,12 @@ const accessPropagationGuard = (
 };
 
 const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const hasCommand = args.command && args.command.trim();
+
+  if (hasCommand && args.forwardPortAddress) {
+    throw "Invalid arguments. Specify either a command or port forwarding, not both.";
+  }
+
   const ssmCommand = [
     "aws",
     "ssm",
@@ -97,11 +107,22 @@ const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
     "--target",
     args.instance,
     "--document-name",
-    args.documentName,
+    // Port forwarding is a special case that uses an AWS-managed document and
+    // not the user-generated document we use for an SSH session
+    args.forwardPortAddress
+      ? LOCAL_PORT_FORWARDING_DOCUMENT_NAME
+      : args.documentName,
   ];
 
-  if (args.command && args.command.trim()) {
+  if (hasCommand) {
     ssmCommand.push("--parameters", `command='${args.command}'`);
+  } else if (args.forwardPortAddress) {
+    const [localPort, remotePort] = args.forwardPortAddress.split(":");
+
+    ssmCommand.push(
+      "--parameters",
+      `localPortNumber=${localPort},portNumber=${remotePort}`
+    );
   }
 
   return ssmCommand;
@@ -193,6 +214,7 @@ export const ssm = async (
     region: region!,
     documentName: request.generated.documentName,
     requestId: request.id,
+    forwardPortAddress: args.L,
     credential,
     command: commandParameter(args),
   };

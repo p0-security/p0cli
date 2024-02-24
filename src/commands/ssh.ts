@@ -30,8 +30,12 @@ import yargs from "yargs";
 export type SshCommandArgs = {
   instance: string;
   command?: string;
+  L?: string;
   arguments: string[];
 };
+
+// Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
+const LOCAL_PORT_FORWARD_PATTERN = /^\d+:\d+$/;
 
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
@@ -57,6 +61,20 @@ export const sshCommand = (yargs: yargs.Argv) =>
           array: true,
           string: true,
           default: [] as string[],
+        })
+        .check((argv: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
+          if (argv.L == null) return true;
+
+          return (
+            argv.L.match(LOCAL_PORT_FORWARD_PATTERN) ||
+            "Local port forward should be in the format `local_port:remote_port`"
+          );
+        })
+        .option("L", {
+          type: "string",
+          describe:
+            // the order of the sockets in the address matches the ssh man page
+            "Forward a local port to the remote host; `local_socket:remote_socket`",
         }),
     guard(ssh)
   );
