@@ -8,7 +8,7 @@
 
 The offical Command-Line Interface (CLI) for P0.
 
-Supports creating access requests for cloud resources, assuming AWS roles, and SSHing into AWS instances.
+Supports creating access requests for cloud resources, assuming AWS roles, and connecting to AWS instances.
 
 ## Table of Contents
 
