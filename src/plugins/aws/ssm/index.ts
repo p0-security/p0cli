@@ -8,11 +8,13 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { print2 } from "../../drivers/stdio";
-import { Authn } from "../../types/identity";
-import { Request } from "../../types/request";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
-import { AwsCredentials, AwsSsh } from "./types";
+import { SshCommandArgs } from "../../../commands/ssh";
+import { print2 } from "../../../drivers/stdio";
+import { Authn } from "../../../types/identity";
+import { Request } from "../../../types/request";
+import { assumeRoleWithOktaSaml } from "../../okta/aws";
+import { AwsCredentials, AwsSsh } from "../types";
+import { ensureSsmInstall } from "./install";
 import { ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable } from "node:stream";
 
@@ -153,11 +155,31 @@ const spawnSsmNode = async (
     });
   });
 
+/** Convert an SshCommandArgs into an SSM document "command" parameter */
+const commandParameter = (args: SshCommandArgs) =>
+  args.command
+    ? `${args.command} ${args.arguments
+        .map(
+          (argument) =>
+            // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
+            // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
+            `"${argument.replace(/"/g, '\\"')}"`
+        )
+        .join(" ")}`.trim()
+    : undefined;
+
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & { id: string; command?: string }
+  request: Request<AwsSsh> & {
+    id: string;
+  },
+  args: SshCommandArgs
 ) => {
+  const isInstalled = await ensureSsmInstall();
+  if (!isInstalled)
+    throw "Please try again after installing the required AWS utilities";
+
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
@@ -166,13 +188,13 @@ export const ssm = async (
     account,
     role: request.generatedRoles[0]!.role,
   });
-  const args = {
+  const ssmArgs = {
     instance: instance!,
     region: region!,
     documentName: request.generated.documentName,
     requestId: request.id,
     credential,
-    command: request.command,
+    command: commandParameter(args),
   };
-  await spawnSsmNode(args);
+  await spawnSsmNode(ssmArgs);
 };
