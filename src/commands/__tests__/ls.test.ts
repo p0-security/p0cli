@@ -31,7 +31,10 @@ describe("ls", () => {
         ok: true,
         term: "",
         arg: "destination",
-        items: ["instance-1", "instance-2"],
+        items: [
+          { key: "instance-1", value: "Instance 1" },
+          { key: "instance-2", value: "Instance 2" },
+        ],
       });
     });
 
