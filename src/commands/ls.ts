@@ -52,10 +52,15 @@ const ls = async (
   ]);
 
   if (data && "ok" in data && data.ok) {
+    const label = pluralize(data.arg);
+    if (data.items.length === 0) {
+      print2(`No ${label}`);
+      return;
+    }
     print2(
       `Showing${
         data.isTruncated ? ` the first ${data.items.length}` : ""
-      } ${pluralize(data.arg)}${data.term ? ` matching '${data.term}'` : ""}:`
+      } ${label}${data.term ? ` matching '${data.term}'` : ""}:`
     );
     for (const item of data.items) {
       print1(item);
