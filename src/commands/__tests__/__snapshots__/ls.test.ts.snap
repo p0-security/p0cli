@@ -19,10 +19,10 @@ Unknown argument: foo",
 exports[`ls when valid ls command should print list response 1`] = `
 [
   [
-    "instance-1 - Instance 1",
+    "instance-1[02m - Instance 1[00m",
   ],
   [
-    "instance-2 - Instance 2",
+    "instance-2[02m - Instance 2[00m",
   ],
 ]
 `;

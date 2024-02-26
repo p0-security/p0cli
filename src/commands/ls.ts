@@ -67,10 +67,15 @@ const ls = async (
 
     print2(`Showing${truncationPart} ${argPart}${postfixPart}:`);
     const isSameValue = data.items.every((i) => !i.group && i.key === i.value);
-    const longest = max(data.items.map((i) => i.key.length)) || 0;
+    const maxLength = max(data.items.map((i) => i.key.length)) || 0;
     for (const item of data.items) {
+      const tagPart = `${item.group ? `${item.group} / ` : ""}${item.value}`;
       print1(
-        isSameValue ? item.key : `${item.key.padEnd(longest)} - ${item.value}`
+        isSameValue
+          ? item.key
+          : maxLength > 30
+            ? `${item.key}\n  \u001b[02m${tagPart}\u001b[00m`
+            : `${item.key.padEnd(maxLength)}\u001b[02m - ${tagPart}\u001b[00m`
       );
     }
   } else {
