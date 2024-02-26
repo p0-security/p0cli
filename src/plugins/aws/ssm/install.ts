@@ -65,7 +65,8 @@ const queryInteractive = async () => {
     {
       type: "confirm",
       name: "isGuided",
-      message: "Do you want P0 to install these for you?",
+      message:
+        "Do you want P0 to install these for you (sudo access required)?",
     },
   ]);
   print2("");
