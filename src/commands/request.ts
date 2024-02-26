@@ -40,6 +40,7 @@ const isCompletedStatus = (
 const requestArgs = <T>(yargs: yargs.Argv<T>) =>
   yargs
     .parserConfiguration({ "unknown-options-as-args": true })
+    .help(false)
     .option("wait", {
       alias: "w",
       boolean: true,
