@@ -30,7 +30,7 @@ import yargs from "yargs";
 export type SshCommandArgs = {
   instance: string;
   command?: string;
-  L?: string;
+  L?: string; // port forwarding option
   arguments: string[];
 };
 
