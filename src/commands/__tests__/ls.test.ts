@@ -23,22 +23,31 @@ const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
 describe("ls", () => {
+  beforeEach(() => jest.clearAllMocks());
+
   describe("when valid ls command", () => {
     const command = "ls ssh destination";
 
-    beforeAll(() => {
+    const mockItems = (items: string[]) =>
       mockFetchCommand.mockResolvedValue({
         ok: true,
         term: "",
         arg: "destination",
-        items: ["instance-1", "instance-2"],
+        items,
       });
-    });
 
     it("should print list response", async () => {
+      mockItems(["instance-1", "instance-2"]);
       await lsCommand(yargs()).parse(command);
-      expect(mockPrint1.mock.calls).toMatchSnapshot();
-      expect(mockPrint2.mock.calls).toMatchSnapshot();
+      expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+      expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+    });
+
+    it("should print friendly message if no items", async () => {
+      mockItems([]);
+      await lsCommand(yargs()).parse(command);
+      expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+      expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
     });
   });
 
