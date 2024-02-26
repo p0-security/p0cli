@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 

@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 
@@ -27,7 +27,7 @@ import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-type SshCommandArgs = {
+export type SshCommandArgs = {
   instance: string;
   command?: string;
   arguments: string[];
@@ -125,7 +125,6 @@ const waitForProvisioning = async <P extends PluginRequest>(
  * - AWS EC2 via SSM with Okta SAML
  */
 const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
-  // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
   const response = await request(
@@ -143,19 +142,9 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   }
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
+
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
-  await ssm(authn, {
-    ...requestData,
-    id,
-    command: args.command
-      ? `${args.command} ${args.arguments
-          .map(
-            (argument) =>
-              // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
-              // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
-              `"${argument.replace(/"/g, '\\"')}"`
-          )
-          .join(" ")}`.trim()
-      : undefined,
-  });
+  const requestWithId = { ...requestData, id };
+
+  await ssm(authn, requestWithId, args);
 };
