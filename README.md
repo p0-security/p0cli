@@ -163,7 +163,7 @@ If you don't see your desired role, you will first need to request access to it.
 Once you have permissions, you can run
 
 ```
-p0 aws role assume <ROLE_NAME>
+$(p0 aws role assume <ROLE_NAME>)
 ```
 
 ### SSH into an AWS Instance
