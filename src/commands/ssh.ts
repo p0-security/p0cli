@@ -28,7 +28,7 @@ import { pick } from "lodash";
 import yargs from "yargs";
 
 export type SshCommandArgs = {
-  instance: string;
+  destination: string;
   command?: string;
   L?: string; // port forwarding option
   arguments: string[];
@@ -44,11 +44,11 @@ const GRANT_TIMEOUT_MILLIS = 60e3;
 
 export const sshCommand = (yargs: yargs.Argv) =>
   yargs.command<SshCommandArgs>(
-    "ssh <instance> [command [arguments..]]",
+    "ssh <destination> [command [arguments..]]",
     "SSH into a virtual machine",
     (yargs) =>
       yargs
-        .positional("instance", {
+        .positional("destination", {
           type: "string",
           demandOption: true,
         })
@@ -143,12 +143,13 @@ const waitForProvisioning = async <P extends PluginRequest>(
  * - AWS EC2 via SSM with Okta SAML
  */
 const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
+  // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: ["ssh", args.instance, "--provider", "aws"],
+      arguments: ["ssh", args.destination, "--provider", "aws"],
       wait: true,
     },
     authn,
