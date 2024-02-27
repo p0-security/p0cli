@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 
@@ -8,11 +8,13 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { print2 } from "../../drivers/stdio";
-import { Authn } from "../../types/identity";
-import { Request } from "../../types/request";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
-import { AwsCredentials, AwsSsh } from "./types";
+import { SshCommandArgs } from "../../../commands/ssh";
+import { print2 } from "../../../drivers/stdio";
+import { Authn } from "../../../types/identity";
+import { Request } from "../../../types/request";
+import { assumeRoleWithOktaSaml } from "../../okta/aws";
+import { AwsCredentials, AwsSsh } from "../types";
+import { ensureSsmInstall } from "./install";
 import { ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable } from "node:stream";
 
@@ -35,12 +37,17 @@ const MAX_SSM_RETRIES = 30;
 const INSTANCE_ARN_PATTERN =
   /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
 
+/** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
+const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
+
 type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
   documentName: string;
   credential: AwsCredentials;
+  command?: string;
+  forwardPortAddress?: string;
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -84,26 +91,53 @@ const accessPropagationGuard = (
   };
 };
 
+const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const hasCommand = args.command && args.command.trim();
+
+  if (hasCommand && args.forwardPortAddress) {
+    throw "Invalid arguments. Specify either a command or port forwarding, not both.";
+  }
+
+  const ssmCommand = [
+    "aws",
+    "ssm",
+    "start-session",
+    "--region",
+    args.region,
+    "--target",
+    args.instance,
+    "--document-name",
+    // Port forwarding is a special case that uses an AWS-managed document and
+    // not the user-generated document we use for an SSH session
+    args.forwardPortAddress
+      ? LOCAL_PORT_FORWARDING_DOCUMENT_NAME
+      : args.documentName,
+  ];
+
+  if (hasCommand) {
+    ssmCommand.push("--parameters", `command='${args.command}'`);
+  } else if (args.forwardPortAddress) {
+    const [localPort, remotePort] = args.forwardPortAddress.split(":");
+
+    ssmCommand.push(
+      "--parameters",
+      `localPortNumber=${localPort},portNumber=${remotePort}`
+    );
+  }
+
+  return ssmCommand;
+};
+
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Pick<SsmArgs, "credential" | "documentName" | "instance" | "region">,
+  args: Omit<SsmArgs, "requestId">,
   options?: { attemptsRemaining?: number }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      args.region,
-      "--target",
-      args.instance,
-      "--document-name",
-      args.documentName,
-    ];
+    const ssmCommand = createSsmCommand(args);
     const child = spawn("/usr/bin/env", ssmCommand, {
       env: {
         ...process.env,
@@ -142,11 +176,31 @@ const spawnSsmNode = async (
     });
   });
 
+/** Convert an SshCommandArgs into an SSM document "command" parameter */
+const commandParameter = (args: SshCommandArgs) =>
+  args.command
+    ? `${args.command} ${args.arguments
+        .map(
+          (argument) =>
+            // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
+            // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
+            `"${argument.replace(/"/g, '\\"')}"`
+        )
+        .join(" ")}`.trim()
+    : undefined;
+
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & { id: string }
+  request: Request<AwsSsh> & {
+    id: string;
+  },
+  args: SshCommandArgs
 ) => {
+  const isInstalled = await ensureSsmInstall();
+  if (!isInstalled)
+    throw "Please try again after installing the required AWS utilities";
+
   const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
@@ -155,12 +209,14 @@ export const ssm = async (
     account,
     role: request.generatedRoles[0]!.role,
   });
-  const args = {
+  const ssmArgs = {
     instance: instance!,
     region: region!,
     documentName: request.generated.documentName,
     requestId: request.id,
+    forwardPortAddress: args.L,
     credential,
+    command: commandParameter(args),
   };
-  await spawnSsmNode(args);
+  await spawnSsmNode(ssmArgs);
 };

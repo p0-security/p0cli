@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 
@@ -40,6 +40,7 @@ const isCompletedStatus = (
 const requestArgs = <T>(yargs: yargs.Argv<T>) =>
   yargs
     .parserConfiguration({ "unknown-options-as-args": true })
+    .help(false) // Turn off help in order to forward the --help command to the backend so P0 can provide the available requestable resources
     .option("wait", {
       alias: "w",
       boolean: true,

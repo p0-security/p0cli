@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 
@@ -27,20 +27,55 @@ import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
+export type SshCommandArgs = {
+  instance: string;
+  command?: string;
+  L?: string; // port forwarding option
+  arguments: string[];
+};
+
+// Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
+const LOCAL_PORT_FORWARD_PATTERN = /^\d+:\d+$/;
+
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
  */
 const GRANT_TIMEOUT_MILLIS = 60e3;
 
 export const sshCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ instance: string }>(
-    "ssh <instance>",
+  yargs.command<SshCommandArgs>(
+    "ssh <instance> [command [arguments..]]",
     "SSH into a virtual machine",
     (yargs) =>
-      yargs.positional("instance", {
-        type: "string",
-        demandOption: true,
-      }),
+      yargs
+        .positional("instance", {
+          type: "string",
+          demandOption: true,
+        })
+        .positional("command", {
+          type: "string",
+          describe: "Pass command to the shell",
+        })
+        .positional("arguments", {
+          describe: "Command arguments",
+          array: true,
+          string: true,
+          default: [] as string[],
+        })
+        .check((argv: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
+          if (argv.L == null) return true;
+
+          return (
+            argv.L.match(LOCAL_PORT_FORWARD_PATTERN) ||
+            "Local port forward should be in the format `local_port:remote_port`"
+          );
+        })
+        .option("L", {
+          type: "string",
+          describe:
+            // the order of the sockets in the address matches the ssh man page
+            "Forward a local port to the remote host; `local_socket:remote_socket`",
+        }),
     guard(ssh)
   );
 
@@ -107,8 +142,7 @@ const waitForProvisioning = async <P extends PluginRequest>(
  * Supported SSH mechanisms:
  * - AWS EC2 via SSM with Okta SAML
  */
-const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
-  // Prefix is required because the backend uses it to determine that this is an AWS request
+const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   const authn = await authenticate();
   await validateSshInstall(authn);
   const response = await request(
@@ -126,6 +160,9 @@ const ssh = async (args: yargs.ArgumentsCamelCase<{ instance: string }>) => {
   }
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
+
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
-  await ssm(authn, { ...requestData, id });
+  const requestWithId = { ...requestData, id };
+
+  await ssm(authn, requestWithId, args);
 };

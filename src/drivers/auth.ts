@@ -1,4 +1,4 @@
-/** Copyright © 2024-present P0 Security 
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/p0cli
 
@@ -32,11 +32,13 @@ export const cached = async <T>(
   loader: () => Promise<T>,
   options: { duration: number }
 ): Promise<T> => {
-  const loc = path.join(
-    path.dirname(IDENTITY_FILE_PATH),
-    "cache",
-    `${name}.json`
-  );
+  const cachePath = path.join(path.dirname(IDENTITY_FILE_PATH), "cache");
+  // Following lines sanitize input
+  // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const loc = path.resolve(path.join(cachePath, `${name}.json`));
+  if (!loc.startsWith(cachePath)) {
+    throw new Error("Illegal path traversal");
+  }
 
   const loadCache = async () => {
     const data = await loader();

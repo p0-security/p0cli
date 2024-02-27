@@ -8,14 +8,8 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import yargs from "yargs";
 
-export const failure = async (spec: yargs.Argv, command: string) => {
-  let error: any;
-  try {
-    await spec.fail((_, err) => (error = err)).parse(command);
-  } catch (thrown: any) {
-    error = thrown;
-  }
-  return error;
-};
+export const isa =
+  <T>(values: readonly T[]) =>
+  (item: any): item is T =>
+    values.includes(item);
