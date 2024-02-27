@@ -79,7 +79,7 @@ To view help, use the `--help` option with any command.
   p0 login <org>            Log in to p0 using a web browser
   p0 ls [arguments..]       List request-command arguments
   p0 request [arguments..]  Manually request permissions on a resource
-  p0 ssh <instance>         SSH into a virtual machine
+  p0 ssh <destination>         SSH into a virtual machine
 ```
 
 ## Support
