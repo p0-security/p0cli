@@ -11,7 +11,10 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { ssm } from "../plugins/aws/ssm";
+import {
+  INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE,
+  ssm,
+} from "../plugins/aws/ssm";
 import { AwsSsh } from "../plugins/aws/types";
 import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
@@ -68,7 +71,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
 
           return (
             argv.L.match(LOCAL_PORT_FORWARD_PATTERN) ||
-            "Local port forward should be in the format `local_port:remote_port`"
+            INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE
           );
         })
         .option("L", {

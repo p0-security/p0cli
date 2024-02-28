@@ -16,7 +16,12 @@ import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { AwsCredentials, AwsSsh } from "../types";
 import { ensureSsmInstall } from "./install";
 import { ChildProcessByStdio, spawn } from "node:child_process";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+
+export const INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE =
+  "Local port forward should be in the format `local_port:remote_port`";
+
+const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
 
 /** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
@@ -45,9 +50,13 @@ type SsmArgs = {
   region: string;
   requestId: string;
   documentName: string;
-  credential: AwsCredentials;
   command?: string;
   forwardPortAddress?: string;
+};
+
+const parseBuffer = (fn: (message: string) => void) => (buffer: Buffer) => {
+  const message = buffer.toString("utf-8");
+  fn(message);
 };
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -71,34 +80,30 @@ const accessPropagationGuard = (
   let isEphemeralAccessDeniedException = false;
   const beforeStart = Date.now();
 
-  child.stderr.on("data", (chunk) => {
-    const chunkString = chunk.toString("utf-8");
-    const match = chunkString.match(UNPROVISIONED_ACCESS_MESSAGE);
+  child.stderr.on(
+    "data",
+    parseBuffer((message) => {
+      const match = message.match(UNPROVISIONED_ACCESS_MESSAGE);
 
-    if (
-      match &&
-      Date.now() <= beforeStart + UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS
-    ) {
-      isEphemeralAccessDeniedException = true;
-      return;
-    }
+      if (
+        match &&
+        Date.now() <= beforeStart + UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS
+      ) {
+        isEphemeralAccessDeniedException = true;
+        return;
+      }
 
-    print2(chunkString);
-  });
+      print2(message);
+    })
+  );
 
   return {
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
   };
 };
 
-const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
-  const hasCommand = args.command && args.command.trim();
-
-  if (hasCommand && args.forwardPortAddress) {
-    throw "Invalid arguments. Specify either a command or port forwarding, not both.";
-  }
-
-  const ssmCommand = [
+const createBaseSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+  return [
     "aws",
     "ssm",
     "start-session",
@@ -106,26 +111,150 @@ const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
     args.region,
     "--target",
     args.instance,
+  ];
+};
+
+const createInteractiveShellCommand = (args: Omit<SsmArgs, "requestId">) => {
+  const ssmCommand = [
+    ...createBaseSsmCommand(args),
     "--document-name",
-    // Port forwarding is a special case that uses an AWS-managed document and
-    // not the user-generated document we use for an SSH session
-    args.forwardPortAddress
-      ? LOCAL_PORT_FORWARDING_DOCUMENT_NAME
-      : args.documentName,
+    args.documentName,
   ];
 
-  if (hasCommand) {
-    ssmCommand.push("--parameters", `command='${args.command}'`);
-  } else if (args.forwardPortAddress) {
-    const [localPort, remotePort] = args.forwardPortAddress.split(":");
-
-    ssmCommand.push(
-      "--parameters",
-      `localPortNumber=${localPort},portNumber=${remotePort}`
-    );
+  const command = args.command?.trim();
+  if (command) {
+    ssmCommand.push("--parameters", `command='${command}'`);
   }
 
   return ssmCommand;
+};
+
+const createPortForwardingCommand = (args: Omit<SsmArgs, "requestId">) => {
+  if (!args.forwardPortAddress) throw INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE;
+
+  const [localPort, remotePort] = args.forwardPortAddress.split(":");
+
+  return [
+    ...createBaseSsmCommand(args),
+    "--document-name",
+    // Port forwarding is a special case that uses an AWS-managed document, not the user-generated document we use for an SSH session
+    LOCAL_PORT_FORWARDING_DOCUMENT_NAME,
+    "--parameters",
+    `localPortNumber=${localPort},portNumber=${remotePort}`,
+  ];
+};
+
+const createSsmCommands = (
+  args: Omit<SsmArgs, "requestId">
+): { command: string[]; subcommand?: string[] } => {
+  const command = createInteractiveShellCommand(args);
+
+  if (args.forwardPortAddress) {
+    return {
+      command,
+      subcommand: createPortForwardingCommand(args),
+    };
+  }
+
+  return {
+    command,
+  };
+};
+
+/**
+ * Manages the lifecycle of child processes that execute AWS SSM commands
+ * @param credentials AWS credentials to be passed to the child processes for executing AWS SSM commands
+ */
+const subcommandManager = (credentials: AwsCredentials) => {
+  const children: ChildProcessByStdio<any, any, any>[] = [];
+  const streamClosers: (() => void)[] = [];
+
+  return {
+    /**
+     * Executes an AWS SSM command in a child process and creates a stream to suppress the {@link STARTING_SESSION_MESSAGE} from the child process
+     * @param command The command to be executed in the child process
+     */
+    executeCommand: (command: string[]) => {
+      const subprocess = spawn("/usr/bin/env", command, {
+        env: {
+          ...process.env,
+          ...credentials,
+        },
+        stdio: ["inherit", "pipe", "pipe"],
+        detached: true,
+      });
+
+      const stream = sessionOutputStream(subprocess, {
+        suppressStartSessionMessage: true,
+      });
+
+      streamClosers.push(stream.close);
+      children.push(subprocess);
+    },
+    /**
+     * Terminates all child processes, their respective subprocesses, and any associated streams
+     */
+    killProcesses: () => {
+      streamClosers.forEach((closer) => closer());
+      children.forEach((child) => {
+        if (child.pid) {
+          process.kill(-child.pid);
+        } else {
+          // Emergency attempt to kill the child process,
+          // in theory the PID should be always be available.
+          child.kill("SIGKILL");
+        }
+      });
+    },
+  };
+};
+
+/**
+ * Creates a stream that intercepts the output of the child process running the SSM session command and triggers a callback when the SSM session starts
+ * @param child The child process that is running the SSM session command
+ * @param options.suppressStartSessionMessage Whether to suppress the {@link STARTING_SESSION_MESSAGE} from being printed to the terminal
+ */
+const sessionOutputStream = (
+  child: ChildProcessByStdio<any, Readable, any>,
+  options?: {
+    suppressStartSessionMessage: boolean;
+  }
+) => {
+  const callbacks: (() => void)[] = [];
+
+  // Create a transform stream to duplicate the data
+  const proxyStream = new Transform({
+    transform(chunk, _, end) {
+      parseBuffer((message) => {
+        // spawn subprocesses when the SSM session starts
+        const match = message.match(STARTING_SESSION_MESSAGE);
+        if (match) {
+          for (const callback of callbacks) {
+            callback();
+          }
+        }
+
+        if (!options?.suppressStartSessionMessage || !match) {
+          // Pass the original chunk through
+          this.push(chunk);
+        }
+
+        end();
+      });
+    },
+  });
+
+  // ensures that content from the child process is printed to the terminal even though we're piping it to a stream
+  child.stdout.pipe(proxyStream).pipe(process.stdout);
+
+  return {
+    onSessionStart: (callback: () => void) => {
+      callbacks.push(callback);
+    },
+    close: () => {
+      proxyStream.destroy();
+    },
+  };
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
@@ -133,24 +262,35 @@ const createSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
  * Requires `aws ssm` to be installed on the client machine.
  */
 const spawnSsmNode = async (
-  args: Omit<SsmArgs, "requestId">,
-  options?: { attemptsRemaining?: number }
+  credentials: AwsCredentials,
+  options: {
+    command: string[];
+    attemptsRemaining?: number;
+    subcommand?: string[];
+  }
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const ssmCommand = createSsmCommand(args);
-    const child = spawn("/usr/bin/env", ssmCommand, {
+    const parent = spawn("/usr/bin/env", options.command, {
       env: {
         ...process.env,
-        ...args.credential,
+        ...credentials,
       },
-      stdio: ["inherit", "inherit", "pipe"],
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+    const stream = sessionOutputStream(parent);
+    const subprocesses = subcommandManager(credentials);
+
+    stream.onSessionStart(() => {
+      const subcommand = options?.subcommand ?? [];
+      if (subcommand.length) {
+        subprocesses.executeCommand(subcommand);
+      }
     });
 
-    const { isAccessPropagated } = accessPropagationGuard(child);
+    const { isAccessPropagated } = accessPropagationGuard(parent);
 
-    const exitListener = child.on("exit", (code) => {
+    const exitListener = parent.on("exit", (code) => {
       exitListener.unref();
-
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
@@ -162,8 +302,8 @@ const spawnSsmNode = async (
           return;
         }
         // console.debug("Permissions not yet propagated in AWS; retrying");
-        spawnSsmNode(args, {
-          ...(options ?? {}),
+        spawnSsmNode(credentials, {
+          ...options,
           attemptsRemaining: attemptsRemaining - 1,
         })
           .then((code) => resolve(code))
@@ -171,6 +311,7 @@ const spawnSsmNode = async (
         return;
       }
 
+      subprocesses.killProcesses();
       print2("SSH session terminated");
       resolve(code);
     });
@@ -215,8 +356,9 @@ export const ssm = async (
     documentName: request.generated.documentName,
     requestId: request.id,
     forwardPortAddress: args.L,
-    credential,
     command: commandParameter(args),
   };
-  await spawnSsmNode(ssmArgs);
+  await spawnSsmNode(credential, {
+    ...createSsmCommands(ssmArgs),
+  });
 };
