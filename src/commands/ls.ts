@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { print2, print1 } from "../drivers/stdio";
+import { print2, print1, Ansi } from "../drivers/stdio";
 import { max } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
@@ -78,8 +78,8 @@ const ls = async (
         isSameValue
           ? item.key
           : maxLength > 30
-            ? `${item.key}\n  \u001b[02m${tagPart}\u001b[00m`
-            : `${item.key.padEnd(maxLength)}\u001b[02m - ${tagPart}\u001b[00m`
+            ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
+            : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
       );
     }
   } else {
