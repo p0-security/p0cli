@@ -2,7 +2,6 @@
 
 exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] = `
 {
-  "$0": "/Users/nathanbrahms/dev/p0cli/node_modules/.bin/jest",
   "_": [
     "ssh",
   ],
@@ -37,7 +36,6 @@ exports[`ssh ephemeral access should call ssm: stderr 1`] = `
 
 exports[`ssh persistent access should call p0 request with reason arg: args 1`] = `
 {
-  "$0": "/Users/nathanbrahms/dev/p0cli/node_modules/.bin/jest",
   "_": [
     "ssh",
   ],
