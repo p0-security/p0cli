@@ -8,12 +8,14 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+
 /** Functions to handle stdio
  *
  * These are essentially wrappers around console.foo, but allow for
  * - Better testing
  * - Later redirection / duplication
  */
+import { mapValues } from "lodash";
 
 /** Used to output machine-readable text to stdout
  *
@@ -33,3 +35,10 @@ export function print2(message: any) {
   // eslint-disable-next-line no-console
   console.error(message);
 }
+
+const AnsiCodes = {
+  Reset: "00",
+  Dim: "02",
+} as const;
+
+export const Ansi = mapValues(AnsiCodes, (v) => `\u001b[${v}m`);
