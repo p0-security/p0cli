@@ -57,6 +57,12 @@ describe("ssh", () => {
       });
     });
 
+    it("should call p0 request with reason arg", async () => {
+      void sshCommand(yargs()).parse(`ssh some-instance --reason reason`);
+      await sleep(100);
+      expect(mockFetchCommand.mock.calls[0][1]).toMatchSnapshot("args");
+    });
+
     it("should wait for access grant", async () => {
       const promise = sshCommand(yargs()).parse(`ssh some-instance`);
       const wait = sleep(100);
