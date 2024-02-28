@@ -30,7 +30,8 @@ import yargs from "yargs";
 export type SshCommandArgs = {
   destination: string;
   command?: string;
-  L?: string; // port forwarding option
+  L?: string; // Port forwarding option
+  N?: boolean; // No remote command
   arguments: string[];
   reason?: string;
 };
@@ -76,6 +77,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe:
             // the order of the sockets in the address matches the ssh man page
             "Forward a local port to the remote host; `local_socket:remote_socket`",
+        })
+        .option("N", {
+          type: "boolean",
+          describe:
+            "Do not execute a remote command. Useful for forwarding ports.",
         })
         // Match `p0 request --reason`
         .option("reason", {
