@@ -17,6 +17,7 @@ Supports creating access requests for cloud resources, assuming AWS roles, and c
   - [Installation](#installation)
   - [Configuration](#configuration)
 - [Command Reference](#command-reference)
+- [Example Usage](#example-usage)
 - [Support](#support)
 - [Contributing](#contributing)
 - [Copyright](#copyright)
@@ -82,6 +83,109 @@ To view help, use the `--help` option with any command.
   p0 ssh <destination>         SSH into a virtual machine
 ```
 
+## Example Usage
+
+### Create an access request
+
+To view the resources available for access requests, run:
+
+```
+p0 request --help
+```
+
+Sample output:
+
+```
+Request access to a resource using P0
+
+Commands:
+  p0 request aws                Amazon Web Services
+  p0 request azure-ad           Entra ID
+  p0 request gcloud             Google Cloud
+  p0 request okta               Okta
+  p0 request ssh <destination>  Secure Shell (SSH) session
+  p0 request workspace          Google Workspace
+
+Options:
+      --help    Show help                                              [boolean]
+      --reason  Reason access is needed                                 [string]
+  -w, --wait    Block until the request is completed                   [boolean]
+```
+
+Run `--help` on any of these commands for information on requesting that resource. For example, to request a Google Cloud role, run
+
+```
+p0 request gcloud --help
+```
+
+```
+Google Cloud
+
+Commands:
+  p0 request gcloud resource <accesses..>  GCP resource
+  p0 request gcloud role <names..>         Custom or predefined role
+  p0 request gcloud permission <names..>   GCP permissions
+
+Options:
+      --help    Show help                                              [boolean]
+      --reason  Reason access is needed                                 [string]
+  -w, --wait    Block until the request is completed                   [boolean]
+```
+
+If you don't know the name of the role you need, you can use the `p0 ls` command. `p0 ls` accepts the same arguments that you provide to `p0 request` and lists the available options for access within your selected resource. For example, to view the available Google Cloud roles, run
+
+```
+ p0 ls gcloud role names --like bigquery
+```
+
+Now, to request `bigquery.admin`, run:
+
+```
+p0 request gcloud role bigquery.admin
+```
+
+This will create an access request on Slack. Once your access request is approved, you will automatically get access to the Bigquery Admin role.
+
+### Assume an AWS IAM Role
+
+You can use the P0 CLI to assume a role in AWS.
+
+To use this feature, you will need to have installed and configured the AWS CLI. If you have not done so already, you can follow the [installation steps](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
+
+List the roles that you have permissions to assume via:
+
+```
+p0 aws role ls
+```
+
+If you don't see your desired role, you will first need to request access to it. You can do that with `p0 request aws role <ROLE_NAME>`.
+
+Once you have permissions, you can run
+
+```
+$(p0 aws role assume <ROLE_NAME>)
+```
+
+### SSH into an AWS Instance
+
+You can request access to an AWS instance and open a SSH session once access is provisioned with a single command in the P0 CLI.
+
+To use this feature, you will need to have installed and configured the AWS CLI and the Session Manager plugin. If you have not done so already, you can follow the [AWS CLI installation steps](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) and [Session Manager plugin installation step](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html).
+
+To see the available AWS instances, run:
+
+```
+p0 ls ssh destination
+```
+
+You can start a SSH session with:
+
+```
+p0 ssh <INSTANCE_NAME>
+```
+
+If you already have access, this will directly open the SSH session. Otherwise, it will request access, wait for approval, and open a SSH session once the access is provisioned.
+
 ## Support
 
 If you encounter any issues with the P0 CLI, you can open a GitHub issue on this repo, email `support@p0.dev`, or reach out to us on our [community slack](https://join.slack.com/t/p0securitycommunity/shared_invite/zt-1zouzlovp-1kuym9RfuzkJ17ZlvAf6mQ).
@@ -94,4 +198,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 Copyright © 2024-present P0 Security.
 
-The P0 Security CLI is licensed under the terms of the GNU General Public License version 3. See [COPYING.md](COPYING.md) for details.
+The P0 Security CLI is licensed under the terms of the GNU General Public License version 3. See [LICENSE.md](LICENSE.md) for details.
