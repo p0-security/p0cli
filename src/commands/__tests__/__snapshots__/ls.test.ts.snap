@@ -16,21 +16,31 @@ Unknown argument: foo",
 }
 `;
 
-exports[`ls when valid ls command should print list response 1`] = `
+exports[`ls when valid ls command should print friendly message if no items: stderr 1`] = `
 [
   [
-    "instance-1[02m - Instance 1[00m",
-  ],
-  [
-    "instance-2[02m - Instance 2[00m",
+    "No destinations",
   ],
 ]
 `;
 
-exports[`ls when valid ls command should print list response 2`] = `
+exports[`ls when valid ls command should print friendly message if no items: stdout 1`] = `[]`;
+
+exports[`ls when valid ls command should print list response: stderr 1`] = `
 [
   [
     "Showing destinations:",
+  ],
+]
+`;
+
+exports[`ls when valid ls command should print list response: stdout 1`] = `
+[
+  [
+    "instance-1[02m - Group / Resource 1[00m",
+  ],
+  [
+    "instance-2[02m - Resource 2[00m",
   ],
 ]
 `;

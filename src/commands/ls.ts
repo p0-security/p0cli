@@ -54,10 +54,14 @@ const ls = async (
   const allArguments = [...args._, ...args.arguments];
 
   if (data && "ok" in data && data.ok) {
+    const label = pluralize(data.arg);
+    if (data.items.length === 0) {
+      print2(`No ${label}`);
+      return;
+    }
     const truncationPart = data.isTruncated
       ? ` the first ${data.items.length}`
       : "";
-    const argPart = pluralize(data.arg);
     const postfixPart = data.term
       ? ` matching '${data.term}'`
       : data.isTruncated
@@ -65,7 +69,7 @@ const ls = async (
          ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
-    print2(`Showing${truncationPart} ${argPart}${postfixPart}:`);
+    print2(`Showing${truncationPart} ${label}${postfixPart}:`);
     const isSameValue = data.items.every((i) => !i.group && i.key === i.value);
     const maxLength = max(data.items.map((i) => i.key.length)) || 0;
     for (const item of data.items) {

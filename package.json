@@ -17,7 +17,7 @@
     "p0",
     "README.md",
     "CONTRIBUTING.md",
-    "COPYING.md"
+    "LICENSE.md"
   ],
   "dependencies": {
     "@rgrove/parse-xml": "^4.1.0",
