@@ -1,5 +1,22 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] = `
+{
+  "_": [
+    "ssh",
+  ],
+  "arguments": [
+    "ssh",
+    "some-instance",
+    "--provider",
+    "aws",
+    "--reason",
+    "reason",
+  ],
+  "wait": true,
+}
+`;
+
 exports[`ssh ephemeral access should call ssm: stderr 1`] = `
 [
   [
@@ -15,6 +32,23 @@ exports[`ssh ephemeral access should call ssm: stderr 1`] = `
     "Waiting for access to be provisioned",
   ],
 ]
+`;
+
+exports[`ssh persistent access should call p0 request with reason arg: args 1`] = `
+{
+  "_": [
+    "ssh",
+  ],
+  "arguments": [
+    "ssh",
+    "some-instance",
+    "--provider",
+    "aws",
+    "--reason",
+    "reason",
+  ],
+  "wait": true,
+}
 `;
 
 exports[`ssh persistent access should call ssm: stderr 1`] = `
