@@ -263,24 +263,22 @@ const interceptSessionOutput = (
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
-const spawnSsmNode = async (
-  credentials: AwsCredentials,
-  options: {
-    command: string[];
-    attemptsRemaining?: number;
-    subcommand?: string[];
-  }
-): Promise<number | null> =>
+const spawnSsmNode = async (options: {
+  credentials: AwsCredentials;
+  command: string[];
+  attemptsRemaining?: number;
+  subcommand?: string[];
+}): Promise<number | null> =>
   new Promise((resolve, reject) => {
     const parent = spawn("/usr/bin/env", options.command, {
       env: {
         ...process.env,
-        ...credentials,
+        ...options.credentials,
       },
       stdio: ["inherit", "pipe", "pipe"],
     });
 
-    const subprocesses = subcommandLauncher(credentials);
+    const subprocesses = subcommandLauncher(options.credentials);
 
     const stream = interceptSessionOutput(parent, {
       onSessionStart() {
@@ -312,7 +310,7 @@ const spawnSsmNode = async (
           return;
         }
         // console.debug("Permissions not yet propagated in AWS; retrying");
-        spawnSsmNode(credentials, {
+        spawnSsmNode({
           ...options,
           attemptsRemaining: attemptsRemaining - 1,
         })
@@ -361,7 +359,7 @@ export const ssm = async (
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
 
-  const credential = await assumeRoleWithOktaSaml(authn, {
+  const credentials = await assumeRoleWithOktaSaml(authn, {
     account,
     role: request.generatedRoles[0]!.role,
   });
@@ -373,7 +371,8 @@ export const ssm = async (
     forwardPortAddress: args.L,
     command: commandParameter(args),
   };
-  await spawnSsmNode(credential, {
+  await spawnSsmNode({
+    credentials,
     ...createSsmCommands(ssmArgs),
   });
 };
