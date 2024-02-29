@@ -162,10 +162,13 @@ const createSsmCommands = (
 };
 
 /**
- * Manages the lifecycle of child processes that execute AWS SSM commands
+ * Manages the lifecycle of child processes that run AWS SSM commands.
+ *
+ * This includes spawning child processes, creating streams to process output, and terminating the child processes, their respective subprocesses, and their related streams.
+ *
  * @param credentials AWS credentials to be passed to the child processes for executing AWS SSM commands
  */
-const subcommandManager = (credentials: AwsCredentials) => {
+const subcommandLauncher = (credentials: AwsCredentials) => {
   const children: ChildProcessByStdio<any, any, any>[] = [];
   const streamClosers: (() => void)[] = [];
 
@@ -185,7 +188,8 @@ const subcommandManager = (credentials: AwsCredentials) => {
         detached: true,
       });
 
-      const stream = sessionOutputStream(subprocess, {
+      const stream = sessionOutputStream({
+        process: subprocess,
         suppressStartSessionMessage: true,
       });
 
@@ -212,28 +216,26 @@ const subcommandManager = (credentials: AwsCredentials) => {
 };
 
 /**
- * Creates a stream that intercepts the output of the child process running the SSM session command and triggers a callback when the SSM session starts
- * @param child The child process that is running the SSM session command
- * @param options.suppressStartSessionMessage Whether to suppress the {@link STARTING_SESSION_MESSAGE} from being printed to the terminal
+ * Creates a stream that intercepts the output of the child process running the SSM session command and triggers a callback when the SSM session starts.
+ *
+ * The SSM session start is detected by the {@link STARTING_SESSION_MESSAGE} being printed to the terminal.
+ *
+ * @param process The child process that is running the SSM session command
+ * @param onSessionStart The callback to be triggered when the SSM session starts
+ * @param suppressStartSessionMessage Whether to suppress the {@link STARTING_SESSION_MESSAGE} from being printed to the terminal
  */
-const sessionOutputStream = (
-  child: ChildProcessByStdio<any, Readable, any>,
-  options?: {
-    suppressStartSessionMessage: boolean;
-  }
-) => {
-  const callbacks: (() => void)[] = [];
-
+const sessionOutputStream = (options: {
+  process: ChildProcessByStdio<any, Readable, any>;
+  onSessionStart?: () => void;
+  suppressStartSessionMessage?: boolean;
+}) => {
   // Create a transform stream to duplicate the data
   const proxyStream = new Transform({
     transform(chunk, _, end) {
       parseBuffer((message) => {
-        // spawn subprocesses when the SSM session starts
         const match = message.match(STARTING_SESSION_MESSAGE);
         if (match) {
-          for (const callback of callbacks) {
-            callback();
-          }
+          options.onSessionStart?.();
         }
 
         if (!options?.suppressStartSessionMessage || !match) {
@@ -246,13 +248,10 @@ const sessionOutputStream = (
     },
   });
 
-  // ensures that content from the child process is printed to the terminal even though we're piping it to a stream
-  child.stdout.pipe(proxyStream).pipe(process.stdout);
+  // Ensures that content from the child process is printed to the terminal and the proxy stream
+  options.process.stdout.pipe(proxyStream).pipe(process.stdout);
 
   return {
-    onSessionStart: (callback: () => void) => {
-      callbacks.push(callback);
-    },
     close: () => {
       proxyStream.destroy();
     },
@@ -279,15 +278,24 @@ const spawnSsmNode = async (
       },
       stdio: ["inherit", "pipe", "pipe"],
     });
-    const stream = sessionOutputStream(parent);
-    const subprocesses = subcommandManager(credentials);
 
-    stream.onSessionStart(() => {
-      const subcommand = options?.subcommand ?? [];
-      if (subcommand.length) {
-        subprocesses.executeCommand(subcommand);
-      }
+    const subprocesses = subcommandLauncher(credentials);
+
+    const stream = sessionOutputStream({
+      process: parent,
+      onSessionStart() {
+        const subcommand = options?.subcommand ?? [];
+        if (subcommand.length) {
+          subprocesses.executeCommand(subcommand);
+        }
+      },
     });
+
+    const cleanUpResources = () => {
+      subprocesses.killProcesses();
+      stream.close();
+      print2("SSH session terminated");
+    };
 
     const { isAccessPropagated } = accessPropagationGuard(parent);
 
@@ -313,14 +321,13 @@ const spawnSsmNode = async (
         return;
       }
 
-      print2("SSH session terminated");
-      subprocesses.killProcesses();
+      cleanUpResources();
       resolve(code);
     });
 
     // Ensure that the child process is killed when the parent process is terminated by pressing Ctrl+C
     process.on("SIGINT", () => {
-      subprocesses.killProcesses();
+      cleanUpResources();
       process.exit();
     });
   });
