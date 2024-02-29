@@ -37,10 +37,10 @@ exports[`ls when valid ls command should print list response: stderr 1`] = `
 exports[`ls when valid ls command should print list response: stdout 1`] = `
 [
   [
-    "instance-1",
+    "instance-1[02m - Group / Resource 1[00m",
   ],
   [
-    "instance-2",
+    "instance-2[02m - Resource 2[00m",
   ],
 ]
 `;

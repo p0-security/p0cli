@@ -4,5 +4,5 @@ module.exports = {
   prettierPath: null,
   preset: "ts-jest",
   testEnvironment: "node",
-  modulePathIgnorePatterns: ["/build"],
+  modulePathIgnorePatterns: ["/dist"],
 };

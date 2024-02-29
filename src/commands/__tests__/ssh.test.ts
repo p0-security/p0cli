@@ -15,6 +15,7 @@ import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
 import { onSnapshot } from "firebase/firestore";
+import { omit } from "lodash";
 import yargs from "yargs";
 
 jest.mock("../../drivers/api");
@@ -55,6 +56,16 @@ describe("ssh", () => {
         isPreexisting: false,
         isPersistent,
       });
+    });
+
+    it("should call p0 request with reason arg", async () => {
+      void sshCommand(yargs()).parse(`ssh some-instance --reason reason`);
+      await sleep(100);
+      const hiddenFilenameRequestArgs = omit(
+        mockFetchCommand.mock.calls[0][1],
+        "$0"
+      );
+      expect(hiddenFilenameRequestArgs).toMatchSnapshot("args");
     });
 
     it("should wait for access grant", async () => {

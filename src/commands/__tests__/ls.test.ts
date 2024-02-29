@@ -28,7 +28,7 @@ describe("ls", () => {
   describe("when valid ls command", () => {
     const command = "ls ssh destination";
 
-    const mockItems = (items: string[]) =>
+    const mockItems = (items: object[]) =>
       mockFetchCommand.mockResolvedValue({
         ok: true,
         term: "",
@@ -37,7 +37,10 @@ describe("ls", () => {
       });
 
     it("should print list response", async () => {
-      mockItems(["instance-1", "instance-2"]);
+      mockItems([
+        { key: "instance-1", group: "Group", value: "Resource 1" },
+        { key: "instance-2", value: "Resource 2" },
+      ]);
       await lsCommand(yargs()).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");

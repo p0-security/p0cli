@@ -33,6 +33,7 @@ export type SshCommandArgs = {
   L?: string; // port forwarding option
   arguments: string[];
   sudo?: boolean;
+  reason?: string;
 };
 
 // Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
@@ -80,6 +81,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe:
             // the order of the sockets in the address matches the ssh man page
             "Forward a local port to the remote host; `local_socket:remote_socket`",
+        })
+        // Match `p0 request --reason`
+        .option("reason", {
+          describe: "Reason access is needed",
+          type: "string",
         }),
     guard(ssh)
   );
@@ -151,12 +157,17 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
-  const requestArgs = ["ssh", args.destination, "--provider", "aws"];
-  if (args.sudo || args.command === "sudo") requestArgs.push("--sudo");
   const response = await request(
     {
       ...pick(args, "$0", "_"),
-      arguments: requestArgs,
+      arguments: [
+        "ssh",
+        args.destination,
+        "--provider",
+        "aws",
+        ...(args.sudo ? ["--sudo"] : []),
+        ...(args.reason ? ["--reason", args.reason] : []),
+      ],
       wait: true,
     },
     authn,
