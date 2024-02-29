@@ -240,7 +240,7 @@ const sessionOutputStream = (
         }
 
         end();
-      });
+      })(chunk);
     },
   });
 
