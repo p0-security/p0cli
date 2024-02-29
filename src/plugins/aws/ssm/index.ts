@@ -181,6 +181,7 @@ const subcommandManager = (credentials: AwsCredentials) => {
           ...credentials,
         },
         stdio: ["inherit", "pipe", "pipe"],
+        // Using a detached process group ensures that the child's subprocesses can be killed when the parent process is terminated
         detached: true,
       });
 
@@ -197,7 +198,8 @@ const subcommandManager = (credentials: AwsCredentials) => {
     killProcesses: () => {
       streamClosers.forEach((closer) => closer());
       children.forEach((child) => {
-        if (child.pid) {
+        if (child.pid && !child.killed) {
+          // Tells the parent process to kill the child process and all of it's descendants.
           process.kill(-child.pid);
         } else {
           // Emergency attempt to kill the child process,
@@ -235,7 +237,7 @@ const sessionOutputStream = (
         }
 
         if (!options?.suppressStartSessionMessage || !match) {
-          // Pass the original chunk through
+          // Pass the original chunk through to the terminal
           this.push(chunk);
         }
 
@@ -311,9 +313,15 @@ const spawnSsmNode = async (
         return;
       }
 
-      subprocesses.killProcesses();
       print2("SSH session terminated");
+      subprocesses.killProcesses();
       resolve(code);
+    });
+
+    // Ensure that the child process is killed when the parent process is terminated by pressing Ctrl+C
+    process.on("SIGINT", () => {
+      subprocesses.killProcesses();
+      process.exit();
     });
   });
 
