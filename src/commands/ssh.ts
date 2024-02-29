@@ -55,7 +55,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .option("sudo", {
           type: "boolean",
-          describe: "Elevated access to the instance",
+          describe: "Add user to sudoers file",
         })
         .positional("command", {
           type: "string",
