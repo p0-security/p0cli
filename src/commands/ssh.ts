@@ -75,11 +75,6 @@ export const sshCommand = (yargs: yargs.Argv) =>
             INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE
           );
         })
-        // Match `p0 request --reason`
-        .option("reason", {
-          describe: "Reason access is needed",
-          type: "string",
-        })
         .option("L", {
           type: "string",
           describe:
@@ -90,7 +85,13 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe:
             "Do not execute a remote command. Useful for forwarding ports.",
+        })
+        // Match `p0 request --reason`
+        .option("reason", {
+          describe: "Reason access is needed",
+          type: "string",
         }),
+
     guard(ssh)
   );
 
