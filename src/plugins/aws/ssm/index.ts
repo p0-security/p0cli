@@ -188,8 +188,7 @@ const subcommandLauncher = (credentials: AwsCredentials) => {
         detached: true,
       });
 
-      const stream = sessionOutputStream({
-        process: subprocess,
+      const stream = interceptSessionOutput(subprocess, {
         suppressStartSessionMessage: true,
       });
 
@@ -216,19 +215,21 @@ const subcommandLauncher = (credentials: AwsCredentials) => {
 };
 
 /**
- * Creates a stream that intercepts the output of the child process running the SSM session command and triggers a callback when the SSM session starts.
+ * Uses a stream to intercept the output of a {@link childProcess} running a command and triggers a callback when the SSM session starts.
  *
- * The SSM session start is detected by the {@link STARTING_SESSION_MESSAGE} being printed to the terminal.
+ * The start of an SSM session is detected by the {@link STARTING_SESSION_MESSAGE} being printed to the stdout.
  *
- * @param process The child process that is running the SSM session command
+ * @param childProcess The child process that is running the SSM session command
  * @param onSessionStart The callback to be triggered when the SSM session starts
  * @param suppressStartSessionMessage Whether to suppress the {@link STARTING_SESSION_MESSAGE} from being printed to the terminal
  */
-const sessionOutputStream = (options: {
-  process: ChildProcessByStdio<any, Readable, any>;
-  onSessionStart?: () => void;
-  suppressStartSessionMessage?: boolean;
-}) => {
+const interceptSessionOutput = (
+  childProcess: ChildProcessByStdio<any, Readable, any>,
+  options: {
+    onSessionStart?: () => void;
+    suppressStartSessionMessage?: boolean;
+  }
+) => {
   // Create a transform stream to duplicate the data
   const proxyStream = new Transform({
     transform(chunk, _, end) {
@@ -249,7 +250,7 @@ const sessionOutputStream = (options: {
   });
 
   // Ensures that content from the child process is printed to the terminal and the proxy stream
-  options.process.stdout.pipe(proxyStream).pipe(process.stdout);
+  childProcess.stdout.pipe(proxyStream).pipe(process.stdout);
 
   return {
     close: () => {
@@ -281,8 +282,7 @@ const spawnSsmNode = async (
 
     const subprocesses = subcommandLauncher(credentials);
 
-    const stream = sessionOutputStream({
-      process: parent,
+    const stream = interceptSessionOutput(parent, {
       onSessionStart() {
         const subcommand = options?.subcommand ?? [];
         if (subcommand.length) {
