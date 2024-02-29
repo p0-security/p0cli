@@ -91,7 +91,6 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "Reason access is needed",
           type: "string",
         }),
-
     guard(ssh)
   );
 
