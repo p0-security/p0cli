@@ -163,7 +163,7 @@ const commandParameter = (args: SshCommandArgs) =>
           (argument) =>
             // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
             // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
-            `"${argument.toString().replace(/"/g, '\\"')}"`
+            `"${String(argument).replace(/"/g, '\\"')}"`
         )
         .join(" ")}`.trim()
     : undefined;
