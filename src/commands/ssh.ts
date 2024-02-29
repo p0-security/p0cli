@@ -33,7 +33,8 @@ import yargs from "yargs";
 export type SshCommandArgs = {
   destination: string;
   command?: string;
-  L?: string; // port forwarding option
+  L?: string; // Port forwarding option
+  N?: boolean; // No remote command
   arguments: string[];
   reason?: string;
 };
@@ -74,16 +75,21 @@ export const sshCommand = (yargs: yargs.Argv) =>
             INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE
           );
         })
+        // Match `p0 request --reason`
+        .option("reason", {
+          describe: "Reason access is needed",
+          type: "string",
+        })
         .option("L", {
           type: "string",
           describe:
             // the order of the sockets in the address matches the ssh man page
             "Forward a local port to the remote host; `local_socket:remote_socket`",
         })
-        // Match `p0 request --reason`
-        .option("reason", {
-          describe: "Reason access is needed",
-          type: "string",
+        .option("N", {
+          type: "boolean",
+          describe:
+            "Do not execute a remote command. Useful for forwarding ports.",
         }),
     guard(ssh)
   );

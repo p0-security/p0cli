@@ -51,6 +51,7 @@ type SsmArgs = {
   requestId: string;
   documentName: string;
   command?: string;
+  noRemoteCommands?: boolean;
   forwardPortAddress?: string;
 };
 
@@ -147,17 +148,22 @@ const createPortForwardingCommand = (args: Omit<SsmArgs, "requestId">) => {
 const createSsmCommands = (
   args: Omit<SsmArgs, "requestId">
 ): { command: string[]; subcommand?: string[] } => {
-  const command = createInteractiveShellCommand(args);
+  const interactiveShellCommand = createInteractiveShellCommand(args);
 
-  if (args.forwardPortAddress) {
+  if (!args.forwardPortAddress) {
     return {
-      command,
-      subcommand: createPortForwardingCommand(args),
+      command: interactiveShellCommand,
     };
   }
 
+  const portForwardingCommand = createPortForwardingCommand(args);
+  if (args.noRemoteCommands) {
+    return { command: portForwardingCommand };
+  }
+
   return {
-    command,
+    command: interactiveShellCommand,
+    subcommand: portForwardingCommand,
   };
 };
 
@@ -368,6 +374,7 @@ export const ssm = async (
     region: region!,
     documentName: request.generated.documentName,
     requestId: request.id,
+    noRemoteCommands: args.N,
     forwardPortAddress: args.L,
     command: commandParameter(args),
   };
