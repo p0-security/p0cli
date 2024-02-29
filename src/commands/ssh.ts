@@ -165,7 +165,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
         args.destination,
         "--provider",
         "aws",
-        ...(args.sudo ? ["--sudo"] : []),
+        ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
       ],
       wait: true,
