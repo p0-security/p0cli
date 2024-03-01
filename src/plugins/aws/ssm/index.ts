@@ -16,13 +16,14 @@ import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { AwsCredentials, AwsSsh } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
+  ChildProcess,
   ChildProcessByStdio,
   StdioNull,
   StdioPipe,
   exec,
   spawn,
 } from "node:child_process";
-import { Readable, Transform, Writable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import psTree from "ps-tree";
 
 const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
@@ -72,7 +73,7 @@ type SsmArgs = {
  *
  * Note that this function requires interception of the AWS SSM stderr stream.
  * This works because AWS SSM wraps the session in a single-stream pty, so we
- * do not capture stderr emmitted from the wrapped shell session.
+ * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
   child: ChildProcessByStdio<any, any, Readable>
@@ -167,27 +168,32 @@ const createSsmCommands = (args: Omit<SsmArgs, "requestId">): string[][] => {
   return [interactiveShellCommand, portForwardingCommand];
 };
 
-const spawnChildProcess = <
-  Stdin extends StdioNull | StdioPipe,
-  Stdout extends StdioNull | StdioPipe,
-  Stderr extends StdioNull | StdioPipe,
->(
+function spawnChildProcess(
   credential: AwsCredentials,
   command: string[],
-  stdio: [Stdin, Stdout, Stderr]
-) => {
+  stdio: [StdioNull, StdioPipe, StdioPipe]
+): ChildProcessByStdio<null, Readable, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string[],
+  stdio: [StdioNull, StdioNull, StdioPipe]
+): ChildProcessByStdio<null, null, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string[],
+  stdio: [StdioNull, StdioNull | StdioPipe, StdioPipe]
+):
+  | ChildProcess
+  | ChildProcessByStdio<null, null, null>
+  | ChildProcessByStdio<null, Readable, Readable> {
   return spawn("/usr/bin/env", command, {
     env: {
       ...process.env,
       ...credential,
     },
     stdio,
-  }) as ChildProcessByStdio<
-    Stdin extends StdioNull ? null : Writable,
-    Stdout extends StdioNull ? null : Readable,
-    Stderr extends StdioNull ? null : Readable
-  >;
-};
+  });
+}
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
@@ -254,12 +260,11 @@ const spawnSubprocessSsmNode = async (options: {
   abortController: AbortController;
 }): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child: ChildProcessByStdio<null, Readable, Readable> =
-      spawnChildProcess(options.credential, options.command, [
-        "ignore",
-        "pipe",
-        "pipe",
-      ]);
+    const child = spawnChildProcess(options.credential, options.command, [
+      "ignore",
+      "pipe",
+      "pipe",
+    ]);
 
     // Captures the starting session message and filters it from the output
     const proxyStream = new Transform({
