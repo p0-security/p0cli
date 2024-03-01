@@ -129,10 +129,13 @@ const createInteractiveShellCommand = (args: Omit<SsmArgs, "requestId">) => {
   return ssmCommand;
 };
 
-const createPortForwardingCommand = (args: Omit<SsmArgs, "requestId">) => {
-  if (!args.forwardPortAddress) throw INVALID_PORT_FORWARD_FORMAT_ERROR_MESSAGE;
-
-  const [localPort, remotePort] = args.forwardPortAddress.split(":");
+const createPortForwardingCommand = (
+  args: Omit<SsmArgs, "requestId"> &
+    Required<Pick<SsmArgs, "forwardPortAddress">>
+) => {
+  const [localPort, remotePort] = args.forwardPortAddress
+    .split(":")
+    .map(Number);
 
   return [
     ...createBaseSsmCommand(args),
@@ -149,10 +152,11 @@ const createSsmCommands = (
 ): { command: string[]; subcommand?: string[] } => {
   const command = createInteractiveShellCommand(args);
 
-  if (args.forwardPortAddress) {
+  const forwardPortAddress = args.forwardPortAddress;
+  if (forwardPortAddress) {
     return {
       command,
-      subcommand: createPortForwardingCommand(args),
+      subcommand: createPortForwardingCommand({ ...args, forwardPortAddress }),
     };
   }
 
