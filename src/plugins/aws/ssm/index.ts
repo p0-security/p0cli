@@ -17,11 +17,12 @@ import { AwsCredentials, AwsSsh } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
-  SpawnOptions,
+  StdioNull,
+  StdioPipe,
   exec,
   spawn,
 } from "node:child_process";
-import { Readable, Transform } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import psTree from "ps-tree";
 
 const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
@@ -166,18 +167,26 @@ const createSsmCommands = (args: Omit<SsmArgs, "requestId">): string[][] => {
   return [interactiveShellCommand, portForwardingCommand];
 };
 
-const spawnChildProcess = (
+const spawnChildProcess = <
+  Stdin extends StdioNull | StdioPipe,
+  Stdout extends StdioNull | StdioPipe,
+  Stderr extends StdioNull | StdioPipe,
+>(
   credential: AwsCredentials,
   command: string[],
-  stdio: SpawnOptions["stdio"]
-): ChildProcessByStdio<any, any, any> => {
+  stdio: [Stdin, Stdout, Stderr]
+) => {
   return spawn("/usr/bin/env", command, {
     env: {
       ...process.env,
       ...credential,
     },
     stdio,
-  });
+  }) as ChildProcessByStdio<
+    Stdin extends StdioNull ? null : Writable,
+    Stdout extends StdioNull ? null : Readable,
+    Stderr extends StdioNull ? null : Readable
+  >;
 };
 
 type SpawnSsmNodeOptions = {
@@ -245,11 +254,12 @@ const spawnSubprocessSsmNode = async (options: {
   abortController: AbortController;
 }): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child = spawnChildProcess(options.credential, options.command, [
-      "inherit",
-      "pipe",
-      "pipe",
-    ]);
+    const child: ChildProcessByStdio<null, Readable, Readable> =
+      spawnChildProcess(options.credential, options.command, [
+        "ignore",
+        "pipe",
+        "pipe",
+      ]);
 
     // Captures the starting session message and filters it from the output
     const proxyStream = new Transform({
