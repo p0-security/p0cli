@@ -32,6 +32,7 @@ export type SshCommandArgs = {
   command?: string;
   L?: string; // port forwarding option
   arguments: string[];
+  sudo?: boolean;
   reason?: string;
 };
 
@@ -52,6 +53,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .positional("destination", {
           type: "string",
           demandOption: true,
+        })
+        .option("sudo", {
+          type: "boolean",
+          describe: "Add user to sudoers file",
         })
         .positional("command", {
           type: "string",
@@ -160,6 +165,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
         args.destination,
         "--provider",
         "aws",
+        ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
       ],
       wait: true,
