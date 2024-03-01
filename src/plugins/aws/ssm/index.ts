@@ -148,12 +148,14 @@ const createPortForwardingCommand = (
   ];
 };
 
-const createSsmCommands = (args: Omit<SsmArgs, "requestId">): string[][] => {
+type SsmCommands = { shellCommand: string[]; subCommand?: string[] };
+
+const createSsmCommands = (args: Omit<SsmArgs, "requestId">): SsmCommands => {
   const interactiveShellCommand = createInteractiveShellCommand(args);
 
   const forwardPortAddress = args.forwardPortAddress;
   if (!forwardPortAddress) {
-    return [interactiveShellCommand];
+    return { shellCommand: interactiveShellCommand };
   }
 
   const portForwardingCommand = createPortForwardingCommand({
@@ -162,10 +164,13 @@ const createSsmCommands = (args: Omit<SsmArgs, "requestId">): string[][] => {
   });
 
   if (args.noRemoteCommands) {
-    return [portForwardingCommand];
+    return { shellCommand: portForwardingCommand };
   }
 
-  return [interactiveShellCommand, portForwardingCommand];
+  return {
+    shellCommand: interactiveShellCommand,
+    subCommand: portForwardingCommand,
+  };
 };
 
 function spawnChildProcess(
@@ -380,7 +385,9 @@ export const ssm = async (
     command: commandParameter(args),
   };
 
-  await startSsmProcesses(credential, ssmArgs);
+  const ssmCommands = createSsmCommands(ssmArgs);
+
+  await startSsmProcesses(credential, ssmCommands);
 };
 
 /**
@@ -388,18 +395,27 @@ export const ssm = async (
  */
 const startSsmProcesses = async (
   credential: AwsCredentials,
-  ssmArgs: SsmArgs
+  commands: SsmCommands
 ) => {
-  const commands = createSsmCommands(ssmArgs);
-
   /** The AbortController is responsible for sending a shared signal to all spawned processes ({@link spawnSsmNode}) when the parent process is terminated unexpectedly. This is necessary because the spawned processes are detached and would otherwise continue running after the parent process is terminated. */
   const abortController = new AbortController();
 
-  const processes = commands.map((command, index) => {
-    const args: SpawnSsmNodeOptions = { credential, abortController, command };
-    // the first command is always the main SSM session which inherits stdout and stdin from the parent process
-    return index === 0 ? spawnSsmNode(args) : spawnSubprocessSsmNode(args);
-  });
+  const args = { credential, abortController };
+  const processes: Promise<unknown>[] = [
+    spawnSsmNode({
+      ...args,
+      command: commands.shellCommand,
+    }),
+  ];
+
+  if (commands.subCommand) {
+    processes.push(
+      spawnSubprocessSsmNode({
+        ...args,
+        command: commands.subCommand,
+      })
+    );
+  }
 
   await Promise.all(processes);
 };
