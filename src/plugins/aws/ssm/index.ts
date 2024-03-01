@@ -270,7 +270,7 @@ const spawnSsmNode = async (options: {
   subcommand?: string[];
 }): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const parent = spawn("/usr/bin/env", options.command, {
+    const child = spawn("/usr/bin/env", options.command, {
       env: {
         ...process.env,
         ...options.credentials,
@@ -280,7 +280,7 @@ const spawnSsmNode = async (options: {
 
     const subprocesses = subcommandLauncher(options.credentials);
 
-    const stream = interceptSessionOutput(parent, {
+    const stream = interceptSessionOutput(child, {
       onSessionStart() {
         const subcommand = options?.subcommand ?? [];
         if (subcommand.length) {
@@ -295,9 +295,9 @@ const spawnSsmNode = async (options: {
       print2("SSH session terminated");
     };
 
-    const { isAccessPropagated } = accessPropagationGuard(parent);
+    const { isAccessPropagated } = accessPropagationGuard(child);
 
-    const exitListener = parent.on("exit", (code) => {
+    const exitListener = child.on("exit", (code) => {
       exitListener.unref();
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
