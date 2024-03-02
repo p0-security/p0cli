@@ -61,7 +61,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
 ║ A new version of P0 CLI is available ║
 ║                                      ║
 ║ To install, run                      ║
-║   npm -g update @p0security/cli      ║
+║   npm -g update ${name.padEnd(21)}║
 ╚══════════════════════════════════════╝
 `
       );
