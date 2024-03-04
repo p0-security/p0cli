@@ -37,7 +37,7 @@ export const sleep = (timeoutMillis: number) => {
  * error.
  */
 export const timeout = async <T extends NonNullable<any>>(
-  promise: Promise<T>,
+  promise: Promise<NonNullable<T>>,
   timeoutMillis: number
 ) => {
   const wait = sleep(timeoutMillis);
