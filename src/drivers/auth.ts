@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
+import { P0_PATH } from "../util";
 import { auth } from "./firestore";
 import { print2 } from "./stdio";
 import {
@@ -18,14 +19,9 @@ import {
   signInWithCredential,
 } from "firebase/auth";
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 
-export const IDENTITY_FILE_PATH = path.join(
-  os.homedir(),
-  ".p0",
-  "identity.json"
-);
+export const IDENTITY_FILE_PATH = path.join(P0_PATH, "identity.json");
 
 export const cached = async <T>(
   name: string,

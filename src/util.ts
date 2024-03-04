@@ -8,6 +8,12 @@ This file is part of @p0security/p0cli
 
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import child_process from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+
+export const P0_PATH = path.join(os.homedir(), ".p0");
+
 /** Waits the specified delay (in ms)
  *
  * The returned promise is cancelable:
@@ -25,9 +31,57 @@ export const sleep = (timeoutMillis: number) => {
   return Object.assign(promise, { cancel: () => clearTimeout(timer) });
 };
 
-export const noop = () => {};
+/** Wrap a promise in a timeout
+ *
+ * If the promise does not resolve within the interval, throws an
+ * error.
+ */
+export const timeout = async <T extends NonNullable<any>>(
+  promise: Promise<NonNullable<T>>,
+  timeoutMillis: number
+) => {
+  const wait = sleep(timeoutMillis);
+  const result = await Promise.race([wait, promise]);
+  if (result === undefined) throw new Error("Timeout");
+  wait.cancel();
+  return result;
+};
 
-export const readLine = () =>
-  new Promise<string>((resolve) =>
-    process.stdin.on("data", (d) => resolve(d.toString()))
+/** Executes a subprocess, waiting for exit, and collecting all output
+ *
+ * Throws an error if the exit code is non-zero
+ */
+export const exec = async (
+  command: string,
+  args: string[],
+  options?: child_process.SpawnOptionsWithoutStdio & {
+    /** If true, throws an error if exit code is non-zero */
+    check?: boolean;
+  }
+) =>
+  new Promise<{ code: number | null; stdout: string; stderr: string }>(
+    (resolve, reject) => {
+      try {
+        const out: string[] = [];
+        const err: string[] = [];
+        const child = child_process.spawn(command, args, {
+          ...(options ?? {}),
+          stdio: "pipe",
+        });
+        child.stdout.on("data", (d) => out.push(d));
+        child.stderr.on("data", (d) => err.push(d));
+        child.on("exit", (code) => {
+          const stdout = out.join("\n");
+          const stderr = err.join("\n");
+          const result = { code, stdout, stderr };
+          if (code !== 0 && options?.check)
+            reject(
+              Object.assign(new Error("Sub-process exited with code"), result)
+            );
+          resolve(result);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }
   );

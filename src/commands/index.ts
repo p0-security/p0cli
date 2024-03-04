@@ -9,6 +9,7 @@ This file is part of @p0security/p0cli
 You should have received a copy of the GNU General Public License along with @p0security/p0cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../drivers/stdio";
+import { checkVersion } from "../middlewares/version";
 import { awsCommand } from "./aws";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
@@ -29,6 +30,7 @@ const commands = [
 
 export const cli = commands
   .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
+  .middleware(checkVersion)
   .strict()
   .version(VERSION)
   .demandCommand(1)
