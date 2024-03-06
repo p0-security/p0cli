@@ -1,6 +1,6 @@
 {
-  "name": "@komaldhull/p0cli",
-  "version": "0.2.5",
+  "name": "@p0security/cli",
+  "version": "0.3.0",
   "description": "Execute infra CLI commands with P0 grants",
   "main": "index.ts",
   "repository": {
