@@ -38,7 +38,7 @@ To learn more about P0, see our [docs](https://docs.p0.dev/).
 To install the P0 CLI, run:
 
 ```
-npm install -g @p0security/p0cli
+npm install -g @p0security/cli
 ```
 
 You can now invoke the CLI by running `p0`.
