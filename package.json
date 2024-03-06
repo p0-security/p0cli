@@ -63,7 +63,7 @@
   },
   "scripts": {
     "build": "tsc && cp -r public dist/",
-    "clean": "rm tsconfig.tsbuildinfo && rm -rf dist/",
+    "clean": "rm -f tsconfig.tsbuildinfo && rm -rf dist/",
     "lint": "yarn prettier --check . &&  yarn run eslint --max-warnings 0 .",
     "p0": "node --no-deprecation ./p0",
     "prepublishOnly": "npm run clean && npm run build"
