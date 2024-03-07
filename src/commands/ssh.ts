@@ -168,6 +168,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       ...pick(args, "$0", "_"),
       arguments: [
         "ssh",
+        "session",
         args.destination,
         "--provider",
         "aws",
