@@ -163,6 +163,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
+  console.log("making request");
   const response = await request(
     {
       ...pick(args, "$0", "_"),
@@ -184,11 +185,22 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     print2("Did not receive access ID from server");
     return;
   }
-  const { id, isPreexisting } = response;
+  // If preexisting, you don't get an id because you don't need to wait for access
+  const { id, arn, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
+  // if isPreexisting is true, we don't have to wait for the access.
+  // otherwise we can wait for provisioning.
+  console.log("Waiting for access to be provisioned", JSON.stringify(response));
+  // TODO the arn might have.
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
   const requestWithId = { ...requestData, id };
 
-  await ssm(authn, requestWithId, args);
+  // split up the arn and pass it to SSM.
+
+  const match = arn.match(INSTANCE_ARN_PATTERN);
+  if (!match) throw "Did not receive a properly formatted instance identifier";
+  const [, region, account, instance] = match;
+
+  await ssm(authn, region, account, instance, args);
 };

@@ -358,6 +358,7 @@ const commandParameter = (args: SshCommandArgs) =>
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
+  // region, account, instance
   request: Request<AwsSsh> & {
     id: string;
   },
@@ -367,8 +368,8 @@ export const ssm = async (
   if (!isInstalled)
     throw "Please try again after installing the required AWS utilities";
 
-  const match =
-    request.permission.spec.resource.arn.match(INSTANCE_ARN_PATTERN);
+  // TODO: break
+  const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
 
@@ -418,5 +419,6 @@ const startSsmProcesses = async (
     );
   }
 
+  console.log("executing commands", commands);
   await Promise.all(processes);
 };
