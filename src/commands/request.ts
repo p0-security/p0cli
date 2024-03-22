@@ -92,7 +92,7 @@ const waitForRequest = async (
     }, WAIT_TIMEOUT);
   });
 
-export const request = async (
+export const request = async <T>(
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
     wait?: boolean;
@@ -101,10 +101,10 @@ export const request = async (
   options?: {
     message?: "all" | "approval-required" | "none";
   }
-): Promise<RequestResponse | undefined> => {
+): Promise<RequestResponse<T> | undefined> => {
   const resolvedAuthn = authn ?? (await authenticate());
   const { userCredential } = resolvedAuthn;
-  const data = await fetchCommand<RequestResponse>(resolvedAuthn, args, [
+  const data = await fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
     "request",
     ...args.arguments,
   ]);
