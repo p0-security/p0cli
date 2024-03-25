@@ -7,6 +7,7 @@ exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] =
   ],
   "arguments": [
     "ssh",
+    "session",
     "some-instance",
     "--provider",
     "aws",
@@ -41,6 +42,7 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
   ],
   "arguments": [
     "ssh",
+    "session",
     "some-instance",
     "--provider",
     "aws",
