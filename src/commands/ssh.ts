@@ -163,7 +163,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
-  const response = await request(
+  const response = await request<AwsSsh>(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -184,11 +184,11 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     print2("Did not receive access ID from server");
     return;
   }
-  const { id, isPreexisting } = response;
+  const { id, isPreexisting, event } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
-  const requestWithId = { ...requestData, id };
+  const requestWithId = { ...requestData, id, permission: event.permission };
 
   await ssm(authn, requestWithId, args);
 };

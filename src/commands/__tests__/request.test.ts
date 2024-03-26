@@ -31,7 +31,7 @@ describe("request", () => {
   describe("when valid request command", () => {
     const command = "request gcloud role viewer";
 
-    function mockFetch(response?: Partial<RequestResponse>) {
+    function mockFetch(response?: Partial<RequestResponse<unknown>>) {
       mockFetchCommand.mockResolvedValue({
         ok: true,
         message: "a message",
