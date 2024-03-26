@@ -46,7 +46,9 @@ export type AwsConfig = {
 export type AwsSsh = {
   permission: {
     spec: {
-      arn: string;
+      resource: {
+        arn: string;
+      };
     };
     type: "session";
   };

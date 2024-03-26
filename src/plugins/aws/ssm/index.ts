@@ -367,7 +367,8 @@ export const ssm = async (
   if (!isInstalled)
     throw "Please try again after installing the required AWS utilities";
 
-  const match = request.permission.spec.arn.match(INSTANCE_ARN_PATTERN);
+  const match =
+    request.permission.spec.resource.arn.match(INSTANCE_ARN_PATTERN);
   if (!match) throw "Did not receive a properly formatted instance identifier";
   const [, region, account, instance] = match;
 
