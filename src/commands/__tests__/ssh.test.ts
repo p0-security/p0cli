@@ -55,6 +55,19 @@ describe("ssh", () => {
         id: "abcefg",
         isPreexisting: false,
         isPersistent,
+        event: {
+          permission: {
+            type: "session",
+            spec: {
+              resource: {
+                arn: "arn:aws:ec2:us-west-2:391052057035:instance/i-0b1b7b7b7b7b7b7b7",
+              },
+            },
+          },
+          generated: {
+            documentName: "documentName",
+          },
+        },
       });
     });
 
