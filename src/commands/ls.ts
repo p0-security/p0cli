@@ -12,7 +12,7 @@ import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { print2, print1, Ansi } from "../drivers/stdio";
-import { max } from "lodash";
+import { max, isEqual} from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
@@ -41,6 +41,14 @@ export const lsCommand = (yargs: yargs.Argv) =>
     guard(ls)
   );
 
+
+/** Applies any command-specific formatting to the p0 ls display */
+const displayLsResource = (args: string[], key: string) => 
+{
+  if (isEqual(args, ["ssh", "session", "destination"])) return key.split("/")[1] ?? key
+
+  return key
+}
 const ls = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
@@ -52,7 +60,6 @@ const ls = async (
     ...args.arguments,
   ]);
   const allArguments = [...args._, ...args.arguments];
-
   if (data && "ok" in data && data.ok) {
     const label = pluralize(data.arg);
     if (data.items.length === 0) {
@@ -74,12 +81,13 @@ const ls = async (
     const maxLength = max(data.items.map((i) => i.key.length)) || 0;
     for (const item of data.items) {
       const tagPart = `${item.group ? `${item.group} / ` : ""}${item.value}`;
+      const displayedItem = displayLsResource(args.arguments, item.key)
       print1(
         isSameValue
-          ? item.key
+          ? displayedItem
           : maxLength > 30
-            ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
-            : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
+            ? `${displayedItem}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
+            : `${displayedItem.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
       );
     }
   } else {
