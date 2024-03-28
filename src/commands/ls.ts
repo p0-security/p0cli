@@ -18,7 +18,12 @@ import yargs from "yargs";
 
 type LsResponse = {
   ok: true;
-  items: { key: string; value: string; group?: string; isPreexisting?: boolean}[];
+  items: {
+    key: string;
+    value: string;
+    group?: string;
+    isPreexisting?: boolean;
+  }[];
   isTruncated: boolean;
   term: string;
   arg: string;
@@ -69,19 +74,25 @@ const ls = async (
          ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
-    print2(`Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`);
-    const sortedItems = data.items.sort((a,b) => +(!!b.isPreexisting) - +(!!a.isPreexisting))
+    print2(
+      `Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`
+    );
+    const sortedItems = data.items.sort(
+      (a, b) => +!!b.isPreexisting - +!!a.isPreexisting
+    );
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
     for (const item of sortedItems) {
       const tagPart = `${item.group ? `${item.group} / ` : ""}${item.value}`;
-      const prefix = item.isPreexisting ? "* " : "  "
-      print1( `${prefix}${
-        isSameValue
-          ? item.key
-          : maxLength > 30
-            ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
-            : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`}`
+      const prefix = item.isPreexisting ? "* " : "  ";
+      print1(
+        `${prefix}${
+          isSameValue
+            ? item.key
+            : maxLength > 30
+              ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
+              : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
+        }`
       );
     }
   } else {
