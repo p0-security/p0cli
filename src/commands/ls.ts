@@ -12,7 +12,7 @@ import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { print2, print1, Ansi } from "../drivers/stdio";
-import { max, orderBy} from "lodash";
+import { max, orderBy } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
