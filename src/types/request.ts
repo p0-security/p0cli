@@ -31,10 +31,11 @@ export type Request<P extends PluginRequest = { permission: object }> = {
   principal: string;
 };
 
-export type RequestResponse = {
+export type RequestResponse<T> = {
   ok: true;
   message: string;
   id: string;
+  event: T;
   isPreexisting: boolean;
   isPersistent: boolean;
 };

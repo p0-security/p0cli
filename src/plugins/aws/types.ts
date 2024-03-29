@@ -46,7 +46,11 @@ export type AwsConfig = {
 export type AwsSsh = {
   permission: {
     spec: {
-      arn: string;
+      awsResourcePermission: {
+        resource: {
+          arn: string;
+        };
+      };
     };
     type: "session";
   };
