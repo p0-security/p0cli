@@ -77,9 +77,7 @@ const ls = async (
     print2(
       `Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`
     );
-    const sortedItems = data.items.sort(
-      (a, b) => +!!b.isPreexisting - +!!a.isPreexisting
-    );
+    const sortedItems = sortBy(data.items, "isPreexisting");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
     for (const item of sortedItems) {
