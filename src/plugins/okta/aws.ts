@@ -31,7 +31,7 @@ export const assumeRoleWithOktaSaml = async (
         account,
         role: args.role,
         saml: {
-          providerName: config.uidLocation.samlProviderName,
+          providerName: config.login.provider.identityProvider,
           response: samlResponse,
         },
       });

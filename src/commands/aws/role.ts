@@ -13,7 +13,7 @@ import { authenticate } from "../../drivers/auth";
 import { guard } from "../../drivers/firestore";
 import { print1, print2 } from "../../drivers/stdio";
 import { getAwsConfig } from "../../plugins/aws/config";
-import { AwsItemConfig, AwsOktaSamlUidLocation } from "../../plugins/aws/types";
+import { AwsFederatedLogin, AwsItem } from "../../plugins/aws/types";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { getSamlResponse } from "../../plugins/okta/login";
 import { Authn } from "../../types/identity";
@@ -46,10 +46,10 @@ export const role = (yargs: yargs.Argv<{ account: string | undefined }>) =>
       .demandCommand(1)
   );
 
-const isOktaSamlConfig = (
-  config: AwsItemConfig
-): config is AwsItemConfig & { uidLocation: AwsOktaSamlUidLocation } =>
-  config.uidLocation?.id === "okta_saml_sso";
+const isFederatedLogin = (
+  config: AwsItem
+): config is AwsItem & { login: AwsFederatedLogin } =>
+  config.login?.type === "federated";
 
 /** Retrieves the configured Okta SAML response for the specified account
  *
@@ -61,13 +61,13 @@ export const initOktaSaml = async (
   account: string | undefined
 ) => {
   const { identity, config } = await getAwsConfig(authn, account);
-  if (!isOktaSamlConfig(config))
-    throw `Account ${config.account.description} is not configured for Okta SAML login.`;
-  const samlResponse = await getSamlResponse(identity, config.uidLocation);
+  if (!isFederatedLogin(config))
+    throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
+  const samlResponse = await getSamlResponse(identity, config.login);
   return {
     samlResponse,
     config,
-    account: config.account.id,
+    account: config.id,
   };
 };
 

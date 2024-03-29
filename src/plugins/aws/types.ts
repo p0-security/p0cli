@@ -14,31 +14,44 @@ export type AwsCredentials = {
   AWS_SESSION_TOKEN: string;
 };
 
-export type AwsOktaSamlUidLocation = {
-  id: "okta_saml_sso";
-  samlProviderName: string;
-  appId: string;
+export type AwsIamLogin = {
+  type: "iam";
+  identity:
+    | {
+        type: "email";
+      }
+    | { type: "tag"; tagName: string };
 };
 
-type AwsUidLocation =
-  | AwsOktaSamlUidLocation
-  | { id: "idc"; parentId: string }
-  | { id: "user_tag"; tagName: string }
-  | { id: "username" };
+export type AwsIdcLogin = {
+  type: "idc";
+  parent: string;
+};
+
+export type AwsFederatedLogin = {
+  type: "federated";
+  provider: {
+    type: "okta";
+    appId: string;
+    identityProvider: string;
+    method: {
+      type: "saml";
+    };
+  };
+};
+
+type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
 
 export type AwsItemConfig = {
-  account: {
-    id: string;
-    description?: string;
-  };
+  label?: string;
   state: string;
-  uidLocation?: AwsUidLocation;
+  login?: AwsLogin;
 };
 
+export type AwsItem = { id: string } & AwsItemConfig;
+
 export type AwsConfig = {
-  workflows?: {
-    items: AwsItemConfig[];
-  };
+  "iam-write": Record<string, AwsItemConfig>;
 };
 
 // -- Specific AWS permission types

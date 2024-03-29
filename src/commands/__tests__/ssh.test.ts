@@ -32,9 +32,9 @@ mockGetDoc({
   workflows: {
     items: [
       {
-        identifier: "test-account",
         state: "installed",
         type: "aws",
+        identifier: "test-account",
       },
     ],
   },

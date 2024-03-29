@@ -12,6 +12,7 @@ import { doc } from "../../drivers/firestore";
 import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
 import { getDoc } from "firebase/firestore";
+import { sortBy } from "lodash";
 
 export const getAwsConfig = async (
   authn: Authn,
@@ -23,11 +24,19 @@ export const getAwsConfig = async (
   );
   const config = snapshot.data();
   // TODO: Support alias lookup
+  const allItems = sortBy(
+    Object.entries(config?.["iam-write"] ?? {}).filter(
+      ([, { state }]) => state === "installed"
+    ),
+    ([id]) => id
+  );
   const item = account
-    ? config?.workflows?.items.find(
-        (i) => i.state === "installed" && i.account.id === account
-      )
-    : config?.workflows?.items[0];
+    ? allItems.find(([id, { label }]) => id === account || label === account)
+    : allItems.length !== 1
+      ? (() => {
+          throw `Please select a unique AWS account with --account; valid accounts are:\n${allItems.map(([id, { label }]) => label ?? id).join("\n")}`;
+        })()
+      : allItems[0];
   if (!item) throw `P0 is not installed on AWS account ${account}`;
-  return { identity, config: item };
+  return { identity, config: { id: item[0], ...item[1] } };
 };
