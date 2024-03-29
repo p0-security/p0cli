@@ -48,14 +48,11 @@ beforeEach(() => {
 describe("aws role", () => {
   describe("a single installed account", () => {
     const item = {
-      account: {
-        id: "1",
-        description: "1 (test)",
-      },
+      label: "test",
       state: "installed",
     };
     describe("without Okta SAML", () => {
-      mockGetDoc({ workflows: { items: [item] } });
+      mockGetDoc({ "iam-write": { "1": item } });
       describe.each([
         ["ls", "aws role ls"],
         ["assume", "aws role assume Role1"],
@@ -63,7 +60,7 @@ describe("aws role", () => {
         it("should print a friendly error message", async () => {
           const error = await failure(awsCommand(yargs()), command);
           expect(error).toMatchInlineSnapshot(
-            `"Account 1 (test) is not configured for Okta SAML login."`
+            `"Account test is not configured for Okta SAML login."`
           );
         });
       });
@@ -71,8 +68,18 @@ describe("aws role", () => {
     describe("with Okta SAML", () => {
       beforeEach(() => {
         mockGetDoc({
-          workflows: {
-            items: [{ ...item, uidLocation: { id: "okta_saml_sso" } }],
+          "iam-write": {
+            "1": {
+              ...item,
+              login: {
+                type: "federated",
+                provider: {
+                  type: "okta",
+                  appId: "0oabcdefgh",
+                  identityProvider: "okta",
+                },
+              },
+            },
           },
         });
       });

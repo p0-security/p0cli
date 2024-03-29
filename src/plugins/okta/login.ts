@@ -15,7 +15,7 @@ import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { sleep } from "../../util";
-import { AwsOktaSamlUidLocation } from "../aws/types";
+import { AwsFederatedLogin } from "../aws/types";
 import { JSDOM } from "jsdom";
 import { omit } from "lodash";
 import open from "open";
@@ -172,9 +172,12 @@ Waiting for authorization...
 // TODO: Inject Okta app
 export const getSamlResponse = async (
   identity: Identity,
-  config: AwsOktaSamlUidLocation
+  config: AwsFederatedLogin
 ) => {
-  const webTokenResponse = await fetchSsoWebToken(config.appId, identity);
+  const webTokenResponse = await fetchSsoWebToken(
+    config.provider.appId,
+    identity
+  );
   const samlResponse = await fetchSamlResponse(identity.org, webTokenResponse);
   if (!samlResponse) {
     throw "No SAML assertion obtained from Okta.";
