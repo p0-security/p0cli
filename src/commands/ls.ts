@@ -12,7 +12,7 @@ import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { print2, print1, Ansi } from "../drivers/stdio";
-import { max } from "lodash";
+import { max, orderBy} from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
@@ -77,7 +77,7 @@ const ls = async (
     print2(
       `Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`
     );
-    const sortedItems = sortBy(data.items, "isPreexisting");
+    const sortedItems = orderBy(data.items, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
     for (const item of sortedItems) {
