@@ -12,13 +12,18 @@ import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { print2, print1, Ansi } from "../drivers/stdio";
-import { max } from "lodash";
+import { max, orderBy } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
 type LsResponse = {
   ok: true;
-  items: { key: string; value: string; group?: string }[];
+  items: {
+    key: string;
+    value: string;
+    group?: string;
+    isPreexisting?: boolean;
+  }[];
   isTruncated: boolean;
   term: string;
   arg: string;
@@ -69,17 +74,23 @@ const ls = async (
          ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
-    print2(`Showing${truncationPart} ${label}${postfixPart}:`);
-    const isSameValue = data.items.every((i) => !i.group && i.key === i.value);
-    const maxLength = max(data.items.map((i) => i.key.length)) || 0;
-    for (const item of data.items) {
+    print2(
+      `Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`
+    );
+    const sortedItems = orderBy(data.items, "isPreexisting", "desc");
+    const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
+    const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
+    for (const item of sortedItems) {
       const tagPart = `${item.group ? `${item.group} / ` : ""}${item.value}`;
+      const prefix = item.isPreexisting ? "* " : "  ";
       print1(
-        isSameValue
-          ? item.key
-          : maxLength > 30
-            ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
-            : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
+        `${prefix}${
+          isSameValue
+            ? item.key
+            : maxLength > 30
+              ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
+              : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
+        }`
       );
     }
   } else {
