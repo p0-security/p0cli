@@ -163,7 +163,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
-  const response = await request(
+  const response = await request<AwsSsh>(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -184,11 +184,23 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     print2("Did not receive access ID from server");
     return;
   }
-  const { id, isPreexisting } = response;
+  const { id, isPreexisting, event } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
+  /**
+   * TODO TECH-DEBT ENG-1813:
+   * We use the id and waitForProvisioning to find the permission request document which has
+   * critical data, such as the document name and generated role, that we need to build up a
+   * viable SSM request.
+   *
+   * Replacing the permission with event.permission is necessary when trying to connect to an
+   * instance which has been granted approval through it's group. The event.permission object
+   * will contain details about the specific instance we are trying to connect to such as the
+   * instance id. Without an instance id, which an SSH group permission request document does
+   * not contain we cannot construct a valid SSM command.
+   */
   const requestData = await waitForProvisioning<AwsSsh>(authn, id);
-  const requestWithId = { ...requestData, id };
+  const requestWithId = { ...requestData, id, permission: event.permission };
 
   await ssm(authn, requestWithId, args);
 };
