@@ -15,7 +15,6 @@ import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { sshCommand } from "./ssh";
-import { VERSION } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -32,7 +31,6 @@ export const cli = commands
   .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
   .middleware(checkVersion)
   .strict()
-  .version(VERSION)
   .demandCommand(1)
   .fail((message, error, yargs) => {
     if (error) print2(error);
