@@ -30,6 +30,7 @@ import yargs from "yargs";
 export type SshCommandArgs = {
   destination: string;
   command?: string;
+  requestGroup?: boolean;
   L?: string; // Port forwarding option
   N?: boolean; // No remote command
   arguments: string[];
@@ -87,6 +88,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe:
             "Do not execute a remote command. Useful for forwarding ports.",
+        })
+        .option("request-group", {
+          type: "boolean",
+          describe:
+            "Request access to all instances that share a group with target destination",
         })
         // Match `p0 request --reason`
         .option("reason", {
@@ -163,6 +169,27 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
   await validateSshInstall(authn);
+
+  if (args.requestGroup) {
+    // When requesting for a group we need 2 requests. The first request grants access to the group
+    // requests will detect that the node is a part of the group and can use the group permission
+    // to gain access to the node.
+    const response = await request(
+      {
+        ...pick(args, "$0", "_"),
+        arguments: ["ssh", "group", "--destination", args.destination],
+        wait: true,
+      },
+      authn,
+      { message: "approval-required" }
+    );
+    if (!response) {
+      print2("Did not receive access ID from server");
+      return;
+    }
+    await waitForProvisioning<AwsSsh>(authn, response.id);
+  }
+
   const response = await request<AwsSsh>(
     {
       ...pick(args, "$0", "_"),
