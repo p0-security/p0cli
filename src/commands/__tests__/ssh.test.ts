@@ -29,14 +29,10 @@ const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
 mockGetDoc({
-  workflows: {
-    items: [
-      {
-        state: "installed",
-        type: "aws",
-        identifier: "test-account",
-      },
-    ],
+  "iam-write": {
+    ["aws:test-account"]: {
+      state: "installed",
+    },
   },
 });
 
