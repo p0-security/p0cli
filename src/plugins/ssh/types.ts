@@ -9,14 +9,10 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 type SshItemConfig = {
-  alias?: string;
-  identifier: string;
+  label?: string;
   state: string;
-  type: "aws" | "gcloud";
 };
 
 export type SshConfig = {
-  workflows?: {
-    items: SshItemConfig[];
-  };
+  "iam-write": Record<string, SshItemConfig>;
 };
