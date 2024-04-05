@@ -35,6 +35,7 @@ export type SshCommandArgs = {
   arguments: string[];
   sudo?: boolean;
   reason?: string;
+  account?: string;
 };
 
 // Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
@@ -92,6 +93,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("reason", {
           describe: "Reason access is needed",
           type: "string",
+        })
+        .option("account", {
+          type: "string",
+          describe: "The account on which the instance is located",
         }),
     guard(ssh)
   );
@@ -174,6 +179,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
         "aws",
         ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
+        ...(args.account ? ["--account", args.account] : []),
       ],
       wait: true,
     },
