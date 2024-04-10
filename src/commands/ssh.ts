@@ -105,12 +105,12 @@ const validateSshInstall = async (authn: Authn) => {
   const configDoc = await getDoc<SshConfig, object>(
     doc(`o/${authn.identity.org.tenantId}/integrations/ssh`)
   );
-  const items = configDoc
-    .data()
-    ?.workflows?.items.filter(
-      (i) => i.state === "installed" && i.type === "aws"
-    );
-  if (!items?.length) {
+  const configItems = configDoc.data()?.["iam-write"];
+
+  const items = Object.entries(configItems ?? {}).filter(
+    ([key, value]) => value.state == "installed" && key.startsWith("aws")
+  );
+  if (items.length === 0) {
     throw "This organization is not configured for SSH access via the P0 CLI";
   }
 };
