@@ -33,6 +33,7 @@ const stsAssume = async (
     AWS_ACCESS_KEY_ID: stsCredentials.AccessKeyId,
     AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
     AWS_SESSION_TOKEN: stsCredentials.SessionToken,
+    AWS_SECURITY_TOKEN: stsCredentials.SessionToken,
   };
 };
 

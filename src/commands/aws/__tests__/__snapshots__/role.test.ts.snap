@@ -21,7 +21,8 @@ exports[`aws role a single installed account with Okta SAML assume should assume
   [
     "  export AWS_ACCESS_KEY_ID=test-access-key
   export AWS_SECRET_ACCESS_KEY=secret-access-key
-  export AWS_SESSION_TOKEN=session-token",
+  export AWS_SESSION_TOKEN=session-token
+  export AWS_SECURITY_TOKEN=session-token",
   ],
 ]
 `;
