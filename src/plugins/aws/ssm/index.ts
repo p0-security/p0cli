@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { SshCommandArgs } from "../../../commands/ssh";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
 import { Request } from "../../../types/request";
@@ -50,7 +49,7 @@ const INSTANCE_ARN_PATTERN =
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
 
-type SsmArgs = {
+export type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
@@ -113,7 +112,7 @@ const createBaseSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
   ];
 };
 
-const createInteractiveShellCommand = (
+export const createInteractiveShellCommand = (
   args: Omit<SsmArgs, "forwardPortAddress" | "requestId">
 ) => {
   const ssmCommand = [
@@ -130,7 +129,7 @@ const createInteractiveShellCommand = (
   return ssmCommand;
 };
 
-const createPortForwardingCommand = (
+export const createPortForwardingCommand = (
   args: Omit<SsmArgs, "requestId"> &
     Required<Pick<SsmArgs, "forwardPortAddress">>
 ) => {
@@ -148,29 +147,11 @@ const createPortForwardingCommand = (
   ];
 };
 
-type SsmCommands = { shellCommand: string[]; subCommand?: string[] };
+type SubCommand = string[];
 
-const createSsmCommands = (args: Omit<SsmArgs, "requestId">): SsmCommands => {
-  const interactiveShellCommand = createInteractiveShellCommand(args);
-
-  const forwardPortAddress = args.forwardPortAddress;
-  if (!forwardPortAddress) {
-    return { shellCommand: interactiveShellCommand };
-  }
-
-  const portForwardingCommand = createPortForwardingCommand({
-    ...args,
-    forwardPortAddress,
-  });
-
-  if (args.noRemoteCommands) {
-    return { shellCommand: portForwardingCommand };
-  }
-
-  return {
-    shellCommand: interactiveShellCommand,
-    subCommand: portForwardingCommand,
-  };
+export type SsmCommands = {
+  shellCommand?: SubCommand;
+  subCommands?: SubCommand[];
 };
 
 function spawnChildProcess(
@@ -202,7 +183,7 @@ function spawnChildProcess(
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
-  command: string[];
+  command: SubCommand;
   attemptsRemaining?: number;
   abortController: AbortController;
   detached?: boolean;
@@ -212,7 +193,7 @@ type SpawnSsmNodeOptions = {
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
-const spawnSsmNode = async (
+export const spawnSsmNode = async (
   options: SpawnSsmNodeOptions
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
@@ -258,9 +239,9 @@ const spawnSsmNode = async (
  *
  * This process should be used when multiple SSM sessions need to be spawned in parallel.
  */
-const spawnSubprocessSsmNode = async (options: {
+export const spawnSubprocessSsmNode = async (options: {
   credential: AwsCredentials;
-  command: string[];
+  command: SubCommand;
   attemptsRemaining?: number;
   abortController: AbortController;
 }): Promise<number | null> =>
@@ -342,26 +323,11 @@ const spawnSubprocessSsmNode = async (options: {
     });
   });
 
-/** Convert an SshCommandArgs into an SSM document "command" parameter */
-const commandParameter = (args: SshCommandArgs) =>
-  args.command
-    ? `${args.command} ${args.arguments
-        .map(
-          (argument) =>
-            // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
-            // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
-            `"${String(argument).replace(/"/g, '\\"')}"`
-        )
-        .join(" ")}`.trim()
-    : undefined;
-
-/** Connect to an SSH backend using AWS Systems Manager (SSM) */
-export const ssm = async (
+export const credsAndInstance = async (
   authn: Authn,
   request: Request<AwsSsh> & {
     id: string;
-  },
-  args: SshCommandArgs
+  }
 ) => {
   const isInstalled = await ensureSsmInstall();
   if (!isInstalled)
@@ -378,25 +344,14 @@ export const ssm = async (
     account,
     role: request.generatedRoles[0]!.role,
   });
-  const ssmArgs = {
-    instance: instance!,
-    region: region!,
-    documentName: request.generated.documentName,
-    requestId: request.id,
-    forwardPortAddress: args.L,
-    noRemoteCommands: args.N,
-    command: commandParameter(args),
-  };
 
-  const ssmCommands = createSsmCommands(ssmArgs);
-
-  await startSsmProcesses(credential, ssmCommands);
+  return { credential, region, account, instance };
 };
 
 /**
  * Starts the SSM session and any additional processes that are requested for the session to function properly.
  */
-const startSsmProcesses = async (
+export const startSsmProcesses = async (
   credential: AwsCredentials,
   commands: SsmCommands
 ) => {
@@ -404,20 +359,25 @@ const startSsmProcesses = async (
   const abortController = new AbortController();
 
   const args = { credential, abortController };
-  const processes: Promise<unknown>[] = [
-    spawnSsmNode({
-      ...args,
-      command: commands.shellCommand,
-    }),
-  ];
+  const processes: Promise<unknown>[] = [];
 
-  if (commands.subCommand) {
+  if (commands.shellCommand)
     processes.push(
-      spawnSubprocessSsmNode({
+      spawnSsmNode({
         ...args,
-        command: commands.subCommand,
+        command: commands.shellCommand,
       })
     );
+
+  if (commands.subCommands) {
+    for (const subCommand of commands.subCommands) {
+      processes.push(
+        spawnSubprocessSsmNode({
+          ...args,
+          command: subCommand,
+        })
+      );
+    }
   }
 
   await Promise.all(processes);

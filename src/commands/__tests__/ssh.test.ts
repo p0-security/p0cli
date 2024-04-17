@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
-import { ssm } from "../../plugins/aws/ssm";
+import { ssmSsh } from "../../plugins/aws/ssm/ssh";
 import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
@@ -21,10 +21,10 @@ import yargs from "yargs";
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
-jest.mock("../../plugins/aws/ssm");
+jest.mock("../../plugins/aws/ssm/ssh");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
-const mockSsm = ssm as jest.Mock;
+const mockSsm = ssmSsh as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
