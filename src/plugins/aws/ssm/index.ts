@@ -8,12 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { SshCommandArgs } from "../../../commands/ssh";
+import {
+  ExerciseGrantResponse,
+  ScpCommandArgs,
+  SshCommandArgs,
+} from "../../../commands/shared";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
-import { Request } from "../../../types/request";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
-import { AwsCredentials, AwsSsh } from "../types";
+import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcess,
@@ -32,7 +35,15 @@ const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
   /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
-
+/**
+ * Matches the following error messages that AWS SSM print1 when ssh authorized
+ * key access hasn't propagated to the instance yet.
+ * - Connection closed by UNKNOWN port 65535
+ * - scp: Connection closed
+ * - kex_exchange_identification: Connection closed by remote host`
+ */
+const UNPROVISIONED_SCP_ACCESS_MESSAGE =
+  /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
  */
@@ -49,6 +60,7 @@ const INSTANCE_ARN_PATTERN =
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
+const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
 
 type SsmArgs = {
   instance: string;
@@ -83,7 +95,9 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString = chunk.toString("utf-8");
-    const match = chunkString.match(UNPROVISIONED_ACCESS_MESSAGE);
+    const match =
+      chunkString.match(UNPROVISIONED_ACCESS_MESSAGE) ||
+      chunkString.match(UNPROVISIONED_SCP_ACCESS_MESSAGE);
 
     if (
       match &&
@@ -101,7 +115,7 @@ const accessPropagationGuard = (
   };
 };
 
-const createBaseSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+const createBaseSsmCommand = (args: Pick<SsmArgs, "instance" | "region">) => {
   return [
     "aws",
     "ssm",
@@ -204,7 +218,7 @@ type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
   command: string[];
   attemptsRemaining?: number;
-  abortController: AbortController;
+  abortController?: AbortController;
   detached?: boolean;
 };
 
@@ -246,7 +260,7 @@ const spawnSsmNode = async (
         return;
       }
 
-      options.abortController.abort(code);
+      options.abortController?.abort(code);
       print2(`SSH session terminated`);
       resolve(code);
     });
@@ -358,31 +372,20 @@ const commandParameter = (args: SshCommandArgs) =>
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & {
-    id: string;
-  },
+  request: ExerciseGrantResponse,
   args: SshCommandArgs
 ) => {
   const isInstalled = await ensureSsmInstall();
   if (!isInstalled)
     throw "Please try again after installing the required AWS utilities";
-
-  const match =
-    request.permission.spec.awsResourcePermission.resource.arn.match(
-      INSTANCE_ARN_PATTERN
-    );
-  if (!match) throw "Did not receive a properly formatted instance identifier";
-  const [, region, account, instance] = match;
-
   const credential = await assumeRoleWithOktaSaml(authn, {
-    account,
-    role: request.generatedRoles[0]!.role,
+    account: request.instance.accountId,
+    role: request.role,
   });
   const ssmArgs = {
-    instance: instance!,
-    region: region!,
-    documentName: request.generated.documentName,
-    requestId: request.id,
+    instance: request.instance.id,
+    region: request.instance.region,
+    documentName: request.documentName,
     forwardPortAddress: args.L,
     noRemoteCommands: args.N,
     command: commandParameter(args),
@@ -419,6 +422,67 @@ const startSsmProcesses = async (
       })
     );
   }
+
+  await Promise.all(processes);
+};
+
+const createScpCommand = (
+  data: ExerciseGrantResponse,
+  args: ScpCommandArgs
+): string[] => {
+  const ssmCommand = [
+    ...createBaseSsmCommand({
+      region: data.instance.region,
+      instance: "%h",
+    }),
+    "--document-name",
+    START_SSH_SESSION_DOCUMENT_NAME,
+    "--parameters",
+    '"portNumber=%p"',
+  ];
+
+  // TODO: add support for original SSH too.
+  return [
+    "scp",
+    "-o",
+    `ProxyCommand=${ssmCommand.join(" ")}`,
+    // if a response is not received after three 5 minute attempts,
+    // the connection will be closed.
+    "-o",
+    "ServerAliveCountMax=3",
+    `-o`,
+    "ServerAliveInterval=300",
+    ...(args.recursive ? ["-r"] : []),
+    "-i",
+    args.identity,
+    args.source,
+    args.destination,
+  ];
+};
+
+export const scp = async (
+  authn: Authn,
+  args: ExerciseGrantResponse,
+  options: ScpCommandArgs
+) => {
+  if (!(await ensureSsmInstall())) {
+    throw "Please try again after installing the required AWS utilities";
+  }
+
+  const credential = await assumeRoleWithOktaSaml(authn, {
+    account: args.instance.accountId,
+    role: args.role,
+  });
+
+  const command = createScpCommand(args, options);
+
+  const processArgs = { credential };
+  const processes: Promise<unknown>[] = [
+    spawnSsmNode({
+      ...processArgs,
+      command,
+    }),
+  ];
 
   await Promise.all(processes);
 };

@@ -14,6 +14,7 @@ import { awsCommand } from "./aws";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
+import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -25,6 +26,7 @@ const commands = [
   lsCommand,
   requestCommand,
   sshCommand,
+  scpCommand,
 ];
 
 export const cli = commands
