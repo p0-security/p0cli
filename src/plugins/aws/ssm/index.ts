@@ -186,23 +186,26 @@ const createSsmCommands = (args: Omit<SsmArgs, "requestId">): SsmCommands => {
 
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioPipe, StdioPipe]
 ): ChildProcessByStdio<null, Readable, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioNull, StdioPipe]
 ): ChildProcessByStdio<null, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioNull | StdioPipe, StdioPipe]
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
   | ChildProcessByStdio<null, Readable, Readable> {
-  return spawn("/usr/bin/env", command, {
+  return spawn(command, args, {
     env: {
       ...process.env,
       ...credential,
@@ -213,7 +216,8 @@ function spawnChildProcess(
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
-  command: string[];
+  command: string;
+  args: string[];
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
@@ -227,11 +231,12 @@ const spawnSsmNode = async (
   options: SpawnSsmNodeOptions
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child = spawnChildProcess(options.credential, options.command, [
-      "inherit",
-      "inherit",
-      "pipe",
-    ]);
+    const child = spawnChildProcess(
+      options.credential,
+      options.command,
+      options.args,
+      ["inherit", "inherit", "pipe"]
+    );
 
     const { isAccessPropagated } = accessPropagationGuard(child);
 
@@ -264,51 +269,29 @@ const spawnSsmNode = async (
   });
 
 /**
- * This function will remove all keys from the ssh-agent.
- *
- * Having too many keys will result in an overwhelming number of requests to a node server, which will prevent connections
- * and return the error: "Too many authentication failures".
- *
- * You can check the number of keys in the ssh-agent by running the command: `ssh-add -l`.
- */
-const wipeSshAgentKeys = async () => {
-  return new Promise((resolve, reject) => {
-    const child = spawn("ssh-add", ["-D"]);
-
-    child.on("exit", (code) => {
-      if (code !== 0) {
-        reject(
-          "Failed to remove private keys from ssh-agent. Please contact support@p0.dev for assistance."
-        );
-      } else {
-        resolve(code);
-      }
-    });
-  });
-};
-
-/**
  * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
  * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
  * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
  * will need to be added again in subsequent sessions.
  */
-const savePrivateKey = async (privateKey: string) => {
-  await wipeSshAgentKeys();
+const executeScpCommand = async (
+  credential: AwsCredentials,
+  command: string,
+  privateKey: string
+) => {
+  const execute = `
+  eval $(ssh-agent) >/dev/null 2>&1
+  ssh-add -q - <<< '${privateKey}' 
+  ${command}
+  SCP_EXIT_CODE=$?  # Capture the exit code of scp
+  kill $SSH_AGENT_PID
+  exit $SCP_EXIT_CODE
+  `;
 
-  return new Promise((resolve, reject) => {
-    const process = spawn("ssh-add", ["-"]);
-    process.stdin.write(privateKey);
-    process.stdin.end();
-
-    process.on("exit", (code) => {
-      if (code !== 0) {
-        reject(
-          "Failed to add private key to ssh-agent. Please contact support@p0.dev for assistance."
-        );
-      }
-      resolve(code);
-    });
+  return spawnSsmNode({
+    credential,
+    command: "bash",
+    args: ["-c", execute],
   });
 };
 
@@ -325,11 +308,12 @@ const spawnSubprocessSsmNode = async (options: {
   abortController: AbortController;
 }): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child = spawnChildProcess(options.credential, options.command, [
-      "ignore",
-      "pipe",
-      "pipe",
-    ]);
+    const child = spawnChildProcess(
+      options.credential,
+      "/usr/bin/env",
+      options.command,
+      ["ignore", "pipe", "pipe"]
+    );
 
     // Captures the starting session message and filters it from the output
     const proxyStream = new Transform({
@@ -456,7 +440,8 @@ const startSsmProcesses = async (
   const processes: Promise<unknown>[] = [
     spawnSsmNode({
       ...args,
-      command: commands.shellCommand,
+      command: "/usr/bin/env",
+      args: commands.shellCommand,
     }),
   ];
 
@@ -491,7 +476,7 @@ const createScpCommand = (
   return [
     "scp",
     "-o",
-    `ProxyCommand=${ssmCommand.join(" ")}`,
+    `ProxyCommand='${ssmCommand.join(" ")}'`,
     // if a response is not received after three 5 minute attempts,
     // the connection will be closed.
     "-o",
@@ -501,7 +486,6 @@ const createScpCommand = (
     `-o`,
     "ServerAliveInterval=300",
     ...(args.recursive ? ["-r"] : []),
-    ...(args.identity ? ["-i", args.identity] : []),
     args.source,
     args.destination,
   ];
@@ -509,30 +493,23 @@ const createScpCommand = (
 
 export const scp = async (
   authn: Authn,
-  args: ExerciseGrantResponse,
-  options: ScpCommandArgs
+  data: ExerciseGrantResponse,
+  args: ScpCommandArgs
 ) => {
   if (!(await ensureSsmInstall())) {
     throw "Please try again after installing the required AWS utilities";
   }
 
   const credential = await assumeRoleWithOktaSaml(authn, {
-    account: args.instance.accountId,
-    role: args.role,
+    account: data.instance.accountId,
+    role: data.role,
   });
 
-  const command = createScpCommand(args, options);
+  const command = createScpCommand(data, args).join(" ");
 
-  const processArgs = { credential };
+  if (!data.privateKey) {
+    throw "Private key is required to run scp command. Please contact support@p0.dev for assistance.";
+  }
 
-  process.env.MYKEY = args.privateKey;
-
-  // every request will generate a new key, save it to memory.
-  args.privateKey && (await savePrivateKey(args.privateKey));
-
-  // run the scp command.
-  await spawnSsmNode({
-    ...processArgs,
-    command,
-  });
+  await executeScpCommand(credential, command, data.privateKey);
 };

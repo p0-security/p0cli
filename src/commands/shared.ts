@@ -52,7 +52,6 @@ export type BaseSshCommandArgs = {
 };
 
 export type ScpCommandArgs = BaseSshCommandArgs & {
-  identity: string;
   source: string;
   destination: string;
   recursive?: boolean;
