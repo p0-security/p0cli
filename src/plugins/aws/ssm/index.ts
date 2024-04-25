@@ -285,7 +285,7 @@ const executeScpCommand = async (
   ssh-add -q - <<< '${privateKey}' 
   ${command}
   SCP_EXIT_CODE=$? 
-  kill $SSH_AGENT_PID 
+  trap 'kill $SSH_AGENT_PID' EXIT
   exit $SCP_EXIT_CODE
   `;
 
