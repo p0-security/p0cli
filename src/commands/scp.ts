@@ -24,19 +24,19 @@ import yargs from "yargs";
 export const scpCommand = (yargs: yargs.Argv) =>
   yargs.command<ScpCommandArgs>(
     "scp <source> <destination>",
-    // TODO: support scp across multiple remote hosts.
+    // TODO (ENG-1930): support scp across multiple remote hosts.
     "SCP copies files between a local and remote host.",
     (yargs) =>
       yargs
         .positional("source", {
           type: "string",
           demandOption: true,
-          description: "Format: [hostname:]file or file",
+          description: "Format [hostname:]file",
         })
         .positional("destination", {
           type: "string",
           demandOption: true,
-          description: "Format: [hostname:]file or file",
+          description: "Format [hostname:]file",
         })
         .option("i", {
           alias: "identity",
@@ -70,6 +70,8 @@ export const scpCommand = (yargs: yargs.Argv) =>
  * Implicitly gains access to the SSH resource if required.
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
+  const identity = await readIdentityFile(args);
+
   const authn = await authenticate();
 
   const host = getHostIdentifier(args.source, args.destination);
@@ -82,15 +84,6 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
 
   if (!requestId) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
-  }
-
-  if (!args.identity) {
-    throw "Please provide a path to the identity file";
-  }
-
-  const identity = await fs.readFile(args.identity, "utf8");
-  if (!identity) {
-    throw "Could not read identity file, please check the path and try again.";
   }
 
   const result = await fetchExerciseGrant(authn, {
@@ -111,9 +104,25 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   });
 };
 
+const FAILED_TO_READ_IDENTITY_FILE =
+  "Could not read identity file, please check the path and try again.";
+
+const readIdentityFile = async (args: ScpCommandArgs) => {
+  try {
+    const identity = await fs.readFile(args.identity, "utf8");
+    if (!identity) {
+      throw FAILED_TO_READ_IDENTITY_FILE;
+    }
+    return identity;
+  } catch (error) {
+    throw FAILED_TO_READ_IDENTITY_FILE;
+  }
+};
+
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
 const REMOTE_PATTERN_COLON = /^([^:]+:)(.*)$/; // Matches host:[path]
 
+// TODO (ENG-1931): Improve remote host and local host checking for SCP requests
 const isExplicitlyRemote = (path: string): boolean => {
   return REMOTE_PATTERN_COLON.test(path);
 };
@@ -129,7 +138,8 @@ const getHostIdentifier = (source: string, destination: string) => {
     return remote.split(":")[0];
   }
 
-  throw "At least one host (source or destination) must be remote.";
+  // TODO (ENG-1930): support scp across multiple remote hosts.
+  throw "Exactly one host (source or destination) must be remote.";
 };
 
 const replaceHostWithInstance = (

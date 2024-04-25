@@ -40,10 +40,10 @@ const UNPROVISIONED_ACCESS_MESSAGE =
  * key access hasn't propagated to the instance yet.
  * - Connection closed by UNKNOWN port 65535
  * - scp: Connection closed
- * - kex_exchange_identification: Connection closed by remote host`
+ * - kex_exchange_identification: Connection closed by remote host
  */
 const UNPROVISIONED_SCP_ACCESS_MESSAGE =
-  /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
+  /^(?:Connection closed by UNKNOWN port \d+|scp: Connection closed|kex_exchange_identification: Connection closed by remote host)$/;
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
  */
@@ -54,9 +54,6 @@ const UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS = 5e3;
  * Note that each attempt consumes ~ 1 s.
  */
 const MAX_SSM_RETRIES = 30;
-
-const INSTANCE_ARN_PATTERN =
-  /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
