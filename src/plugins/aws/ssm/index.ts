@@ -508,7 +508,7 @@ export const scp = async (
   const command = createScpCommand(data, args).join(" ");
 
   if (!data.privateKey) {
-    throw "Private key is required to run scp command. Please contact support@p0.dev for assistance.";
+    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
   await executeScpCommand(credential, command, data.privateKey);
