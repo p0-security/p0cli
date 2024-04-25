@@ -39,6 +39,7 @@ export const fetchCommand = async <T>(
 export const fetchExerciseGrant = async (
   authn: Authn,
   args: {
+    type: "scp" | "ssh";
     requestId: string;
     destination: string;
     publicKey?: string;

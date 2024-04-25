@@ -43,7 +43,6 @@ export const scpCommand = (yargs: yargs.Argv) =>
           type: "string",
           describe:
             "Selects a file from which the identity (private key) for public key authentication is read",
-          demandOption: true,
         })
         .option("r", {
           alias: "recursive",
@@ -87,12 +86,26 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   }
 
   const result = await fetchExerciseGrant(authn, {
+    type: "scp",
     requestId,
     destination: host,
     // Generates the public key from the private key which prevents having to pass the public key separately.
     // Works with rsa/ed25519 algorithms and keys generated with ssh-keygen or openssl.
-    publicKey: sshpk.parseKey(identity, "pem").toString("ssh"),
+    publicKey: identity
+      ? sshpk.parseKey(identity, "pem").toString("ssh")
+      : undefined,
   });
+
+  if (result.privateKey) {
+    // write to the ~/.ssh/p0-identity file
+    await fs.writeFile(
+      `${process.env.HOME}/.ssh/p0-identity`,
+      result.privateKey,
+      "utf8"
+    );
+    // set the correct permissions on the file
+    await fs.chmod(`${process.env.HOME}/.ssh/p0-identity`, 0o600);
+  }
 
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(result, args);
@@ -108,6 +121,9 @@ const FAILED_TO_READ_IDENTITY_FILE =
   "Could not read identity file, please check the path and try again.";
 
 const readIdentityFile = async (args: ScpCommandArgs) => {
+  if (!args.identity) {
+    return;
+  }
   try {
     const identity = await fs.readFile(args.identity, "utf8");
     if (!identity) {

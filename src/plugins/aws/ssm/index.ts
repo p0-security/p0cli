@@ -43,7 +43,7 @@ const UNPROVISIONED_ACCESS_MESSAGE =
  * - kex_exchange_identification: Connection closed by remote host
  */
 const UNPROVISIONED_SCP_ACCESS_MESSAGE =
-  /^(?:Connection closed by UNKNOWN port \d+|scp: Connection closed|kex_exchange_identification: Connection closed by remote host)$/;
+  /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
  */
@@ -450,8 +450,7 @@ const createScpCommand = (
     `-o`,
     "ServerAliveInterval=300",
     ...(args.recursive ? ["-r"] : []),
-    "-i",
-    args.identity,
+    ...(args.identity ? ["-i", args.identity] : []),
     args.source,
     args.destination,
   ];

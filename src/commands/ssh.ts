@@ -92,6 +92,7 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   }
 
   const result = await fetchExerciseGrant(authn, {
+    type: "ssh",
     requestId,
     destination,
   });
