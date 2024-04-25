@@ -264,6 +264,55 @@ const spawnSsmNode = async (
   });
 
 /**
+ * This function will remove all keys from the ssh-agent.
+ *
+ * Having too many keys will result in an overwhelming number of requests to a node server, which will prevent connections
+ * and return the error: "Too many authentication failures".
+ *
+ * You can check the number of keys in the ssh-agent by running the command: `ssh-add -l`.
+ */
+const wipeSshAgentKeys = async () => {
+  return new Promise((resolve, reject) => {
+    const child = spawn("ssh-add", ["-D"]);
+
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        reject(
+          "Failed to remove private keys from ssh-agent. Please contact support@p0.dev for assistance."
+        );
+      } else {
+        resolve(code);
+      }
+    });
+  });
+};
+
+/**
+ * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
+ * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
+ * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
+ * will need to be added again in subsequent sessions.
+ */
+const savePrivateKey = async (privateKey: string) => {
+  await wipeSshAgentKeys();
+
+  return new Promise((resolve, reject) => {
+    const process = spawn("ssh-add", ["-"]);
+    process.stdin.write(privateKey);
+    process.stdin.end();
+
+    process.on("exit", (code) => {
+      if (code !== 0) {
+        reject(
+          "Failed to add private key to ssh-agent. Please contact support@p0.dev for assistance."
+        );
+      }
+      resolve(code);
+    });
+  });
+};
+
+/**
  * A subprocess SSM session redirects its output through a proxy that filters certain messages reducing the verbosity of the output.
  * The subprocess also makes sure to terminate any grandchild processes that might spawn during the session.
  *
@@ -446,6 +495,8 @@ const createScpCommand = (
     // if a response is not received after three 5 minute attempts,
     // the connection will be closed.
     "-o",
+    "ForwardAgent=yes",
+    "-o",
     "ServerAliveCountMax=3",
     `-o`,
     "ServerAliveInterval=300",
@@ -473,12 +524,15 @@ export const scp = async (
   const command = createScpCommand(args, options);
 
   const processArgs = { credential };
-  const processes: Promise<unknown>[] = [
-    spawnSsmNode({
-      ...processArgs,
-      command,
-    }),
-  ];
 
-  await Promise.all(processes);
+  process.env.MYKEY = args.privateKey;
+
+  // every request will generate a new key, save it to memory.
+  args.privateKey && (await savePrivateKey(args.privateKey));
+
+  // run the scp command.
+  await spawnSsmNode({
+    ...processArgs,
+    command,
+  });
 };

@@ -17,8 +17,6 @@ import {
   ScpCommandArgs,
   provisionRequest,
 } from "./shared";
-import * as fs from "fs/promises";
-import * as sshpk from "sshpk";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -37,12 +35,6 @@ export const scpCommand = (yargs: yargs.Argv) =>
           type: "string",
           demandOption: true,
           description: "Format [hostname:]file",
-        })
-        .option("i", {
-          alias: "identity",
-          type: "string",
-          describe:
-            "Selects a file from which the identity (private key) for public key authentication is read",
         })
         .option("r", {
           alias: "recursive",
@@ -69,8 +61,6 @@ export const scpCommand = (yargs: yargs.Argv) =>
  * Implicitly gains access to the SSH resource if required.
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
-  const identity = await readIdentityFile(args);
-
   const authn = await authenticate();
 
   const host = getHostIdentifier(args.source, args.destination);
@@ -89,23 +79,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     type: "scp",
     requestId,
     destination: host,
-    // Generates the public key from the private key which prevents having to pass the public key separately.
-    // Works with rsa/ed25519 algorithms and keys generated with ssh-keygen or openssl.
-    publicKey: identity
-      ? sshpk.parseKey(identity, "pem").toString("ssh")
-      : undefined,
   });
-
-  if (result.privateKey) {
-    // write to the ~/.ssh/p0-identity file
-    await fs.writeFile(
-      `${process.env.HOME}/.ssh/p0-identity`,
-      result.privateKey,
-      "utf8"
-    );
-    // set the correct permissions on the file
-    await fs.chmod(`${process.env.HOME}/.ssh/p0-identity`, 0o600);
-  }
 
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(result, args);
@@ -115,24 +89,6 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     source,
     destination,
   });
-};
-
-const FAILED_TO_READ_IDENTITY_FILE =
-  "Could not read identity file, please check the path and try again.";
-
-const readIdentityFile = async (args: ScpCommandArgs) => {
-  if (!args.identity) {
-    return;
-  }
-  try {
-    const identity = await fs.readFile(args.identity, "utf8");
-    if (!identity) {
-      throw FAILED_TO_READ_IDENTITY_FILE;
-    }
-    return identity;
-  } catch (error) {
-    throw FAILED_TO_READ_IDENTITY_FILE;
-  }
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
