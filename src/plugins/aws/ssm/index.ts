@@ -282,10 +282,10 @@ const executeScpCommand = async (
   // Execute should not leave any ssh-agent processes running after it's done performing an SCP transaction.
   const execute = `
   eval $(ssh-agent) >/dev/null 2>&1
+  trap 'kill $SSH_AGENT_PID' EXIT
   ssh-add -q - <<< '${privateKey}' 
   ${command}
   SCP_EXIT_CODE=$? 
-  trap 'kill $SSH_AGENT_PID' EXIT
   exit $SCP_EXIT_CODE
   `;
 
