@@ -495,7 +495,8 @@ const createScpCommand = (
 export const scp = async (
   authn: Authn,
   data: ExerciseGrantResponse,
-  args: ScpCommandArgs
+  args: ScpCommandArgs,
+  privateKey: string
 ) => {
   if (!(await ensureSsmInstall())) {
     throw "Please try again after installing the required AWS utilities";
@@ -508,9 +509,9 @@ export const scp = async (
 
   const command = createScpCommand(data, args).join(" ");
 
-  if (!data.privateKey) {
+  if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
-  await executeScpCommand(credential, command, data.privateKey);
+  await executeScpCommand(credential, command, privateKey);
 };

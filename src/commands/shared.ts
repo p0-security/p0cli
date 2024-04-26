@@ -35,7 +35,6 @@ export type ExerciseGrantResponse = {
   linuxUserName: string;
   ok: true;
   role: string;
-  privateKey?: string;
   instance: {
     arn: string;
     accountId: string;

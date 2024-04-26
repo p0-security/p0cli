@@ -17,6 +17,7 @@ import {
   ScpCommandArgs,
   provisionRequest,
 } from "./shared";
+import forge from "node-forge";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -75,20 +76,27 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
+  const { publicKey, privateKey } = createKeyPair();
+
   const result = await fetchExerciseGrant(authn, {
-    type: "scp",
     requestId,
     destination: host,
+    publicKey,
   });
 
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(result, args);
 
-  await scp(authn, result, {
-    ...args,
-    source,
-    destination,
-  });
+  await scp(
+    authn,
+    result,
+    {
+      ...args,
+      source,
+      destination,
+    },
+    privateKey
+  );
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
@@ -130,4 +138,12 @@ const replaceHostWithInstance = (
   }
 
   return { source, destination };
+};
+
+const createKeyPair = () => {
+  const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+  const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
+  const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
+
+  return { publicKey, privateKey };
 };
