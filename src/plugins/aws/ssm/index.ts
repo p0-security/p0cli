@@ -268,6 +268,53 @@ const spawnSsmNode = async (
     });
   });
 
+const spawnScpNode = async (options: {
+  credential: AwsCredentials;
+  commands: string[];
+  attemptsRemaining?: number;
+}): Promise<number | null> =>
+  new Promise((resolve, reject) => {
+    const child = spawn("bash", [], {
+      env: {
+        ...process.env,
+        ...options.credential,
+      },
+      stdio: ["pipe", "inherit", "pipe"],
+    });
+
+    for (const command of options.commands) {
+      child.stdin.write(`${command}\n`);
+    }
+
+    const { isAccessPropagated } = accessPropagationGuard(child);
+
+    const exitListener = child.on("exit", (code) => {
+      exitListener.unref();
+      // In the case of ephemeral AccessDenied exceptions due to unpropagated
+      // permissions, continually retry access until success
+      if (!isAccessPropagated()) {
+        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSM_RETRIES;
+        if (attemptsRemaining <= 0) {
+          reject(
+            "Access did not propagate through AWS before max retry attempts were exceeded. Please contact support@p0.dev for assistance."
+          );
+          return;
+        }
+
+        spawnScpNode({
+          ...options,
+          attemptsRemaining: attemptsRemaining - 1,
+        })
+          .then((code) => resolve(code))
+          .catch(reject);
+        return;
+      }
+
+      print2(`SSH session terminated`);
+      resolve(code);
+    });
+  });
+
 /**
  * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
  * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
@@ -280,19 +327,20 @@ const executeScpCommand = async (
   privateKey: string
 ) => {
   // Execute should not leave any ssh-agent processes running after it's done performing an SCP transaction.
-  const execute = `
-  eval $(ssh-agent) >/dev/null 2>&1
-  trap 'kill $SSH_AGENT_PID' EXIT
-  ssh-add -q - <<< '${privateKey}' 
-  ${command}
-  SCP_EXIT_CODE=$? 
-  exit $SCP_EXIT_CODE
-  `;
+  const commands = [
+    // completely disable bash history for this session
+    `unset HISTFILE`,
+    `eval $(ssh-agent) >/dev/null 2>&1`,
+    `trap 'kill $SSH_AGENT_PID' EXIT`,
+    `ssh-add -q - <<< '${privateKey}'`,
+    command,
+    `SCP_EXIT_CODE=$?`,
+    `exit $SCP_EXIT_CODE`,
+  ];
 
-  return spawnSsmNode({
+  return spawnScpNode({
     credential,
-    command: "bash",
-    args: ["-c", execute],
+    commands,
   });
 };
 
