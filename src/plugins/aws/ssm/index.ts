@@ -507,13 +507,14 @@ export const scp = async (
   });
 
   /**
-   * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
-   * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
-   * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
-   * will need to be added again in subsequent sessions.
+   * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite
+   * of tools and is used to hold private keys during a session. The SSH agent typically does not persist keys
+   * across system reboots or logout/login cycles. Once you log out or restart your system, any keys added to
+   * the SSH agent during that session will need to be added again in subsequent sessions.
    */
   const writeStdin = [
-    // completely disable bash history for this session
+    // This_might be overkill because we are already spawning a subprocess that will run the commands for us
+    // but just in case someone enters that subprocess we're also disabling the history of commands run.
     `unset HISTFILE`,
     `eval $(ssh-agent) >/dev/null 2>&1`,
     `trap 'kill $SSH_AGENT_PID' EXIT`,
