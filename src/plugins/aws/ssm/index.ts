@@ -8,12 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { SshCommandArgs } from "../../../commands/ssh";
+import {
+  ExerciseGrantResponse,
+  ScpCommandArgs,
+  SshCommandArgs,
+} from "../../../commands/shared";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
-import { Request } from "../../../types/request";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
-import { AwsCredentials, AwsSsh } from "../types";
+import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcess,
@@ -32,7 +35,15 @@ const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
   /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
-
+/**
+ * Matches the following error messages that AWS SSM print1 when ssh authorized
+ * key access hasn't propagated to the instance yet.
+ * - Connection closed by UNKNOWN port 65535
+ * - scp: Connection closed
+ * - kex_exchange_identification: Connection closed by remote host
+ */
+const UNPROVISIONED_SCP_ACCESS_MESSAGE =
+  /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
 /** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
  *  in the process's stderr
  */
@@ -44,11 +55,9 @@ const UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS = 5e3;
  */
 const MAX_SSM_RETRIES = 30;
 
-const INSTANCE_ARN_PATTERN =
-  /^arn:aws:ssm:([^:]+):([^:]+):managed-instance\/([^:]+)$/;
-
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const LOCAL_PORT_FORWARDING_DOCUMENT_NAME = "AWS-StartPortForwardingSession";
+const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
 
 type SsmArgs = {
   instance: string;
@@ -83,7 +92,9 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString = chunk.toString("utf-8");
-    const match = chunkString.match(UNPROVISIONED_ACCESS_MESSAGE);
+    const match =
+      chunkString.match(UNPROVISIONED_ACCESS_MESSAGE) ||
+      chunkString.match(UNPROVISIONED_SCP_ACCESS_MESSAGE);
 
     if (
       match &&
@@ -101,7 +112,7 @@ const accessPropagationGuard = (
   };
 };
 
-const createBaseSsmCommand = (args: Omit<SsmArgs, "requestId">) => {
+const createBaseSsmCommand = (args: Pick<SsmArgs, "instance" | "region">) => {
   return [
     "aws",
     "ssm",
@@ -175,23 +186,26 @@ const createSsmCommands = (args: Omit<SsmArgs, "requestId">): SsmCommands => {
 
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioPipe, StdioPipe]
 ): ChildProcessByStdio<null, Readable, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioNull, StdioPipe]
 ): ChildProcessByStdio<null, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
-  command: string[],
+  command: string,
+  args: string[],
   stdio: [StdioNull, StdioNull | StdioPipe, StdioPipe]
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
   | ChildProcessByStdio<null, Readable, Readable> {
-  return spawn("/usr/bin/env", command, {
+  return spawn(command, args, {
     env: {
       ...process.env,
       ...credential,
@@ -202,9 +216,10 @@ function spawnChildProcess(
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
-  command: string[];
+  command: string;
+  args: string[];
   attemptsRemaining?: number;
-  abortController: AbortController;
+  abortController?: AbortController;
   detached?: boolean;
 };
 
@@ -216,11 +231,12 @@ const spawnSsmNode = async (
   options: SpawnSsmNodeOptions
 ): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child = spawnChildProcess(options.credential, options.command, [
-      "inherit",
-      "inherit",
-      "pipe",
-    ]);
+    const child = spawnChildProcess(
+      options.credential,
+      options.command,
+      options.args,
+      ["inherit", "inherit", "pipe"]
+    );
 
     const { isAccessPropagated } = accessPropagationGuard(child);
 
@@ -246,11 +262,39 @@ const spawnSsmNode = async (
         return;
       }
 
-      options.abortController.abort(code);
+      options.abortController?.abort(code);
       print2(`SSH session terminated`);
       resolve(code);
     });
   });
+
+/**
+ * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
+ * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
+ * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
+ * will need to be added again in subsequent sessions.
+ */
+const executeScpCommand = async (
+  credential: AwsCredentials,
+  command: string,
+  privateKey: string
+) => {
+  // Execute should not leave any ssh-agent processes running after it's done performing an SCP transaction.
+  const execute = `
+  eval $(ssh-agent) >/dev/null 2>&1
+  trap 'kill $SSH_AGENT_PID' EXIT
+  ssh-add -q - <<< '${privateKey}' 
+  ${command}
+  SCP_EXIT_CODE=$? 
+  exit $SCP_EXIT_CODE
+  `;
+
+  return spawnSsmNode({
+    credential,
+    command: "bash",
+    args: ["-c", execute],
+  });
+};
 
 /**
  * A subprocess SSM session redirects its output through a proxy that filters certain messages reducing the verbosity of the output.
@@ -265,11 +309,12 @@ const spawnSubprocessSsmNode = async (options: {
   abortController: AbortController;
 }): Promise<number | null> =>
   new Promise((resolve, reject) => {
-    const child = spawnChildProcess(options.credential, options.command, [
-      "ignore",
-      "pipe",
-      "pipe",
-    ]);
+    const child = spawnChildProcess(
+      options.credential,
+      "/usr/bin/env",
+      options.command,
+      ["ignore", "pipe", "pipe"]
+    );
 
     // Captures the starting session message and filters it from the output
     const proxyStream = new Transform({
@@ -358,31 +403,20 @@ const commandParameter = (args: SshCommandArgs) =>
 /** Connect to an SSH backend using AWS Systems Manager (SSM) */
 export const ssm = async (
   authn: Authn,
-  request: Request<AwsSsh> & {
-    id: string;
-  },
+  request: ExerciseGrantResponse,
   args: SshCommandArgs
 ) => {
   const isInstalled = await ensureSsmInstall();
   if (!isInstalled)
     throw "Please try again after installing the required AWS utilities";
-
-  const match =
-    request.permission.spec.awsResourcePermission.resource.arn.match(
-      INSTANCE_ARN_PATTERN
-    );
-  if (!match) throw "Did not receive a properly formatted instance identifier";
-  const [, region, account, instance] = match;
-
   const credential = await assumeRoleWithOktaSaml(authn, {
-    account,
-    role: request.generatedRoles[0]!.role,
+    account: request.instance.accountId,
+    role: request.role,
   });
   const ssmArgs = {
-    instance: instance!,
-    region: region!,
-    documentName: request.generated.documentName,
-    requestId: request.id,
+    instance: request.instance.id,
+    region: request.instance.region,
+    documentName: request.documentName,
     forwardPortAddress: args.L,
     noRemoteCommands: args.N,
     command: commandParameter(args),
@@ -407,7 +441,8 @@ const startSsmProcesses = async (
   const processes: Promise<unknown>[] = [
     spawnSsmNode({
       ...args,
-      command: commands.shellCommand,
+      command: "/usr/bin/env",
+      args: commands.shellCommand,
     }),
   ];
 
@@ -421,4 +456,60 @@ const startSsmProcesses = async (
   }
 
   await Promise.all(processes);
+};
+
+const createScpCommand = (
+  data: ExerciseGrantResponse,
+  args: ScpCommandArgs
+): string[] => {
+  const ssmCommand = [
+    ...createBaseSsmCommand({
+      region: data.instance.region,
+      instance: "%h",
+    }),
+    "--document-name",
+    START_SSH_SESSION_DOCUMENT_NAME,
+    "--parameters",
+    '"portNumber=%p"',
+  ];
+
+  // TODO: add support for original SSH too.
+  return [
+    "scp",
+    "-o",
+    `ProxyCommand='${ssmCommand.join(" ")}'`,
+    // if a response is not received after three 5 minute attempts,
+    // the connection will be closed.
+    "-o",
+    "ServerAliveCountMax=3",
+    `-o`,
+    "ServerAliveInterval=300",
+    ...(args.recursive ? ["-r"] : []),
+    args.source,
+    args.destination,
+  ];
+};
+
+export const scp = async (
+  authn: Authn,
+  data: ExerciseGrantResponse,
+  args: ScpCommandArgs,
+  privateKey: string
+) => {
+  if (!(await ensureSsmInstall())) {
+    throw "Please try again after installing the required AWS utilities";
+  }
+
+  const credential = await assumeRoleWithOktaSaml(authn, {
+    account: data.instance.accountId,
+    role: data.role,
+  });
+
+  const command = createScpCommand(data, args).join(" ");
+
+  if (!privateKey) {
+    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
+  }
+
+  await executeScpCommand(credential, command, privateKey);
 };
