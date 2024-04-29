@@ -293,38 +293,6 @@ async function spawnSsmNode(
 }
 
 /**
- * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
- * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
- * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
- * will need to be added again in subsequent sessions.
- */
-const executeScpCommand = async (
-  credential: AwsCredentials,
-  command: string,
-  privateKey: string
-) => {
-  // Execute should not leave any ssh-agent processes running after it's done performing an SCP transaction.
-  const commands = [
-    // completely disable bash history for this session
-    `unset HISTFILE`,
-    `eval $(ssh-agent) >/dev/null 2>&1`,
-    `trap 'kill $SSH_AGENT_PID' EXIT`,
-    `ssh-add -q - <<< '${privateKey}'`,
-    command,
-    `SCP_EXIT_CODE=$?`,
-    `exit $SCP_EXIT_CODE`,
-  ];
-
-  return spawnSsmNode({
-    credential,
-    writeStdin: commands,
-    stdio: ["pipe", "inherit", "pipe"],
-    command: "bash",
-    args: [],
-  });
-};
-
-/**
  * A subprocess SSM session redirects its output through a proxy that filters certain messages reducing the verbosity of the output.
  * The subprocess also makes sure to terminate any grandchild processes that might spawn during the session.
  *
@@ -529,16 +497,37 @@ export const scp = async (
     throw "Please try again after installing the required AWS utilities";
   }
 
+  if (!privateKey) {
+    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
+  }
+
   const credential = await assumeRoleWithOktaSaml(authn, {
     account: data.instance.accountId,
     role: data.role,
   });
 
-  const command = createScpCommand(data, args).join(" ");
+  /**
+   * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
+   * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
+   * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
+   * will need to be added again in subsequent sessions.
+   */
+  const writeStdin = [
+    // completely disable bash history for this session
+    `unset HISTFILE`,
+    `eval $(ssh-agent) >/dev/null 2>&1`,
+    `trap 'kill $SSH_AGENT_PID' EXIT`,
+    `ssh-add -q - <<< '${privateKey}'`,
+    createScpCommand(data, args).join(" "),
+    `SCP_EXIT_CODE=$?`,
+    `exit $SCP_EXIT_CODE`,
+  ];
 
-  if (!privateKey) {
-    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
-  }
-
-  await executeScpCommand(credential, command, privateKey);
+  return spawnSsmNode({
+    credential,
+    writeStdin,
+    stdio: ["pipe", "inherit", "pipe"],
+    command: "bash",
+    args: [],
+  });
 };
