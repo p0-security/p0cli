@@ -26,7 +26,7 @@ import {
   exec,
   spawn,
 } from "node:child_process";
-import { Readable, Transform } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import psTree from "ps-tree";
 
 const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
@@ -200,11 +200,26 @@ function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioNull | StdioPipe, StdioPipe]
+  stdio: [StdioPipe, StdioNull, StdioPipe]
+): ChildProcessByStdio<Writable, null, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string,
+  args: string[],
+  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe]
+):
+  | ChildProcessByStdio<null, null, Readable>
+  | ChildProcessByStdio<Writable, null, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string,
+  args: string[],
+  stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe]
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
-  | ChildProcessByStdio<null, Readable, Readable> {
+  | ChildProcessByStdio<null, Readable, Readable>
+  | ChildProcessByStdio<Writable, null, Readable> {
   return spawn(command, args, {
     env: {
       ...process.env,
@@ -221,22 +236,30 @@ type SpawnSsmNodeOptions = {
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
+  writeStdin?: string[];
+  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe];
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
-const spawnSsmNode = async (
+
+async function spawnSsmNode(
   options: SpawnSsmNodeOptions
-): Promise<number | null> =>
-  new Promise((resolve, reject) => {
+): Promise<number | null> {
+  return new Promise((resolve, reject) => {
     const child = spawnChildProcess(
       options.credential,
       options.command,
       options.args,
-      ["inherit", "inherit", "pipe"]
+      options.stdio
     );
+
+    // optionally buffer content into stdin for the child process
+    for (const command of options.writeStdin ?? []) {
+      child.stdin?.write(`${command}\n`);
+    }
 
     const { isAccessPropagated } = accessPropagationGuard(child);
 
@@ -267,53 +290,7 @@ const spawnSsmNode = async (
       resolve(code);
     });
   });
-
-const spawnScpNode = async (options: {
-  credential: AwsCredentials;
-  commands: string[];
-  attemptsRemaining?: number;
-}): Promise<number | null> =>
-  new Promise((resolve, reject) => {
-    const child = spawn("bash", [], {
-      env: {
-        ...process.env,
-        ...options.credential,
-      },
-      stdio: ["pipe", "inherit", "pipe"],
-    });
-
-    for (const command of options.commands) {
-      child.stdin.write(`${command}\n`);
-    }
-
-    const { isAccessPropagated } = accessPropagationGuard(child);
-
-    const exitListener = child.on("exit", (code) => {
-      exitListener.unref();
-      // In the case of ephemeral AccessDenied exceptions due to unpropagated
-      // permissions, continually retry access until success
-      if (!isAccessPropagated()) {
-        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSM_RETRIES;
-        if (attemptsRemaining <= 0) {
-          reject(
-            "Access did not propagate through AWS before max retry attempts were exceeded. Please contact support@p0.dev for assistance."
-          );
-          return;
-        }
-
-        spawnScpNode({
-          ...options,
-          attemptsRemaining: attemptsRemaining - 1,
-        })
-          .then((code) => resolve(code))
-          .catch(reject);
-        return;
-      }
-
-      print2(`SSH session terminated`);
-      resolve(code);
-    });
-  });
+}
 
 /**
  * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
@@ -338,9 +315,12 @@ const executeScpCommand = async (
     `exit $SCP_EXIT_CODE`,
   ];
 
-  return spawnScpNode({
+  return spawnSsmNode({
     credential,
-    commands,
+    writeStdin: commands,
+    stdio: ["pipe", "inherit", "pipe"],
+    command: "bash",
+    args: [],
   });
 };
 
@@ -491,6 +471,7 @@ const startSsmProcesses = async (
       ...args,
       command: "/usr/bin/env",
       args: commands.shellCommand,
+      stdio: ["inherit", "inherit", "pipe"],
     }),
   ];
 
