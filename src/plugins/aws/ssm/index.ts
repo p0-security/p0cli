@@ -481,8 +481,6 @@ const createScpCommand = (
     // if a response is not received after three 5 minute attempts,
     // the connection will be closed.
     "-o",
-    "ForwardAgent=yes",
-    "-o",
     "ServerAliveCountMax=3",
     `-o`,
     "ServerAliveInterval=300",
