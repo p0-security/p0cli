@@ -553,22 +553,22 @@ export const scp = async (
     `exit $SCP_EXIT_CODE`,
   ];
 
-  // Print commands that can be individually executed to reproduce behavior
-  // Remove the debug information - can be executed manually between steps
-  const reproCommands = without(
-    [
-      "bash",
-      ...Object.entries(process.env).map(
-        ([key, value]) => `export ${key}='${value}'`
-      ),
-      ...Object.entries(credential).map(
-        ([key, value]) => `export ${key}='${value}'`
-      ),
-      ...writeStdin,
-    ],
-    ...debug
-  );
   if (args.debug) {
+    // Print commands that can be individually executed to reproduce behavior
+    // Remove the debug information - can be executed manually between steps
+    const reproCommands = without(
+      [
+        "bash",
+        ...Object.entries(process.env).map(
+          ([key, value]) => `export ${key}='${value}'`
+        ),
+        ...Object.entries(credential).map(
+          ([key, value]) => `export ${key}='${value}'`
+        ),
+        ...writeStdin,
+      ],
+      ...debug
+    );
     print2(
       `Execute the following commands to create a similar SCP session:\n *** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n *** COMMANDS END ***`
     );
