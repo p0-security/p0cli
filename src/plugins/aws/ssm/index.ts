@@ -476,6 +476,9 @@ const createProxyCommands = (
     scp: [
       "scp",
       ...(debug ? ["-v"] : []),
+      // ignore any overrides in the user's config file, we only want to use the ssh-agent we've set up for the session
+      "-o",
+      "IdentityAgent=$SSH_AUTH_SOCK",
       "-o",
       `ProxyCommand='${ssmCommand.join(" ")}'`,
       // if a response is not received after three 5 minute attempts,
