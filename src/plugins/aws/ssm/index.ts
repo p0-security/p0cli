@@ -26,7 +26,7 @@ import {
   exec,
   spawn,
 } from "node:child_process";
-import { Readable, Transform } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import psTree from "ps-tree";
 
 const STARTING_SESSION_MESSAGE = /Starting session with SessionId: (.*)/;
@@ -200,11 +200,26 @@ function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioNull | StdioPipe, StdioPipe]
+  stdio: [StdioPipe, StdioNull, StdioPipe]
+): ChildProcessByStdio<Writable, null, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string,
+  args: string[],
+  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe]
+):
+  | ChildProcessByStdio<null, null, Readable>
+  | ChildProcessByStdio<Writable, null, Readable>;
+function spawnChildProcess(
+  credential: AwsCredentials,
+  command: string,
+  args: string[],
+  stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe]
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
-  | ChildProcessByStdio<null, Readable, Readable> {
+  | ChildProcessByStdio<null, Readable, Readable>
+  | ChildProcessByStdio<Writable, null, Readable> {
   return spawn(command, args, {
     env: {
       ...process.env,
@@ -221,22 +236,30 @@ type SpawnSsmNodeOptions = {
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
+  writeStdin?: string[];
+  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe];
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
  * Requires `aws ssm` to be installed on the client machine.
  */
-const spawnSsmNode = async (
+
+async function spawnSsmNode(
   options: SpawnSsmNodeOptions
-): Promise<number | null> =>
-  new Promise((resolve, reject) => {
+): Promise<number | null> {
+  return new Promise((resolve, reject) => {
     const child = spawnChildProcess(
       options.credential,
       options.command,
       options.args,
-      ["inherit", "inherit", "pipe"]
+      options.stdio
     );
+
+    // optionally buffer content into stdin for the child process
+    for (const command of options.writeStdin ?? []) {
+      child.stdin?.write(`${command}\n`);
+    }
 
     const { isAccessPropagated } = accessPropagationGuard(child);
 
@@ -267,34 +290,7 @@ const spawnSsmNode = async (
       resolve(code);
     });
   });
-
-/**
- * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite of tools
- * and is used to hold private keys during a session. The SSH agent typically does not persist keys across system reboots
- * or logout/login cycles. Once you log out or restart your system, any keys added to the SSH agent during that session
- * will need to be added again in subsequent sessions.
- */
-const executeScpCommand = async (
-  credential: AwsCredentials,
-  command: string,
-  privateKey: string
-) => {
-  // Execute should not leave any ssh-agent processes running after it's done performing an SCP transaction.
-  const execute = `
-  eval $(ssh-agent) >/dev/null 2>&1
-  trap 'kill $SSH_AGENT_PID' EXIT
-  ssh-add -q - <<< '${privateKey}' 
-  ${command}
-  SCP_EXIT_CODE=$? 
-  exit $SCP_EXIT_CODE
-  `;
-
-  return spawnSsmNode({
-    credential,
-    command: "bash",
-    args: ["-c", execute],
-  });
-};
+}
 
 /**
  * A subprocess SSM session redirects its output through a proxy that filters certain messages reducing the verbosity of the output.
@@ -443,6 +439,7 @@ const startSsmProcesses = async (
       ...args,
       command: "/usr/bin/env",
       args: commands.shellCommand,
+      stdio: ["inherit", "inherit", "pipe"],
     }),
   ];
 
@@ -500,16 +497,38 @@ export const scp = async (
     throw "Please try again after installing the required AWS utilities";
   }
 
+  if (!privateKey) {
+    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
+  }
+
   const credential = await assumeRoleWithOktaSaml(authn, {
     account: data.instance.accountId,
     role: data.role,
   });
 
-  const command = createScpCommand(data, args).join(" ");
+  /**
+   * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite
+   * of tools and is used to hold private keys during a session. The SSH agent typically does not persist keys
+   * across system reboots or logout/login cycles. Once you log out or restart your system, any keys added to
+   * the SSH agent during that session will need to be added again in subsequent sessions.
+   */
+  const writeStdin = [
+    // This might be overkill because we are already spawning a subprocess that will run the commands for us
+    // but just in case someone enters that subprocess we're also disabling the history of commands run.
+    `unset HISTFILE`,
+    `eval $(ssh-agent) >/dev/null 2>&1`,
+    `trap 'kill $SSH_AGENT_PID' EXIT`,
+    `ssh-add -q - <<< '${privateKey}'`,
+    createScpCommand(data, args).join(" "),
+    `SCP_EXIT_CODE=$?`,
+    `exit $SCP_EXIT_CODE`,
+  ];
 
-  if (!privateKey) {
-    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
-  }
-
-  await executeScpCommand(credential, command, privateKey);
+  return spawnSsmNode({
+    credential,
+    writeStdin,
+    stdio: ["pipe", "inherit", "pipe"],
+    command: "bash",
+    args: [],
+  });
 };
