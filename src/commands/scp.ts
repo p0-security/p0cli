@@ -53,6 +53,10 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("sudo", {
           type: "boolean",
           describe: "Add user to sudoers file",
+        })
+        .option("debug", {
+          type: "boolean",
+          describe: "Print debug information, dangerous for sensitive data",
         }),
     guard(scpAction)
   );

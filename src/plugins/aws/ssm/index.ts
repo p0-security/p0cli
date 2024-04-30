@@ -18,6 +18,7 @@ import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
+import { without } from "lodash";
 import {
   ChildProcess,
   ChildProcessByStdio,
@@ -455,10 +456,11 @@ const startSsmProcesses = async (
   await Promise.all(processes);
 };
 
-const createScpCommand = (
+const createProxyCommands = (
   data: ExerciseGrantResponse,
-  args: ScpCommandArgs
-): string[] => {
+  args: ScpCommandArgs,
+  debug?: boolean
+) => {
   const ssmCommand = [
     ...createBaseSsmCommand({
       region: data.instance.region,
@@ -470,21 +472,31 @@ const createScpCommand = (
     '"portNumber=%p"',
   ];
 
-  // TODO: add support for original SSH too.
-  return [
-    "scp",
-    "-o",
-    `ProxyCommand='${ssmCommand.join(" ")}'`,
-    // if a response is not received after three 5 minute attempts,
-    // the connection will be closed.
-    "-o",
-    "ServerAliveCountMax=3",
-    `-o`,
-    "ServerAliveInterval=300",
-    ...(args.recursive ? ["-r"] : []),
-    args.source,
-    args.destination,
-  ];
+  return {
+    scp: [
+      "scp",
+      ...(debug ? ["-v"] : []),
+      "-o",
+      `ProxyCommand='${ssmCommand.join(" ")}'`,
+      // if a response is not received after three 5 minute attempts,
+      // the connection will be closed.
+      "-o",
+      "ServerAliveCountMax=3",
+      `-o`,
+      "ServerAliveInterval=300",
+      ...(args.recursive ? ["-r"] : []),
+      args.source,
+      args.destination,
+    ],
+    ssh: [
+      "ssh",
+      ...(debug ? ["-v"] : []),
+      "-o",
+      `ProxyCommand='${ssmCommand.join(" ")}'`,
+      `${data.linuxUserName}@${data.instance.id}`,
+    ],
+    ssm: ssmCommand,
+  };
 };
 
 export const scp = async (
@@ -506,6 +518,20 @@ export const scp = async (
     role: data.role,
   });
 
+  const commands = createProxyCommands(data, args, args.debug);
+  const scpCommand = commands.scp.join(" ");
+  const sshCommand = commands.ssh.join(" ");
+
+  const debug = [
+    `echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"`,
+    `echo "SSH_AGENT_PID: $SSH_AGENT_PID"`,
+    `echo '$(p0 aws role assume ${data.role})'`,
+    `echo "${sshCommand}"`,
+    `echo "${scpCommand}"`,
+    `echo "SSH Agent Keys:"`,
+    `ssh-add -l`,
+  ];
+
   /**
    * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite
    * of tools and is used to hold private keys during a session. The SSH agent typically does not persist keys
@@ -516,13 +542,37 @@ export const scp = async (
     // This might be overkill because we are already spawning a subprocess that will run the commands for us
     // but just in case someone enters that subprocess we're also disabling the history of commands run.
     `unset HISTFILE`,
-    `eval $(ssh-agent) >/dev/null 2>&1`,
+    // in debug mode, we want to see the pid of the ssh-agent and compare it to the environment variable
+    `eval $(ssh-agent)${args.debug ? "" : " >/dev/null 2>&1"}`,
     `trap 'kill $SSH_AGENT_PID' EXIT`,
     `ssh-add -q - <<< '${privateKey}'`,
-    createScpCommand(data, args).join(" "),
+    // in debug mode, we'll see the keys that were added to the agent and more information about the agent
+    ...(args.debug ? debug : []),
+    scpCommand,
     `SCP_EXIT_CODE=$?`,
     `exit $SCP_EXIT_CODE`,
   ];
+
+  if (args.debug) {
+    // Print commands that can be individually executed to reproduce behavior
+    // Remove the debug information - can be executed manually between steps
+    const reproCommands = without(
+      [
+        "bash",
+        ...Object.entries(process.env).map(
+          ([key, value]) => `export ${key}='${value}'`
+        ),
+        ...Object.entries(credential).map(
+          ([key, value]) => `export ${key}='${value}'`
+        ),
+        ...writeStdin,
+      ],
+      ...debug
+    );
+    print2(
+      `Execute the following commands to create a similar SCP session:\n *** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n *** COMMANDS END ***`
+    );
+  }
 
   return spawnSsmNode({
     credential,
