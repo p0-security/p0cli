@@ -18,6 +18,7 @@ import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
+import { without } from "lodash";
 import {
   ChildProcess,
   ChildProcessByStdio,
@@ -524,7 +525,6 @@ export const scp = async (
   const debug = [
     `echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"`,
     `echo "SSH_AGENT_PID: $SSH_AGENT_PID"`,
-    `echo "ssh-add -q - <<< '${privateKey}'"`,
     `echo '$(p0 aws role assume ${data.role})'`,
     `echo "${sshCommand}"`,
     `echo "${scpCommand}"`,
@@ -552,6 +552,27 @@ export const scp = async (
     `SCP_EXIT_CODE=$?`,
     `exit $SCP_EXIT_CODE`,
   ];
+
+  // Print commands that can be individually executed to reproduce behavior
+  // Remove the debug information - can be executed manually between steps
+  const reproCommands = without(
+    [
+      "bash",
+      ...Object.entries(process.env).map(
+        ([key, value]) => `export ${key}='${value}'`
+      ),
+      ...Object.entries(credential).map(
+        ([key, value]) => `export ${key}='${value}'`
+      ),
+      ...writeStdin,
+    ],
+    ...debug
+  );
+  if (args.debug) {
+    print2(
+      `Execute the following commands to create a similar SCP session:\n *** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n *** COMMANDS END ***`
+    );
+  }
 
   return spawnSsmNode({
     credential,
