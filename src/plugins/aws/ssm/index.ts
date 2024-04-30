@@ -513,7 +513,7 @@ export const scp = async (
    * the SSH agent during that session will need to be added again in subsequent sessions.
    */
   const writeStdin = [
-    // This_might be overkill because we are already spawning a subprocess that will run the commands for us
+    // This might be overkill because we are already spawning a subprocess that will run the commands for us
     // but just in case someone enters that subprocess we're also disabling the history of commands run.
     `unset HISTFILE`,
     `eval $(ssh-agent) >/dev/null 2>&1`,
