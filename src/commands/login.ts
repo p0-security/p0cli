@@ -28,9 +28,7 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  const orgDoc = await getDoc<RawOrgData, object>(
-    doc(`orgs/${args.org}`)
-  );
+  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
   const orgData = orgDoc.data();
   if (!orgData) throw "Could not find organization";
 

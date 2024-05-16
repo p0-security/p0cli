@@ -12,5 +12,5 @@ import { OrgData } from "../../types/org";
 import { oidcLogin } from "../oidc/login";
 
 /** Logs in to PingOne via OIDC */
-export const pingLogin = async (org: OrgData) => 
+export const pingLogin = async (org: OrgData) =>
   oidcLogin(org, "openid email profile");

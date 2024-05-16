@@ -20,8 +20,7 @@ import open from "open";
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export const validateProviderDomain = (org: OrgData) => {
-  if (!org.providerDomain)
-    throw "Login requires a configured provider domain.";
+  if (!org.providerDomain) throw "Login requires a configured provider domain.";
 };
 
 /** Executes the first step of a device-authorization grant flow */
@@ -41,11 +40,12 @@ const authorize = async (org: OrgData, scope: string) => {
   validateProviderDomain(org);
   // This is the "org" authorization server; the okta.apps.* scopes are not
   // available with custom authorization servers
-  const url = org.providerType === "okta"
-    ? `https:${org.providerDomain}/oauth2/v1/device/authorize`
-    : org.providerType === "ping"
-    ? `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`
-    : throwAssertNever(org.providerType);
+  const url =
+    org.providerType === "okta"
+      ? `https:${org.providerDomain}/oauth2/v1/device/authorize`
+      : org.providerType === "ping"
+        ? `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`
+        : throwAssertNever(org.providerType);
   const response = await fetch(url, init);
   await validateResponse(response);
   return (await response.json()) as AuthorizeResponse;
@@ -71,11 +71,12 @@ const fetchOidcToken = async (org: OrgData, authorize: AuthorizeResponse) => {
     }),
   };
   validateProviderDomain(org);
-  const url = org.providerType === "okta"
-    ? `https:${org.providerDomain}/oauth2/v1/token`
-    : org.providerType === "ping"
-    ? `https://${org.providerDomain}/${org.environmentId}/as/token`
-    : throwAssertNever(org.providerType);
+  const url =
+    org.providerType === "okta"
+      ? `https:${org.providerDomain}/oauth2/v1/token`
+      : org.providerType === "ping"
+        ? `https://${org.providerDomain}/${org.environmentId}/as/token`
+        : throwAssertNever(org.providerType);
   const response = await fetch(url, init);
 
   if (!response.ok) {

@@ -21,19 +21,20 @@ type BaseOrgData = {
     | "oidc-pkce"
     | "okta";
   tenantId: string;
-}
+};
 
 /** Publicly readable organization data */
-export type RawOrgData = BaseOrgData & (
-  | {
-      providerType?: "okta"
-    }
-  | {
-      providerType?: "ping";
-      environmentId: string;
-    }
-);
+export type RawOrgData = BaseOrgData &
+  (
+    | {
+        providerType?: "okta";
+      }
+    | {
+        providerType?: "ping";
+        environmentId: string;
+      }
+  );
 
 export type OrgData = RawOrgData & {
   slug: string;
-}
+};

@@ -14,9 +14,9 @@ import { Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { AwsFederatedLogin } from "../aws/types";
+import { oidcLogin, validateProviderDomain } from "../oidc/login";
 import { JSDOM } from "jsdom";
 import { omit } from "lodash";
-import { oidcLogin, validateProviderDomain } from "../oidc/login";
 
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
