@@ -85,3 +85,14 @@ export const exec = async (
       }
     }
   );
+
+export const throwAssertNever = (value: never) => {
+  throw assertNever(value);
+};
+
+export const assertNever = (value: never) => {
+  return unexpectedValueError(value);
+};
+
+export const unexpectedValueError = (value: any) =>
+  new Error(`Unexpected code state: value ${value} had unexpected type`);

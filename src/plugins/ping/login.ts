@@ -8,33 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { OrgData } from "../../types/org";
+import { oidcLogin } from "../oidc/login";
 
-type BaseOrgData = {
-  clientId: string;
-  providerId: string;
-  providerDomain?: string;
-  ssoProvider:
-    | "azure-oidc"
-    | "google-oidc"
-    | "google"
-    | "microsoft"
-    | "oidc-pkce"
-    | "okta";
-  tenantId: string;
-};
-
-/** Publicly readable organization data */
-export type RawOrgData = BaseOrgData &
-  (
-    | {
-        providerType?: "okta";
-      }
-    | {
-        providerType?: "ping";
-        environmentId: string;
-      }
-  );
-
-export type OrgData = RawOrgData & {
-  slug: string;
-};
+/** Logs in to PingOne via OIDC */
+export const pingLogin = async (org: OrgData) =>
+  oidcLogin(org, "openid email profile");
