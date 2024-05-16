@@ -13,7 +13,7 @@ import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";
-import { OrgData } from "../types/org";
+import { OrgData, RawOrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -28,7 +28,7 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  const orgDoc = await getDoc<Omit<OrgData, "slug">, object>(
+  const orgDoc = await getDoc<RawOrgData, object>(
     doc(`orgs/${args.org}`)
   );
   const orgData = orgDoc.data();

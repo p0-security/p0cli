@@ -14,10 +14,10 @@ import { print2 } from "../../drivers/stdio";
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { sleep } from "../../util";
+import { sleep, throwAssertNever } from "../../util";
 import { AwsFederatedLogin } from "../aws/types";
 import { JSDOM } from "jsdom";
-import { omit } from "lodash";
+import { capitalize, omit } from "lodash";
 import open from "open";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
@@ -28,27 +28,32 @@ const WEB_SSO_TOKEN_TYPE = "urn:okta:oauth:token-type:web_sso_token";
 
 const validateProviderDomain = (org: OrgData) => {
   if (!org.providerDomain)
-    throw "Okta login requires a configured provider domain.";
+    throw "Login requires a configured provider domain.";
 };
 
-/** Executes the first step of Okta's device-authorization grant flow */
+/** Executes the first step of a device-authorization grant flow */
 // cf. https://developer.okta.com/docs/guides/device-authorization-grant/main/
-const authorize = async (org: OrgData) => {
+const authorize = async (org: OrgData, scope: string) => {
+  if (org.providerType === undefined) {
+    throw "Login requires a configured provider type.";
+  }
   const init = {
     method: "POST",
     headers: OIDC_HEADERS,
     body: urlEncode({
       client_id: org.clientId,
-      scope: "openid email profile okta.apps.sso",
+      scope,
     }),
   };
   validateProviderDomain(org);
   // This is the "org" authorization server; the okta.apps.* scopes are not
   // available with custom authorization servers
-  const response = await fetch(
-    `https:${org.providerDomain}/oauth2/v1/device/authorize`,
-    init
-  );
+  const url = org.providerType === "okta"
+    ? `https:${org.providerDomain}/oauth2/v1/device/authorize`
+    : org.providerType === "ping"
+    ? `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`
+    : throwAssertNever(org.providerType);
+  const response = await fetch(url, init);
   await validateResponse(response);
   return (await response.json()) as AuthorizeResponse;
 };
@@ -60,6 +65,9 @@ const authorize = async (org: OrgData) => {
  * function will return undefined.
  */
 const fetchOidcToken = async (org: OrgData, authorize: AuthorizeResponse) => {
+  if (org.providerType === undefined) {
+    throw "Login requires a configured provider type.";
+  }
   const init = {
     method: "POST",
     headers: OIDC_HEADERS,
@@ -70,10 +78,13 @@ const fetchOidcToken = async (org: OrgData, authorize: AuthorizeResponse) => {
     }),
   };
   validateProviderDomain(org);
-  const response = await fetch(
-    `https:${org.providerDomain}/oauth2/v1/token`,
-    init
-  );
+  const url = org.providerType === "okta"
+    ? `https:${org.providerDomain}/oauth2/v1/token`
+    : org.providerType === "ping"
+    ? `https://${org.providerDomain}/${org.environmentId}/as/token`
+    : throwAssertNever(org.providerType);
+  const response = await fetch(url, init);
+
   if (!response.ok) {
     if (response.status === 400) {
       const data = await response.json();
@@ -153,11 +164,17 @@ const fetchSamlResponse = async (
 };
 
 /** Logs in to Okta via OIDC */
-export const oktaLogin = async (org: OrgData) => {
-  const authorizeResponse = await authorize(org);
+export const oktaLogin = async (org: OrgData) =>
+  oidcLogin(org, "openid email profile okta.apps.sso");
+
+export const oidcLogin = async (org: OrgData, scope: string) => {
+  if (org.providerType === undefined) {
+    throw "Login requires a configured provider type.";
+  }
+  const authorizeResponse = await authorize(org, scope);
   print2(`Please use the opened browser window to continue your P0 login.
   
-When prompted, confirm that Okta displays this code:
+When prompted, confirm that ${capitalize(org.providerType)} displays this code:
 
   ${authorizeResponse.user_code}
 

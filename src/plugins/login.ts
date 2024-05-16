@@ -12,6 +12,7 @@ import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
 import { googleLogin } from "./google/login";
 import { oktaLogin } from "./okta/login";
+import { pingLogin } from "./ping/login";
 
 export const pluginLoginMap: Record<
   string,
@@ -19,5 +20,6 @@ export const pluginLoginMap: Record<
 > = {
   google: googleLogin,
   okta: oktaLogin,
+  ping: pingLogin,
   "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
 };

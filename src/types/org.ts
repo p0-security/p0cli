@@ -8,12 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-/** Publicly readable organization data */
-export type OrgData = {
+
+type BaseOrgData = {
   clientId: string;
   providerId: string;
   providerDomain?: string;
-  providerType?: "okta";
   ssoProvider:
     | "azure-oidc"
     | "google-oidc"
@@ -21,6 +20,20 @@ export type OrgData = {
     | "microsoft"
     | "oidc-pkce"
     | "okta";
-  slug: string;
   tenantId: string;
-};
+}
+
+/** Publicly readable organization data */
+export type RawOrgData = BaseOrgData & (
+  | {
+      providerType?: "okta"
+    }
+  | {
+      providerType?: "ping";
+      environmentId: string;
+    }
+);
+
+export type OrgData = RawOrgData & {
+  slug: string;
+}
