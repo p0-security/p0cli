@@ -507,7 +507,7 @@ const createProxyCommands = (
     ...commonArgs,
     ...(args.A ? ["-A"] : []),
     `${data.linuxUserName}@${data.instance.id}`,
-  ];
+  ].join(" ");
 };
 
 export const sshOrScp = async (
@@ -529,7 +529,7 @@ export const sshOrScp = async (
     role: data.role,
   });
 
-  const command = createProxyCommands(data, args, args.debug).join(" ");
+  const command = createProxyCommands(data, args, args.debug);
 
   const debug = [
     `echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"`,
