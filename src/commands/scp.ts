@@ -11,13 +11,13 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchExerciseGrant } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { scp } from "../plugins/aws/ssm";
+import { sshOrScp } from "../plugins/aws/ssm";
 import {
   ExerciseGrantResponse,
   ScpCommandArgs,
+  createKeyPair,
   provisionRequest,
 } from "./shared";
-import forge from "node-forge";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -91,7 +91,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(result, args);
 
-  await scp(
+  await sshOrScp(
     authn,
     result,
     {
@@ -142,12 +142,4 @@ const replaceHostWithInstance = (
   }
 
   return { source, destination };
-};
-
-const createKeyPair = () => {
-  const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
-  const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
-  const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
-
-  return { publicKey, privateKey };
 };

@@ -189,25 +189,29 @@ function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioPipe, StdioPipe]
+  stdio: [StdioNull, StdioPipe, StdioPipe],
+  shell: boolean
 ): ChildProcessByStdio<null, Readable, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioNull, StdioPipe]
+  stdio: [StdioNull, StdioNull, StdioPipe],
+  shell: boolean
 ): ChildProcessByStdio<null, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioPipe, StdioNull, StdioPipe]
+  stdio: [StdioPipe, StdioNull, StdioPipe],
+  shell: boolean
 ): ChildProcessByStdio<Writable, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe]
+  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe],
+  shell: boolean
 ):
   | ChildProcessByStdio<null, null, Readable>
   | ChildProcessByStdio<Writable, null, Readable>;
@@ -215,7 +219,8 @@ function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe]
+  stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe],
+  shell: boolean
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
@@ -227,6 +232,7 @@ function spawnChildProcess(
       ...credential,
     },
     stdio,
+    shell: shell || false,
   });
 }
 
@@ -237,8 +243,8 @@ type SpawnSsmNodeOptions = {
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
-  writeStdin?: string[];
   stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe];
+  shell: boolean;
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
@@ -254,13 +260,9 @@ async function spawnSsmNode(
       options.credential,
       options.command,
       options.args,
-      options.stdio
+      options.stdio,
+      options.shell
     );
-
-    // optionally buffer content into stdin for the child process
-    for (const command of options.writeStdin ?? []) {
-      child.stdin?.write(`${command}\n`);
-    }
 
     const { isAccessPropagated } = accessPropagationGuard(child);
 
@@ -310,7 +312,8 @@ const spawnSubprocessSsmNode = async (options: {
       options.credential,
       "/usr/bin/env",
       options.command,
-      ["ignore", "pipe", "pipe"]
+      ["ignore", "pipe", "pipe"],
+      false
     );
 
     // Captures the starting session message and filters it from the output
@@ -410,6 +413,7 @@ export const ssm = async (
     account: request.instance.accountId,
     role: request.role,
   });
+
   const ssmArgs = {
     instance: request.instance.id,
     region: request.instance.region,
@@ -441,6 +445,7 @@ const startSsmProcesses = async (
       command: "/usr/bin/env",
       args: commands.shellCommand,
       stdio: ["inherit", "inherit", "pipe"],
+      shell: false,
     }),
   ];
 
@@ -458,7 +463,7 @@ const startSsmProcesses = async (
 
 const createProxyCommands = (
   data: ExerciseGrantResponse,
-  args: ScpCommandArgs,
+  args: ScpCommandArgs | SshCommandArgs,
   debug?: boolean
 ) => {
   const ssmCommand = [
@@ -472,15 +477,19 @@ const createProxyCommands = (
     '"portNumber=%p"',
   ];
 
-  return {
-    scp: [
+  const commonArgs = [
+    ...(debug ? ["-v"] : []),
+    // ignore any overrides in the user's config file, we only want to use the ssh-agent we've set up for the session
+    "-o",
+    "IdentityAgent=$SSH_AUTH_SOCK",
+    "-o",
+    `ProxyCommand='${ssmCommand.join(" ")}'`,
+  ];
+
+  if ("source" in args) {
+    return [
       "scp",
-      ...(debug ? ["-v"] : []),
-      // ignore any overrides in the user's config file, we only want to use the ssh-agent we've set up for the session
-      "-o",
-      "IdentityAgent=$SSH_AUTH_SOCK",
-      "-o",
-      `ProxyCommand='${ssmCommand.join(" ")}'`,
+      ...commonArgs,
       // if a response is not received after three 5 minute attempts,
       // the connection will be closed.
       "-o",
@@ -490,22 +499,21 @@ const createProxyCommands = (
       ...(args.recursive ? ["-r"] : []),
       args.source,
       args.destination,
-    ],
-    ssh: [
-      "ssh",
-      ...(debug ? ["-v"] : []),
-      "-o",
-      `ProxyCommand='${ssmCommand.join(" ")}'`,
-      `${data.linuxUserName}@${data.instance.id}`,
-    ],
-    ssm: ssmCommand,
-  };
+    ];
+  }
+
+  return [
+    "ssh",
+    ...commonArgs,
+    ...(args.A ? ["-A"] : []),
+    `${data.linuxUserName}@${data.instance.id}`,
+  ];
 };
 
-export const scp = async (
+export const sshOrScp = async (
   authn: Authn,
   data: ExerciseGrantResponse,
-  args: ScpCommandArgs,
+  args: ScpCommandArgs | SshCommandArgs,
   privateKey: string
 ) => {
   if (!(await ensureSsmInstall())) {
@@ -521,16 +529,13 @@ export const scp = async (
     role: data.role,
   });
 
-  const commands = createProxyCommands(data, args, args.debug);
-  const scpCommand = commands.scp.join(" ");
-  const sshCommand = commands.ssh.join(" ");
+  const command = createProxyCommands(data, args, args.debug).join(" ");
 
   const debug = [
     `echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"`,
     `echo "SSH_AGENT_PID: $SSH_AGENT_PID"`,
     `echo '$(p0 aws role assume ${data.role})'`,
-    `echo "${sshCommand}"`,
-    `echo "${scpCommand}"`,
+    `echo "${command}"`,
     `echo "SSH Agent Keys:"`,
     `ssh-add -l`,
   ];
@@ -541,7 +546,7 @@ export const scp = async (
    * across system reboots or logout/login cycles. Once you log out or restart your system, any keys added to
    * the SSH agent during that session will need to be added again in subsequent sessions.
    */
-  const writeStdin = [
+  const commands = [
     // This might be overkill because we are already spawning a subprocess that will run the commands for us
     // but just in case someone enters that subprocess we're also disabling the history of commands run.
     `unset HISTFILE`,
@@ -551,7 +556,7 @@ export const scp = async (
     `ssh-add -q - <<< '${privateKey}'`,
     // in debug mode, we'll see the keys that were added to the agent and more information about the agent
     ...(args.debug ? debug : []),
-    scpCommand,
+    command,
     `SCP_EXIT_CODE=$?`,
     `exit $SCP_EXIT_CODE`,
   ];
@@ -568,7 +573,7 @@ export const scp = async (
         ...Object.entries(credential).map(
           ([key, value]) => `export ${key}='${value}'`
         ),
-        ...writeStdin,
+        ...commands,
       ],
       ...debug
     );
@@ -579,9 +584,10 @@ export const scp = async (
 
   return spawnSsmNode({
     credential,
-    writeStdin,
-    stdio: ["pipe", "inherit", "pipe"],
-    command: "bash",
+    abortController: new AbortController(),
+    command: commands.join(" && "),
     args: [],
+    stdio: ["inherit", "inherit", "pipe"],
+    shell: true,
   });
 };

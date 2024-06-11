@@ -1,0 +1,1 @@
+ssh -i /Users/gergo/Documents/certificate-based-ssh/gergely.danyi@p0.dev -t -t -o "CertificateFile=/Users/gergo/Documents/certificate-based-ssh/gergely.danyi@p0.dev-cert.pub" -o ProxyCommand='aws ssm start-session --region us-west-2 --target %h --parameters "portNumber=%p" --document-name AWS-StartSSHSession' $@
