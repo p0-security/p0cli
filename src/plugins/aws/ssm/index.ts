@@ -508,6 +508,8 @@ const createProxyCommands = (
       ...commonArgs,
       ...(args.A ? ["-A"] : []),
       `${data.linuxUserName}@${data.instance.id}`,
+      ...(args.command ? [args.command] : []),
+      ...args.arguments,
     ],
   };
 };

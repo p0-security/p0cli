@@ -96,7 +96,7 @@ describe("ssh", () => {
       await expect(wait).resolves.toBeUndefined();
     });
 
-    it("should call ssm with non-interactive command", async () => {
+    it("should not call ssm with non-interactive command", async () => {
       const promise = sshCommand(yargs()).parse(
         `ssh some-instance do something`
       );
@@ -111,8 +111,8 @@ describe("ssh", () => {
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
-      expect(mockSsm).toHaveBeenCalled();
-      expect(mockSshOrScp).not.toHaveBeenCalled();
+      expect(mockSsm).not.toHaveBeenCalled();
+      expect(mockSshOrScp).toHaveBeenCalled();
     });
 
     it("should not call ssm with interactive session", async () => {

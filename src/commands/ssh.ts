@@ -132,7 +132,7 @@ export const ssh = async (
   args: SshCommandArgs,
   privateKey: string
 ) => {
-  if (!args.command && !args.L) {
+  if (!args.L) {
     // Use the AWS-StartSSHSession document for interactive ssh sessions
     await sshOrScp(authn, request, args, privateKey);
   } else {
