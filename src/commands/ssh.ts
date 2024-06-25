@@ -83,7 +83,8 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .option("debug", {
           type: "boolean",
-          describe: "Print debug information, dangerous for sensitive data",
+          describe:
+            "Print debug information. The ssh-agent subprocess is not terminated automatically.",
         }),
     guard(sshAction)
   );

@@ -16,9 +16,10 @@ import {
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
+import { sshAdd, sshAddList, withSshAgent } from "../../ssh-agent";
+import { SshAgentEnv } from "../../ssh-agent/types";
 import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
-import { without } from "lodash";
 import {
   ChildProcess,
   ChildProcessByStdio,
@@ -189,29 +190,26 @@ function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioPipe, StdioPipe],
-  shell: boolean
+  stdio: [StdioNull, StdioPipe, StdioPipe]
 ): ChildProcessByStdio<null, Readable, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioNull, StdioPipe],
-  shell: boolean
+  stdio: [StdioNull, StdioNull, StdioPipe]
 ): ChildProcessByStdio<null, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioPipe, StdioNull, StdioPipe],
-  shell: boolean
+  stdio: [StdioPipe, StdioNull, StdioPipe]
 ): ChildProcessByStdio<Writable, null, Readable>;
 function spawnChildProcess(
   credential: AwsCredentials,
   command: string,
   args: string[],
   stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe],
-  shell: boolean
+  sshAgentEnv: SshAgentEnv
 ):
   | ChildProcessByStdio<null, null, Readable>
   | ChildProcessByStdio<Writable, null, Readable>;
@@ -220,7 +218,7 @@ function spawnChildProcess(
   command: string,
   args: string[],
   stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe],
-  shell: boolean
+  sshAgentEnv?: SshAgentEnv
 ):
   | ChildProcess
   | ChildProcessByStdio<null, null, null>
@@ -230,21 +228,22 @@ function spawnChildProcess(
     env: {
       ...process.env,
       ...credential,
+      ...(sshAgentEnv || {}),
     },
     stdio,
-    shell: shell || false,
+    shell: false,
   });
 }
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
+  sshAgentEnv: SshAgentEnv;
   command: string;
   args: string[];
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe];
-  shell: boolean;
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
@@ -261,7 +260,7 @@ async function spawnSsmNode(
       options.command,
       options.args,
       options.stdio,
-      options.shell
+      options.sshAgentEnv
     );
 
     const { isAccessPropagated } = accessPropagationGuard(child);
@@ -312,8 +311,7 @@ const spawnSubprocessSsmNode = async (options: {
       options.credential,
       "/usr/bin/env",
       options.command,
-      ["ignore", "pipe", "pipe"],
-      false
+      ["ignore", "pipe", "pipe"]
     );
 
     // Captures the starting session message and filters it from the output
@@ -413,7 +411,6 @@ export const ssm = async (
     account: request.instance.accountId,
     role: request.role,
   });
-
   const ssmArgs = {
     instance: request.instance.id,
     region: request.instance.region,
@@ -445,7 +442,7 @@ const startSsmProcesses = async (
       command: "/usr/bin/env",
       args: commands.shellCommand,
       stdio: ["inherit", "inherit", "pipe"],
-      shell: false,
+      sshAgentEnv: {} as SshAgentEnv, // TODO remove this once port-forwarding and interactive commands also use the ssh-agent
     }),
   ];
 
@@ -464,6 +461,7 @@ const startSsmProcesses = async (
 const createProxyCommands = (
   data: ExerciseGrantResponse,
   args: ScpCommandArgs | SshCommandArgs,
+  sshAuthSock: string,
   debug?: boolean
 ) => {
   const ssmCommand = [
@@ -481,39 +479,55 @@ const createProxyCommands = (
     ...(debug ? ["-v"] : []),
     // ignore any overrides in the user's config file, we only want to use the ssh-agent we've set up for the session
     "-o",
-    "IdentityAgent=$SSH_AUTH_SOCK",
+    `IdentityAgent=${sshAuthSock}`,
     "-o",
-    `ProxyCommand='${ssmCommand.join(" ")}'`,
+    `ProxyCommand=${ssmCommand.join(" ")}`,
   ];
 
   if ("source" in args) {
-    return [
-      "scp",
-      ...commonArgs,
-      // if a response is not received after three 5 minute attempts,
-      // the connection will be closed.
-      "-o",
-      "ServerAliveCountMax=3",
-      `-o`,
-      "ServerAliveInterval=300",
-      ...(args.recursive ? ["-r"] : []),
-      args.source,
-      args.destination,
-    ];
+    return {
+      command: "scp",
+      args: [
+        ...commonArgs,
+        // if a response is not received after three 5 minute attempts,
+        // the connection will be closed.
+        "-o",
+        "ServerAliveCountMax=3",
+        `-o`,
+        "ServerAliveInterval=300",
+        ...(args.recursive ? ["-r"] : []),
+        args.source,
+        args.destination,
+      ],
+    };
   }
 
-  return [
-    "ssh",
-    ...commonArgs,
-    ...(args.A ? ["-A"] : []),
-    `${data.linuxUserName}@${data.instance.id}`,
-  ].join(" ");
+  return {
+    command: "ssh",
+    args: [
+      ...commonArgs,
+      ...(args.A ? ["-A"] : []),
+      `${data.linuxUserName}@${data.instance.id}`,
+    ],
+  };
+};
+
+/** Converts arguments for manual execution - arguments may have to be quoted or certain characters escaped when executing the commands from a shell */
+const transformForShell = (args: string[]) => {
+  return args.map((arg) => {
+    // The ProxyCommand option must be surrounded by single quotes
+    if (arg.startsWith("ProxyCommand=")) {
+      const [name, ...value] = arg.split("="); // contains the '=' character in the parameters option: ProxyCommand=aws ssm start-session ... --parameters "portNumber=%p"
+      return `${name}='${value.join("=")}'`;
+    }
+    return arg;
+  });
 };
 
 export const sshOrScp = async (
   authn: Authn,
   data: ExerciseGrantResponse,
-  args: ScpCommandArgs | SshCommandArgs,
+  cmdArgs: ScpCommandArgs | SshCommandArgs,
   privateKey: string
 ) => {
   if (!(await ensureSsmInstall())) {
@@ -529,65 +543,39 @@ export const sshOrScp = async (
     role: data.role,
   });
 
-  const command = createProxyCommands(data, args, args.debug);
+  return withSshAgent(cmdArgs, async (sshAgentEnv) => {
+    await sshAdd(cmdArgs, sshAgentEnv, privateKey);
+    if (cmdArgs.debug) {
+      print2("SSH Agent Keys:");
+      await sshAddList(cmdArgs, sshAgentEnv);
+    }
 
-  const debug = [
-    `echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"`,
-    `echo "SSH_AGENT_PID: $SSH_AGENT_PID"`,
-    `echo '$(p0 aws role assume ${data.role})'`,
-    `echo "${command}"`,
-    `echo "SSH Agent Keys:"`,
-    `ssh-add -l`,
-  ];
-
-  /**
-   * Spawns a child process to add a private key to the ssh-agent. The SSH agent is included in the OpenSSH suite
-   * of tools and is used to hold private keys during a session. The SSH agent typically does not persist keys
-   * across system reboots or logout/login cycles. Once you log out or restart your system, any keys added to
-   * the SSH agent during that session will need to be added again in subsequent sessions.
-   */
-  const commands = [
-    // This might be overkill because we are already spawning a subprocess that will run the commands for us
-    // but just in case someone enters that subprocess we're also disabling the history of commands run.
-    `unset HISTFILE`,
-    // in debug mode, we want to see the pid of the ssh-agent and compare it to the environment variable
-    `eval $(ssh-agent)${args.debug ? "" : " >/dev/null 2>&1"}`,
-    `trap 'kill $SSH_AGENT_PID' EXIT`,
-    `ssh-add -q - <<< '${privateKey}'`,
-    // in debug mode, we'll see the keys that were added to the agent and more information about the agent
-    ...(args.debug ? debug : []),
-    command,
-    `SCP_EXIT_CODE=$?`,
-    `exit $SCP_EXIT_CODE`,
-  ];
-
-  if (args.debug) {
-    // Print commands that can be individually executed to reproduce behavior
-    // Remove the debug information - can be executed manually between steps
-    const reproCommands = without(
-      [
-        "bash",
-        ...Object.entries(process.env).map(
-          ([key, value]) => `export ${key}='${value}'`
-        ),
-        ...Object.entries(credential).map(
-          ([key, value]) => `export ${key}='${value}'`
-        ),
-        ...commands,
-      ],
-      ...debug
+    const { command, args } = createProxyCommands(
+      data,
+      cmdArgs,
+      sshAgentEnv.SSH_AUTH_SOCK,
+      cmdArgs.debug
     );
-    print2(
-      `Execute the following commands to create a similar SCP session:\n *** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n *** COMMANDS END ***`
-    );
-  }
 
-  return spawnSsmNode({
-    credential,
-    abortController: new AbortController(),
-    command: commands.join(" && "),
-    args: [],
-    stdio: ["inherit", "inherit", "pipe"],
-    shell: true,
+    if (cmdArgs.debug) {
+      const reproCommands = [
+        `eval $(p0 aws role assume ${data.role} --account ${data.instance.accountId})`,
+        `export SSH_AUTH_SOCK=${sshAgentEnv.SSH_AUTH_SOCK}`,
+        `export SSH_AGENT_PID=${sshAgentEnv.SSH_AGENT_PID}`,
+        `${command} ${transformForShell(args).join(" ")}`,
+      ];
+      print2(
+        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n*** COMMANDS END ***\n\nTHE SSH AGENT PROCESS WILL NOT BE KILLED AUTOMATICALLY IN DEBUG MODE\nYou can kill it with "sudo kill ${sshAgentEnv.SSH_AGENT_PID}"\n`
+      );
+    }
+
+    return spawnSsmNode({
+      credential,
+      sshAgentEnv,
+      abortController: new AbortController(),
+      command,
+      args,
+      stdio: ["inherit", "inherit", "pipe"],
+    });
   });
 };
