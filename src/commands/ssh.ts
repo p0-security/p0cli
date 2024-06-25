@@ -11,18 +11,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchExerciseGrant } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { sshOrScp, ssm } from "../plugins/aws/ssm";
-import { Authn } from "../types/identity";
-import {
-  createKeyPair,
-  SshCommandArgs,
-  provisionRequest,
-  ExerciseGrantResponse,
-} from "./shared";
+import { sshOrScp } from "../plugins/aws/ssm";
+import { createKeyPair, SshCommandArgs, provisionRequest } from "./shared";
 import yargs from "yargs";
-
-// Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
-const LOCAL_PORT_FORWARD_PATTERN = /^\d+:\d+$/;
 
 export const sshCommand = (yargs: yargs.Argv) =>
   yargs.command<SshCommandArgs>(
@@ -48,19 +39,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           string: true,
           default: [] as string[],
         })
-        .check((argv: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
-          if (argv.L == null) return true;
-
-          return (
-            argv.L.match(LOCAL_PORT_FORWARD_PATTERN) ||
-            "Local port forward should be in the format `local_port:remote_port`"
-          );
-        })
         .option("L", {
           type: "string",
+          // Copied from `man ssh`
           describe:
-            // the order of the sockets in the address matches the ssh man page
-            "Forward a local port to the remote host; `local_socket:remote_socket`",
+            "Specifies that connections to the given TCP port or Unix socket on the local (client) host are to be forwarded to the given host and port, or Unix socket, on the remote side. This works by allocating a socket to listen to either a TCP port on the local side, optionally bound to the specified bind_address, or to a Unix socket.  Whenever a connection is made to the local port or socket, the connection is forwarded over the secure channel, and a connection is made to either host port hostport, or the Unix socket remote_socket, from the remote machine.",
         })
         .option("N", {
           type: "boolean",
@@ -115,7 +98,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     publicKey,
   });
 
-  await ssh(
+  await sshOrScp(
     authn,
     result,
     {
@@ -124,20 +107,4 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     },
     privateKey
   );
-};
-
-export const ssh = async (
-  authn: Authn,
-  request: ExerciseGrantResponse,
-  args: SshCommandArgs,
-  privateKey: string
-) => {
-  if (!args.L) {
-    // Use the AWS-StartSSHSession document for interactive ssh sessions
-    await sshOrScp(authn, request, args, privateKey);
-  } else {
-    // Use the AWS-StartPortForwardingSession document for port forwarding
-    // and the per-request generated document for commands
-    await ssm(authn, request, args);
-  }
 };

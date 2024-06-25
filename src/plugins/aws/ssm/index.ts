@@ -507,6 +507,8 @@ const createProxyCommands = (
     args: [
       ...commonArgs,
       ...(args.A ? ["-A"] : []),
+      ...(args.L ? ["-L", args.L] : []),
+      ...(args.N ? ["-N"] : []),
       `${data.linuxUserName}@${data.instance.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments,
