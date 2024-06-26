@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
+import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
@@ -25,6 +26,7 @@ const commands = [
   loginCommand,
   lsCommand,
   requestCommand,
+  allowCommand,
   sshCommand,
   scpCommand,
 ];
