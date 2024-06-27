@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { TERMINATION_CONTROLLER } from "../..";
 import { print2 } from "../../drivers/stdio";
 import { AgentArgs, SshAgentEnv } from "./types";
 import { SpawnOptionsWithoutStdio, spawn } from "node:child_process";
@@ -137,6 +138,17 @@ export const withSshAgent = async <T>(
   fn: (sshAgentEnv: SshAgentEnv) => Promise<T>
 ) => {
   const sshAgentEnv = await sshAgent(args);
+
+  // The ssh-agent runs in a process that is not automatically terminated.
+  // 1. Kill it when catching the main process termination signal.
+  // 2. Also kill it if the encapsulated function throws an error.
+  const abortListener = (_code: any) => {
+    TERMINATION_CONTROLLER.signal.removeEventListener("abort", abortListener);
+    void sshAgentKill(args, sshAgentEnv);
+  };
+
+  TERMINATION_CONTROLLER.signal.addEventListener("abort", abortListener);
+
   try {
     return await fn(sshAgentEnv);
   } finally {
