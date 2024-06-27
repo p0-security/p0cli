@@ -23,6 +23,7 @@ import {
 import { request } from "./request";
 import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
+import forge from "node-forge";
 import yargs from "yargs";
 
 /** Maximum amount of time to wait after access is approved to wait for access
@@ -62,8 +63,10 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   destination: string;
   L?: string; // Port forwarding option
   N?: boolean; // No remote command
+  A?: boolean;
   arguments: string[];
   command?: string;
+  debug?: boolean;
 };
 
 const validateSshInstall = async (authn: Authn) => {
@@ -158,4 +161,12 @@ export const provisionRequest = async (
   await waitForProvisioning<AwsSsh>(authn, id);
 
   return id;
+};
+
+export const createKeyPair = () => {
+  const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+  const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
+  const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
+
+  return { publicKey, privateKey };
 };

@@ -18,7 +18,24 @@ exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] =
 }
 `;
 
-exports[`ssh ephemeral access should call ssm: stderr 1`] = `
+exports[`ssh ephemeral access should call ssm with non-interactive command: stderr 1`] = `
+[
+  [
+    "a message",
+  ],
+  [
+    "Will wait up to 5 minutes for this request to complete...",
+  ],
+  [
+    "Your request was approved",
+  ],
+  [
+    "Waiting for access to be provisioned",
+  ],
+]
+`;
+
+exports[`ssh ephemeral access should not call ssm with interactive session: stderr 1`] = `
 [
   [
     "a message",
@@ -53,7 +70,15 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
 }
 `;
 
-exports[`ssh persistent access should call ssm: stderr 1`] = `
+exports[`ssh persistent access should call ssm with non-interactive command: stderr 1`] = `
+[
+  [
+    "Waiting for access to be provisioned",
+  ],
+]
+`;
+
+exports[`ssh persistent access should not call ssm with interactive session: stderr 1`] = `
 [
   [
     "Waiting for access to be provisioned",

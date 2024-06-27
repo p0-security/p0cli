@@ -11,8 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchExerciseGrant } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { ssm } from "../plugins/aws/ssm";
-import { SshCommandArgs, provisionRequest } from "./shared";
+import { sshOrScp, ssm } from "../plugins/aws/ssm";
+import { Authn } from "../types/identity";
+import {
+  createKeyPair,
+  SshCommandArgs,
+  provisionRequest,
+  ExerciseGrantResponse,
+} from "./shared";
 import yargs from "yargs";
 
 // Matches strings with the pattern "digits:digits" (e.g. 1234:5678)
@@ -61,6 +67,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe:
             "Do not execute a remote command. Useful for forwarding ports.",
         })
+        .option("A", {
+          type: "boolean",
+          describe:
+            "Enables forwarding of connections from an authentication agent such as ssh-agent",
+        })
         // Match `p0 request --reason`
         .option("reason", {
           describe: "Reason access is needed",
@@ -69,8 +80,13 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("account", {
           type: "string",
           describe: "The account on which the instance is located",
+        })
+        .option("debug", {
+          type: "boolean",
+          describe:
+            "Print debug information. The ssh-agent subprocess is not terminated automatically.",
         }),
-    guard(ssh)
+    guard(sshAction)
   );
 
 /** Connect to an SSH backend
@@ -80,7 +96,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
  * Supported SSH mechanisms:
  * - AWS EC2 via SSM with Okta SAML
  */
-const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
+const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
 
@@ -91,10 +107,37 @@ const ssh = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
+  const { publicKey, privateKey } = createKeyPair();
+
   const result = await fetchExerciseGrant(authn, {
     requestId,
     destination,
+    publicKey,
   });
 
-  await ssm(authn, result, args);
+  await ssh(
+    authn,
+    result,
+    {
+      ...args,
+      destination,
+    },
+    privateKey
+  );
+};
+
+export const ssh = async (
+  authn: Authn,
+  request: ExerciseGrantResponse,
+  args: SshCommandArgs,
+  privateKey: string
+) => {
+  if (!args.command && !args.L) {
+    // Use the AWS-StartSSHSession document for interactive ssh sessions
+    await sshOrScp(authn, request, args, privateKey);
+  } else {
+    // Use the AWS-StartPortForwardingSession document for port forwarding
+    // and the per-request generated document for commands
+    await ssm(authn, request, args);
+  }
 };
