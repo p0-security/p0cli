@@ -21,13 +21,12 @@ import { SshAgentEnv } from "../../ssh-agent/types";
 import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
-  ChildProcess,
   ChildProcessByStdio,
   StdioNull,
   StdioPipe,
   spawn,
 } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import { Readable } from "node:stream";
 
 /** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
@@ -82,7 +81,7 @@ type SsmArgs = {
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
-  child: ChildProcessByStdio<any, any, Readable>
+  child: ChildProcessByStdio<null, null, Readable>
 ) => {
   let isEphemeralAccessDeniedException = false;
   const beforeStart = Date.now();
@@ -121,45 +120,14 @@ const createBaseSsmCommand = (args: Pick<SsmArgs, "instance" | "region">) => {
   ];
 };
 
-function spawnChildProcess(
+const spawnChildProcess = (
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioPipe, StdioPipe]
-): ChildProcessByStdio<null, Readable, Readable>;
-function spawnChildProcess(
-  credential: AwsCredentials,
-  command: string,
-  args: string[],
-  stdio: [StdioNull, StdioNull, StdioPipe]
-): ChildProcessByStdio<null, null, Readable>;
-function spawnChildProcess(
-  credential: AwsCredentials,
-  command: string,
-  args: string[],
-  stdio: [StdioPipe, StdioNull, StdioPipe]
-): ChildProcessByStdio<Writable, null, Readable>;
-function spawnChildProcess(
-  credential: AwsCredentials,
-  command: string,
-  args: string[],
-  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe],
+  stdio: [StdioNull, StdioNull, StdioPipe],
   sshAgentEnv: SshAgentEnv
-):
-  | ChildProcessByStdio<null, null, Readable>
-  | ChildProcessByStdio<Writable, null, Readable>;
-function spawnChildProcess(
-  credential: AwsCredentials,
-  command: string,
-  args: string[],
-  stdio: [StdioNull | StdioPipe, StdioNull | StdioPipe, StdioPipe],
-  sshAgentEnv?: SshAgentEnv
-):
-  | ChildProcess
-  | ChildProcessByStdio<null, null, null>
-  | ChildProcessByStdio<null, Readable, Readable>
-  | ChildProcessByStdio<Writable, null, Readable> {
-  return spawn(command, args, {
+) =>
+  spawn(command, args, {
     env: {
       ...process.env,
       ...credential,
@@ -168,7 +136,6 @@ function spawnChildProcess(
     stdio,
     shell: false,
   });
-}
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
@@ -178,7 +145,7 @@ type SpawnSsmNodeOptions = {
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
-  stdio: [StdioNull | StdioPipe, StdioNull, StdioPipe];
+  stdio: [StdioNull, StdioNull, StdioPipe];
 };
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
