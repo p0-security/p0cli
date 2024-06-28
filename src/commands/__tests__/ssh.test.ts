@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
-import { sshOrScp, ssm } from "../../plugins/aws/ssm";
+import { sshOrScp } from "../../plugins/aws/ssm";
 import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
@@ -24,7 +24,6 @@ jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/aws/ssm");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
-const mockSsm = ssm as jest.Mock;
 const mockSshOrScp = sshOrScp as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
@@ -36,8 +35,6 @@ mockGetDoc({
     },
   },
 });
-
-mockSsm.mockResolvedValue({});
 
 describe("ssh", () => {
   describe.each([
@@ -96,7 +93,7 @@ describe("ssh", () => {
       await expect(wait).resolves.toBeUndefined();
     });
 
-    it("should call ssm with non-interactive command", async () => {
+    it("should call sshOrScp with non-interactive command", async () => {
       const promise = sshCommand(yargs()).parse(
         `ssh some-instance do something`
       );
@@ -111,11 +108,10 @@ describe("ssh", () => {
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
-      expect(mockSsm).toHaveBeenCalled();
-      expect(mockSshOrScp).not.toHaveBeenCalled();
+      expect(mockSshOrScp).toHaveBeenCalled();
     });
 
-    it("should not call ssm with interactive session", async () => {
+    it("should call sshOrScp with interactive session", async () => {
       const promise = sshCommand(yargs()).parse(`ssh some-instance`);
       await sleep(100); // Need to wait for listen before trigger in tests
       (onSnapshot as any).trigger({
@@ -128,7 +124,6 @@ describe("ssh", () => {
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
-      expect(mockSsm).not.toHaveBeenCalled();
       expect(mockSshOrScp).toHaveBeenCalled();
     });
   });
