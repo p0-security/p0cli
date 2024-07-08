@@ -58,9 +58,6 @@ describe("ssh", () => {
               },
             },
           },
-          generated: {
-            documentName: "documentName",
-          },
         },
       });
     });

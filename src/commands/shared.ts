@@ -32,7 +32,6 @@ import yargs from "yargs";
 const GRANT_TIMEOUT_MILLIS = 60e3;
 
 export type ExerciseGrantResponse = {
-  documentName: string;
   linuxUserName: string;
   ok: true;
   role: string;

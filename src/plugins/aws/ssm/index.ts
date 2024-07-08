@@ -59,7 +59,6 @@ type SsmArgs = {
   instance: string;
   region: string;
   requestId: string;
-  documentName: string;
   command?: string;
   forwardPortAddress?: string;
   noRemoteCommands?: boolean;
