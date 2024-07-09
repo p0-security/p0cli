@@ -8,11 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchExerciseGrant } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
-import { createKeyPair, SshCommandArgs, provisionRequest } from "./shared";
+import {
+  createKeyPair,
+  SshCommandArgs,
+  provisionRequest,
+  requestToSsh,
+} from "./shared";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -85,22 +89,16 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
 
   const destination = args.destination;
 
-  const requestId = await provisionRequest(authn, args, destination);
-  if (!requestId) {
+  const { publicKey, privateKey } = await createKeyPair();
+
+  const request = await provisionRequest(authn, args, destination, publicKey);
+  if (!request) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { publicKey, privateKey } = createKeyPair();
-
-  const result = await fetchExerciseGrant(authn, {
-    requestId,
-    destination,
-    publicKey,
-  });
-
   await sshOrScp(
     authn,
-    result,
+    requestToSsh(request),
     {
       ...args,
       destination,

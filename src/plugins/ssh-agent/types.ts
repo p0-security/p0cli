@@ -11,8 +11,3 @@ You should have received a copy of the GNU General Public License along with @p0
 export type AgentArgs = {
   debug?: boolean;
 };
-
-export type SshAgentEnv = {
-  SSH_AUTH_SOCK: string;
-  SSH_AGENT_PID: string;
-};

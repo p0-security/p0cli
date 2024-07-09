@@ -1,57 +1,5 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] = `
-{
-  "_": [
-    "ssh",
-  ],
-  "arguments": [
-    "ssh",
-    "session",
-    "some-instance",
-    "--provider",
-    "aws",
-    "--reason",
-    "reason",
-  ],
-  "wait": true,
-}
-`;
-
-exports[`ssh ephemeral access should call sshOrScp with non-interactive command: stderr 1`] = `
-[
-  [
-    "a message",
-  ],
-  [
-    "Will wait up to 5 minutes for this request to complete...",
-  ],
-  [
-    "Your request was approved",
-  ],
-  [
-    "Waiting for access to be provisioned",
-  ],
-]
-`;
-
-exports[`ssh ephemeral access should call sshOrScp with interactive session: stderr 1`] = `
-[
-  [
-    "a message",
-  ],
-  [
-    "Will wait up to 5 minutes for this request to complete...",
-  ],
-  [
-    "Your request was approved",
-  ],
-  [
-    "Waiting for access to be provisioned",
-  ],
-]
-`;
-
 exports[`ssh persistent access should call p0 request with reason arg: args 1`] = `
 {
   "_": [
@@ -61,6 +9,8 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
     "ssh",
     "session",
     "some-instance",
+    "--public-key",
+    "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC/LBEMei4SHUS36JPWdW6Ds0xiQvdcswbQajH+t64vJj+osTFky9dBjx8yuOi4ZJmFmfOfQIVoxlIITxaT8g/aYfkgSNEXUmjLAcRllpFT0hLUBZWj2xxBgt2ZoOi1fkNzQc+rYksPBCWd2vDhEqjEanJPNQxwQf8Gy0FKfABuJWZV/dyIiCWfwTIQMIm1XhgavC1xKKzYZa54TWK2CLBinSKeJifO0jEhhexK6y6La/Y4pMR1rDNc879CbHY2dZX8YYGAEC5+cfQrpwuTYfw4qvZyCeMdIvnS5YRe1Nh2sD0Q9wyBH0QoRCwY7WDJgSgxAtNgMdrSLstH279oKI3D ",
     "--provider",
     "aws",
     "--reason",
@@ -70,7 +20,7 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
 }
 `;
 
-exports[`ssh persistent access should call sshOrScp with non-interactive command: stderr 1`] = `
+exports[`ssh persistent access should call sshOrScp with interactive session: stderr 1`] = `
 [
   [
     "Waiting for access to be provisioned",
@@ -78,7 +28,7 @@ exports[`ssh persistent access should call sshOrScp with non-interactive command
 ]
 `;
 
-exports[`ssh persistent access should call sshOrScp with interactive session: stderr 1`] = `
+exports[`ssh persistent access should call sshOrScp with non-interactive command: stderr 1`] = `
 [
   [
     "Waiting for access to be provisioned",

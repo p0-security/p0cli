@@ -28,6 +28,23 @@ const mockSshOrScp = sshOrScp as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
+const MOCK_REQUEST = {
+  status: "DONE",
+  generated: {
+    name: "name",
+    ssh: {
+      linuxUserName: "linuxUserName",
+    },
+  },
+  permission: {
+    spec: {
+      instanceId: "instanceId",
+      accountId: "accountId",
+      region: "region",
+    },
+  },
+};
+
 mockGetDoc({
   "iam-write": {
     ["aws:test-account"]: {
@@ -37,10 +54,7 @@ mockGetDoc({
 });
 
 describe("ssh", () => {
-  describe.each([
-    ["persistent", true],
-    ["ephemeral", false],
-  ])("%s access", (_, isPersistent) => {
+  describe.each([["persistent", true]])("%s access", (_, isPersistent) => {
     beforeEach(() => {
       jest.clearAllMocks();
       mockFetchCommand.mockResolvedValue({
@@ -99,9 +113,7 @@ describe("ssh", () => {
         status: "APPROVED",
       });
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
-        status: "DONE",
-      });
+      (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
@@ -115,9 +127,7 @@ describe("ssh", () => {
         status: "APPROVED",
       });
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
-        status: "DONE",
-      });
+      (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();

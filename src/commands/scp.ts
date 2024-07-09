@@ -8,15 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchExerciseGrant } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
 import {
-  ExerciseGrantResponse,
   ScpCommandArgs,
+  SshRequest,
   createKeyPair,
   provisionRequest,
+  requestToSsh,
 } from "./shared";
 import yargs from "yargs";
 
@@ -75,26 +75,22 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Could not determine host identifier from source or destination";
   }
 
-  const requestId = await provisionRequest(authn, args, host);
+  const { publicKey, privateKey } = await createKeyPair();
 
-  if (!requestId) {
+  const request = await provisionRequest(authn, args, host, publicKey);
+
+  if (!request) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { publicKey, privateKey } = createKeyPair();
-
-  const result = await fetchExerciseGrant(authn, {
-    requestId,
-    destination: host,
-    publicKey,
-  });
+  const data = requestToSsh(request);
 
   // replace the host with the linuxUserName@instanceId
-  const { source, destination } = replaceHostWithInstance(result, args);
+  const { source, destination } = replaceHostWithInstance(data, args);
 
   await sshOrScp(
     authn,
-    result,
+    data,
     {
       ...args,
       source,
@@ -127,19 +123,16 @@ const getHostIdentifier = (source: string, destination: string) => {
   throw "Exactly one host (source or destination) must be remote.";
 };
 
-const replaceHostWithInstance = (
-  result: ExerciseGrantResponse,
-  args: ScpCommandArgs
-) => {
+const replaceHostWithInstance = (result: SshRequest, args: ScpCommandArgs) => {
   let source = args.source;
   let destination = args.destination;
 
   if (isExplicitlyRemote(source)) {
-    source = `${result.linuxUserName}@${result.instance.id}:${source.split(":")[1]}`;
+    source = `${result.linuxUserName}@${result.id}:${source.split(":")[1]}`;
   }
 
   if (isExplicitlyRemote(destination)) {
-    destination = `${result.linuxUserName}@${result.instance.id}:${destination.split(":")[1]}`;
+    destination = `${result.linuxUserName}@${result.id}:${destination.split(":")[1]}`;
   }
 
   return { source, destination };
