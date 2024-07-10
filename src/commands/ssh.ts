@@ -8,15 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { createKeyPair } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
-import {
-  createKeyPair,
-  SshCommandArgs,
-  provisionRequest,
-  requestToSsh,
-} from "./shared";
+import { SshCommandArgs, provisionRequest, requestToSsh } from "./shared";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>

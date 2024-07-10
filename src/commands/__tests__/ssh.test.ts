@@ -22,6 +22,7 @@ jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/aws/ssm");
+jest.mock("../../common/keys");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
 const mockSshOrScp = sshOrScp as jest.Mock;
@@ -54,7 +55,10 @@ mockGetDoc({
 });
 
 describe("ssh", () => {
-  describe.each([["persistent", true]])("%s access", (_, isPersistent) => {
+  describe.each([
+    ["persistent", true],
+    ["ephemeral", false],
+  ])("%s access", (_, isPersistent) => {
     beforeEach(() => {
       jest.clearAllMocks();
       mockFetchCommand.mockResolvedValue({

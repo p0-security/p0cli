@@ -20,13 +20,9 @@ import {
   PluginRequest,
   Request,
 } from "../types/request";
-import { P0_PATH } from "../util";
 import { request } from "./request";
 import { getDoc, onSnapshot } from "firebase/firestore";
-import * as fs from "fs/promises";
 import { pick } from "lodash";
-import forge from "node-forge";
-import * as path from "path";
 import yargs from "yargs";
 
 /** Maximum amount of time to wait after access is approved to wait for access
@@ -159,45 +155,6 @@ export const provisionRequest = async (
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
   return await waitForProvisioning<AwsSsh>(authn, id);
-};
-
-export const PUBLIC_KEY_PATH = path.join(P0_PATH, "ssh", "id_rsa.pub");
-export const PRIVATE_KEY_PATH = path.join(P0_PATH, "ssh", "id_rsa");
-
-/**
- * Search for a cached key pair, or create a new one if not found
- */
-export const createKeyPair = async (): Promise<{
-  publicKey: string;
-  privateKey: string;
-}> => {
-  if (
-    (await fileExists(PUBLIC_KEY_PATH)) &&
-    (await fileExists(PRIVATE_KEY_PATH))
-  ) {
-    const publicKey = await fs.readFile(PUBLIC_KEY_PATH, "utf8");
-    const privateKey = await fs.readFile(PRIVATE_KEY_PATH, "utf8");
-
-    return { publicKey, privateKey };
-  } else {
-    const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
-    const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
-    const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
-
-    await fs.mkdir(path.dirname(PUBLIC_KEY_PATH), { recursive: true });
-    await fs.writeFile(PUBLIC_KEY_PATH, publicKey, { mode: 0o600 });
-    await fs.writeFile(PRIVATE_KEY_PATH, privateKey, { mode: 0o600 });
-    return { publicKey, privateKey };
-  }
-};
-
-const fileExists = async (path: string) => {
-  try {
-    await fs.access(path);
-    return true;
-  } catch (error) {
-    return false;
-  }
 };
 
 export const requestToSsh = (request: AwsSsh): SshRequest => {
