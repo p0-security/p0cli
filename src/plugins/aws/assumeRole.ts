@@ -8,34 +8,28 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { urlEncode, validateResponse } from "../../common/fetch";
+import { parseXml } from "../../common/xml";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
 import { AwsCredentials } from "./types";
-import {
-  STSClient,
-  AssumeRoleWithSAMLCommand,
-  AssumeRoleWithSAMLCommandInput,
-} from "@aws-sdk/client-sts";
 
 const roleArn = (args: { account: string; role: string }) =>
   `${arnPrefix(args.account)}:role/${args.role}`;
 
 const stsAssume = async (
-  params: AssumeRoleWithSAMLCommandInput
+  params: Record<string, string>
 ): Promise<AwsCredentials> => {
-  const stsClient = new STSClient();
-  const response = await stsClient.send(new AssumeRoleWithSAMLCommand(params));
-  const stsCredentials = response.Credentials;
-  if (
-    !stsCredentials ||
-    !stsCredentials.AccessKeyId ||
-    !stsCredentials.SecretAccessKey ||
-    !stsCredentials.SessionToken
-  )
-    throw new Error(
-      "Failed to authenticate user. Please contact support@p0.dev for assistance."
-    );
-
+  const url = `https://sts.amazonaws.com?${urlEncode(params)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    body: new URLSearchParams(params),
+  });
+  await validateResponse(response);
+  const stsXml = await response.text();
+  const stsObject = parseXml(stsXml);
+  const stsCredentials =
+    stsObject.AssumeRoleWithSAMLResponse.AssumeRoleWithSAMLResult.Credentials;
   return {
     AWS_ACCESS_KEY_ID: stsCredentials.AccessKeyId,
     AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
@@ -67,6 +61,5 @@ export const assumeRoleWithSaml = async (args: {
     // Note that, despite the name, AWS actually expects a SAML Response
     SAMLAssertion: args.saml.response,
   };
-
   return await stsAssume(params);
 };
