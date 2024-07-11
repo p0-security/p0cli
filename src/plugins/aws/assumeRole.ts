@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { urlEncode, validateResponse } from "../../common/fetch";
+import { validateResponse } from "../../common/fetch";
 import { parseXml } from "../../common/xml";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
@@ -20,9 +20,10 @@ const roleArn = (args: { account: string; role: string }) =>
 const stsAssume = async (
   params: Record<string, string>
 ): Promise<AwsCredentials> => {
-  const url = `https://sts.amazonaws.com?${urlEncode(params)}`;
+  const url = `https://sts.amazonaws.com`;
   const response = await fetch(url, {
-    method: "GET",
+    method: "POST",
+    body: new URLSearchParams(params),
   });
   await validateResponse(response);
   const stsXml = await response.text();
