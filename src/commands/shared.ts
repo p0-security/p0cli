@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { AwsSsh } from "../plugins/aws/types";
@@ -120,10 +121,11 @@ const waitForProvisioning = async <P extends PluginRequest>(
 export const provisionRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
-  destination: string,
-  publicKey: string
+  destination: string
 ) => {
   await validateSshInstall(authn);
+
+  const { publicKey, privateKey } = await createKeyPair();
 
   const response = await request<AwsSsh>(
     {
@@ -154,7 +156,12 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
-  return await waitForProvisioning<AwsSsh>(authn, id);
+  const provisionedRequest = await waitForProvisioning<AwsSsh>(authn, id);
+  if (provisionedRequest.generated.ssh.publicKey !== publicKey) {
+    throw "Public key mismatch. Please revoke the request and try again.";
+  }
+
+  return { request: provisionedRequest, publicKey, privateKey };
 };
 
 export const requestToSsh = (request: AwsSsh): SshRequest => {

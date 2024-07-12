@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { createKeyPair } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
@@ -75,13 +74,12 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Could not determine host identifier from source or destination";
   }
 
-  const { publicKey, privateKey } = await createKeyPair();
+  const result = await provisionRequest(authn, args, host);
 
-  const request = await provisionRequest(authn, args, host, publicKey);
-
-  if (!request) {
+  if (!result) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
+  const { request, privateKey } = result;
 
   const data = requestToSsh(request);
 

@@ -59,6 +59,8 @@ const asyncSpawn = async (
 const isSshAgentRunning = async (args: AgentArgs) => {
   try {
     if (args.debug) print2("Searching for active ssh-agents");
+    // TODO: There's a possible edge-case but unlikely that ssh-agent has an invalid process or PID.
+    // We can check to see if the active PID matches the current socket to mitigate this.
     await asyncSpawn(args, `pgrep`, ["-x", "ssh-agent"]);
     if (args.debug) print2("At least one SSH agent is running");
     return true;

@@ -71,6 +71,7 @@ export type AwsSsh = {
     name: string;
     ssh: {
       linuxUserName: string;
+      publicKey: string;
     };
   };
 };
