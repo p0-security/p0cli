@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { sshOrScp } from "../../plugins/aws/ssm";
@@ -35,6 +36,7 @@ const MOCK_REQUEST = {
     name: "name",
     ssh: {
       linuxUserName: "linuxUserName",
+      publicKey: TEST_PUBLIC_KEY,
     },
   },
   permission: {

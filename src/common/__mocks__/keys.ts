@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+export const TEST_PUBLIC_KEY = "test-public-key";
 export const createKeyPair = jest.fn().mockImplementation(() => ({
   publicKey: "test-public-key",
   privateKey: "test-private-key",
