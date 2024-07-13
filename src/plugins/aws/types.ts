@@ -64,6 +64,7 @@ export type AwsSsh = {
       instanceId: string;
       accountId: string;
       region: string;
+      type: "aws";
     };
     type: "session";
   };
@@ -75,3 +76,19 @@ export type AwsSsh = {
     };
   };
 };
+
+export type GcpSsh = {
+  generated: {
+    roles: { permissionId: string; role: string }[];
+  };
+  permission: {
+    spec: {
+      projectId: string;
+      type: "gcloud";
+      zone: string;
+      instanceName: string;
+    };
+  };
+};
+
+export type ProviderSsh = AwsSsh | GcpSsh;

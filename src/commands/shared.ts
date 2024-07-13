@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { AwsSsh } from "../plugins/aws/types";
+import { AwsSsh, ProviderSsh } from "../plugins/aws/types";
 import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
 import {
@@ -43,6 +43,7 @@ export type BaseSshCommandArgs = {
   sudo?: boolean;
   reason?: string;
   account?: string;
+  provider: "aws" | "gcloud";
 };
 
 export type ScpCommandArgs = BaseSshCommandArgs & {
@@ -136,9 +137,7 @@ export const provisionRequest = async (
         destination,
         "--public-key",
         publicKey,
-        // Prefix is required because the backend uses it to determine that this is an AWS request
-        "--provider",
-        "aws",
+        ...(args.provider ? ["--provider", args.provider] : []),
         ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
         ...(args.account ? ["--account", args.account] : []),
@@ -156,20 +155,14 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
-  const provisionedRequest = await waitForProvisioning<AwsSsh>(authn, id);
+  const provisionedRequest = (await waitForProvisioning<ProviderSsh>(
+    authn,
+    id
+  )) as any;
+
   if (provisionedRequest.generated.ssh.publicKey !== publicKey) {
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
   return { request: provisionedRequest, publicKey, privateKey };
-};
-
-export const requestToSsh = (request: AwsSsh): SshRequest => {
-  return {
-    id: request.permission.spec.instanceId,
-    accountId: request.permission.spec.accountId,
-    region: request.permission.spec.region,
-    role: request.generated.name,
-    linuxUserName: request.generated.ssh.linuxUserName,
-  };
 };

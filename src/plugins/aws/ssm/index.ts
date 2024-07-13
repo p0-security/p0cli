@@ -8,17 +8,13 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  ScpCommandArgs,
-  SshCommandArgs,
-  SshRequest,
-} from "../../../commands/shared";
+import { ScpCommandArgs, SshCommandArgs } from "../../../commands/shared";
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
-import { AwsCredentials } from "../types";
+import { AwsCredentials, AwsSsh, GcpSsh, ProviderSsh } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
@@ -28,6 +24,7 @@ import {
 } from "node:child_process";
 import { Readable } from "node:stream";
 
+const UNPROVISIONED_GCLOUD_ACCESS_MESSAGE = /TODO/;
 /** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
 const UNPROVISIONED_ACCESS_MESSAGE =
@@ -89,7 +86,8 @@ const accessPropagationGuard = (
     const chunkString = chunk.toString("utf-8");
     const match =
       chunkString.match(UNPROVISIONED_ACCESS_MESSAGE) ||
-      chunkString.match(UNPROVISIONED_SCP_ACCESS_MESSAGE);
+      chunkString.match(UNPROVISIONED_SCP_ACCESS_MESSAGE) ||
+      chunkString.match(UNPROVISIONED_GCLOUD_ACCESS_MESSAGE);
 
     if (
       match &&
@@ -120,7 +118,7 @@ const createBaseSsmCommand = (args: Pick<SsmArgs, "instance" | "region">) => {
 };
 
 const spawnChildProcess = (
-  credential: AwsCredentials,
+  credential: AwsCredentials | GcpCredentials,
   command: string,
   args: string[],
   stdio: [StdioNull, StdioNull, StdioPipe]
@@ -134,8 +132,13 @@ const spawnChildProcess = (
     shell: false,
   });
 
+type GcpCredentials = {
+  todo: string;
+};
+
 type SpawnSsmNodeOptions = {
-  credential: AwsCredentials;
+  credential: AwsCredentials | GcpCredentials;
+  provider: "aws" | "gcloud";
   command: string;
   args: string[];
   attemptsRemaining?: number;
@@ -170,7 +173,7 @@ async function spawnSsmNode(
         const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSM_RETRIES;
         if (attemptsRemaining <= 0) {
           reject(
-            "Access did not propagate through AWS before max retry attempts were exceeded. Please contact support@p0.dev for assistance."
+            `Access did not propagate through ${options.provider} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
           );
           return;
         }
@@ -192,13 +195,18 @@ async function spawnSsmNode(
 }
 
 const createProxyCommands = (
-  data: SshRequest,
   args: ScpCommandArgs | SshCommandArgs,
-  debug?: boolean
+  opts: {
+    linuxUserName: string;
+    instanceId: string;
+    region: string;
+    debug?: boolean;
+  }
 ) => {
+  const { region, debug, linuxUserName, instanceId } = opts;
   const ssmCommand = [
     ...createBaseSsmCommand({
-      region: data.region,
+      region,
       instance: "%h",
     }),
     "--document-name",
@@ -238,7 +246,7 @@ const createProxyCommands = (
       ...(args.A ? ["-A"] : []),
       ...(args.L ? ["-L", args.L] : []),
       ...(args.N ? ["-N"] : []),
-      `${data.linuxUserName}@${data.id}`,
+      `${linuxUserName}@${instanceId}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
@@ -264,7 +272,7 @@ const transformForShell = (args: string[]) => {
 
 export const sshOrScp = async (
   authn: Authn,
-  data: SshRequest,
+  data: ProviderSsh,
   cmdArgs: ScpCommandArgs | SshCommandArgs,
   privateKey: string
 ) => {
@@ -276,19 +284,38 @@ export const sshOrScp = async (
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
+  if (data.permission.spec.type === "aws") {
+    return awsSpecificLogic(authn, data as AwsSsh, cmdArgs);
+  } else {
+    return gcpSpecificLogic(authn, data as GcpSsh, cmdArgs);
+  }
+};
+
+const awsSpecificLogic = async (
+  authn: Authn,
+  data: AwsSsh,
+  cmdArgs: ScpCommandArgs | SshCommandArgs
+) => {
+  const { instanceId, accountId, region } = data.permission.spec;
+  const { name, ssh } = data.generated;
   const credential = await assumeRoleWithOktaSaml(authn, {
-    account: data.accountId,
-    role: data.role,
+    account: accountId,
+    role: name,
   });
 
   return withSshAgent(cmdArgs, async () => {
-    const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
+    const { command, args } = createProxyCommands(cmdArgs, {
+      linuxUserName: ssh.linuxUserName,
+      region,
+      instanceId,
+      debug: cmdArgs.debug, // TODO: do we need to pass this separately?
+    });
 
     if (cmdArgs.debug) {
       const reproCommands = [
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,
-        `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
+        `eval $(p0 aws role assume ${name} --account ${accountId})`,
         `${command} ${transformForShell(args).join(" ")}`,
       ];
       print2(
@@ -297,11 +324,56 @@ export const sshOrScp = async (
     }
 
     return spawnSsmNode({
+      provider: "aws",
       credential,
-      abortController: new AbortController(),
+      abortController: new AbortController(), // TODO: we probably don't need abort controller at all anymore
       command,
       args,
       stdio: ["inherit", "inherit", "pipe"],
     });
   });
+};
+
+const gcpSpecificLogic = async (
+  authn: Authn,
+  data: GcpSsh,
+  cmdArgs: ScpCommandArgs | SshCommandArgs
+) => {
+  // TODO: how do we assume the role with Okta SAML for GCP?
+  const credential = await assumeRoleWithOktaSaml(authn, {
+    role: "TODO: gcloud specific?",
+    account: "TODO: gcloud specific?",
+  });
+
+  const { command, args } = createGcloudProxyCommands(
+    cmdArgs,
+    data.permission.spec
+  );
+
+  return spawnSsmNode({
+    credential,
+    provider: "gcloud",
+    abortController: new AbortController(), // TODO: we probably don't need abort controller at all anymore
+    command,
+    args,
+    stdio: ["inherit", "inherit", "pipe"],
+  });
+};
+
+const createGcloudProxyCommands = (
+  cmdArgs: ScpCommandArgs | SshCommandArgs,
+  { projectId, zone, instanceName }: GcpSsh["permission"]["spec"]
+) => {
+  return {
+    command: "gcloud",
+    args: [
+      "compute",
+      "ssh",
+      "--project",
+      projectId,
+      "--zone",
+      zone,
+      instanceName,
+    ],
+  };
 };

@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
-import { SshCommandArgs, provisionRequest, requestToSsh } from "./shared";
+import { SshCommandArgs, provisionRequest } from "./shared";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -54,6 +54,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe:
             "Enables forwarding of connections from an authentication agent such as ssh-agent",
         })
+        .option("provider", {
+          type: "string",
+          describe: "The provider managing the instance, AWS or GCloud",
+        })
         // Match `p0 request --reason`
         .option("reason", {
           describe: "Reason access is needed",
@@ -91,7 +95,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
 
   await sshOrScp(
     authn,
-    requestToSsh(result.request),
+    result.request,
     {
       ...args,
       destination,
