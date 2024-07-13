@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { sshOrScp } from "../../plugins/aws/ssm";
@@ -22,11 +23,30 @@ jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/aws/ssm");
+jest.mock("../../common/keys");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
 const mockSshOrScp = sshOrScp as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
+
+const MOCK_REQUEST = {
+  status: "DONE",
+  generated: {
+    name: "name",
+    ssh: {
+      linuxUserName: "linuxUserName",
+      publicKey: TEST_PUBLIC_KEY,
+    },
+  },
+  permission: {
+    spec: {
+      instanceId: "instanceId",
+      accountId: "accountId",
+      region: "region",
+    },
+  },
+};
 
 mockGetDoc({
   "iam-write": {
@@ -99,9 +119,7 @@ describe("ssh", () => {
         status: "APPROVED",
       });
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
-        status: "DONE",
-      });
+      (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
@@ -115,9 +133,7 @@ describe("ssh", () => {
         status: "APPROVED",
       });
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
-        status: "DONE",
-      });
+      (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();

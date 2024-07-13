@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { AwsSsh } from "../plugins/aws/types";
@@ -23,7 +24,6 @@ import {
 import { request } from "./request";
 import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
-import forge from "node-forge";
 import yargs from "yargs";
 
 /** Maximum amount of time to wait after access is approved to wait for access
@@ -31,17 +31,12 @@ import yargs from "yargs";
  */
 const GRANT_TIMEOUT_MILLIS = 60e3;
 
-export type ExerciseGrantResponse = {
+export type SshRequest = {
   linuxUserName: string;
-  ok: true;
   role: string;
-  instance: {
-    arn: string;
-    accountId: string;
-    region: string;
-    id: string;
-    name?: string;
-  };
+  accountId: string;
+  region: string;
+  id: string;
 };
 
 export type BaseSshCommandArgs = {
@@ -130,6 +125,8 @@ export const provisionRequest = async (
 ) => {
   await validateSshInstall(authn);
 
+  const { publicKey, privateKey } = await createKeyPair();
+
   const response = await request<AwsSsh>(
     {
       ...pick(args, "$0", "_"),
@@ -137,6 +134,8 @@ export const provisionRequest = async (
         "ssh",
         "session",
         destination,
+        "--public-key",
+        publicKey,
         // Prefix is required because the backend uses it to determine that this is an AWS request
         "--provider",
         "aws",
@@ -157,15 +156,20 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
-  await waitForProvisioning<AwsSsh>(authn, id);
+  const provisionedRequest = await waitForProvisioning<AwsSsh>(authn, id);
+  if (provisionedRequest.generated.ssh.publicKey !== publicKey) {
+    throw "Public key mismatch. Please revoke the request and try again.";
+  }
 
-  return id;
+  return { request: provisionedRequest, publicKey, privateKey };
 };
 
-export const createKeyPair = () => {
-  const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
-  const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
-  const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
-
-  return { publicKey, privateKey };
+export const requestToSsh = (request: AwsSsh): SshRequest => {
+  return {
+    id: request.permission.spec.instanceId,
+    accountId: request.permission.spec.accountId,
+    region: request.permission.spec.region,
+    role: request.generated.name,
+    linuxUserName: request.generated.ssh.linuxUserName,
+  };
 };

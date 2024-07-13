@@ -9,15 +9,15 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
-  ExerciseGrantResponse,
   ScpCommandArgs,
   SshCommandArgs,
+  SshRequest,
 } from "../../../commands/shared";
+import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
-import { sshAdd, sshAddList, withSshAgent } from "../../ssh-agent";
-import { SshAgentEnv } from "../../ssh-agent/types";
+import { withSshAgent } from "../../ssh-agent";
 import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
@@ -123,14 +123,12 @@ const spawnChildProcess = (
   credential: AwsCredentials,
   command: string,
   args: string[],
-  stdio: [StdioNull, StdioNull, StdioPipe],
-  sshAgentEnv: SshAgentEnv
+  stdio: [StdioNull, StdioNull, StdioPipe]
 ) =>
   spawn(command, args, {
     env: {
       ...process.env,
       ...credential,
-      ...(sshAgentEnv || {}),
     },
     stdio,
     shell: false,
@@ -138,7 +136,6 @@ const spawnChildProcess = (
 
 type SpawnSsmNodeOptions = {
   credential: AwsCredentials;
-  sshAgentEnv: SshAgentEnv;
   command: string;
   args: string[];
   attemptsRemaining?: number;
@@ -160,8 +157,7 @@ async function spawnSsmNode(
       options.credential,
       options.command,
       options.args,
-      options.stdio,
-      options.sshAgentEnv
+      options.stdio
     );
 
     const { isAccessPropagated } = accessPropagationGuard(child);
@@ -196,14 +192,13 @@ async function spawnSsmNode(
 }
 
 const createProxyCommands = (
-  data: ExerciseGrantResponse,
+  data: SshRequest,
   args: ScpCommandArgs | SshCommandArgs,
-  sshAuthSock: string,
   debug?: boolean
 ) => {
   const ssmCommand = [
     ...createBaseSsmCommand({
-      region: data.instance.region,
+      region: data.region,
       instance: "%h",
     }),
     "--document-name",
@@ -214,9 +209,6 @@ const createProxyCommands = (
 
   const commonArgs = [
     ...(debug ? ["-v"] : []),
-    // ignore any overrides in the user's config file, we only want to use the ssh-agent we've set up for the session
-    "-o",
-    `IdentityAgent=${sshAuthSock}`,
     "-o",
     `ProxyCommand=${ssmCommand.join(" ")}`,
   ];
@@ -246,7 +238,7 @@ const createProxyCommands = (
       ...(args.A ? ["-A"] : []),
       ...(args.L ? ["-L", args.L] : []),
       ...(args.N ? ["-N"] : []),
-      `${data.linuxUserName}@${data.instance.id}`,
+      `${data.linuxUserName}@${data.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
@@ -272,7 +264,7 @@ const transformForShell = (args: string[]) => {
 
 export const sshOrScp = async (
   authn: Authn,
-  data: ExerciseGrantResponse,
+  data: SshRequest,
   cmdArgs: ScpCommandArgs | SshCommandArgs,
   privateKey: string
 ) => {
@@ -285,39 +277,27 @@ export const sshOrScp = async (
   }
 
   const credential = await assumeRoleWithOktaSaml(authn, {
-    account: data.instance.accountId,
+    account: data.accountId,
     role: data.role,
   });
 
-  return withSshAgent(cmdArgs, async (sshAgentEnv) => {
-    await sshAdd(cmdArgs, sshAgentEnv, privateKey);
-    if (cmdArgs.debug) {
-      print2("SSH Agent Keys:");
-      await sshAddList(cmdArgs, sshAgentEnv);
-    }
-
-    const { command, args } = createProxyCommands(
-      data,
-      cmdArgs,
-      sshAgentEnv.SSH_AUTH_SOCK,
-      cmdArgs.debug
-    );
+  return withSshAgent(cmdArgs, async () => {
+    const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
 
     if (cmdArgs.debug) {
       const reproCommands = [
-        `eval $(p0 aws role assume ${data.role} --account ${data.instance.accountId})`,
-        `export SSH_AUTH_SOCK=${sshAgentEnv.SSH_AUTH_SOCK}`,
-        `export SSH_AGENT_PID=${sshAgentEnv.SSH_AGENT_PID}`,
+        `eval $(ssh-agent)`,
+        `ssh-add "${PRIVATE_KEY_PATH}"`,
+        `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
         `${command} ${transformForShell(args).join(" ")}`,
       ];
       print2(
-        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n*** COMMANDS END ***\n\nTHE SSH AGENT PROCESS WILL NOT BE KILLED AUTOMATICALLY IN DEBUG MODE\nYou can kill it with "sudo kill ${sshAgentEnv.SSH_AGENT_PID}"\n`
+        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n*** COMMANDS END ***"\n`
       );
     }
 
     return spawnSsmNode({
       credential,
-      sshAgentEnv,
       abortController: new AbortController(),
       command,
       args,
