@@ -12,6 +12,7 @@ import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { AwsSsh } from "../plugins/aws/types";
+import { GcpSsh } from "../plugins/google/types";
 import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
 import {
@@ -21,6 +22,7 @@ import {
   PluginRequest,
   Request,
 } from "../types/request";
+import { assertNever } from "../util";
 import { request } from "./request";
 import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
@@ -30,19 +32,33 @@ import yargs from "yargs";
  *  to be configured
  */
 const GRANT_TIMEOUT_MILLIS = 60e3;
+// The prefix of installed SSH accounts in P0 is the provider name
+const SUPPORTED_PROVIDERS = ["aws", "gcloud"];
 
-export type SshRequest = {
+export type SshRequest = AwsSshRequest | GcpSshRequest;
+
+export type AwsSshRequest = {
   linuxUserName: string;
   role: string;
   accountId: string;
   region: string;
   id: string;
+  type: "aws";
+};
+
+export type GcpSshRequest = {
+  linuxUserName: string;
+  projectId: string;
+  zone: string;
+  id: string;
+  type: "gcloud";
 };
 
 export type BaseSshCommandArgs = {
   sudo?: boolean;
   reason?: string;
   account?: string;
+  provider?: "aws" | "gcloud";
 };
 
 export type ScpCommandArgs = BaseSshCommandArgs & {
@@ -63,14 +79,23 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   debug?: boolean;
 };
 
-const validateSshInstall = async (authn: Authn) => {
+const validateSshInstall = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>
+) => {
   const configDoc = await getDoc<SshConfig, object>(
     doc(`o/${authn.identity.org.tenantId}/integrations/ssh`)
   );
   const configItems = configDoc.data()?.["iam-write"];
 
+  const providersToCheck = args.provider
+    ? [args.provider]
+    : SUPPORTED_PROVIDERS;
+
   const items = Object.entries(configItems ?? {}).filter(
-    ([key, value]) => value.state == "installed" && key.startsWith("aws")
+    ([key, value]) =>
+      value.state == "installed" &&
+      providersToCheck.some((prefix) => key.startsWith(prefix))
   );
   if (items.length === 0) {
     throw "This organization is not configured for SSH access via the P0 CLI";
@@ -123,11 +148,11 @@ export const provisionRequest = async (
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
   destination: string
 ) => {
-  await validateSshInstall(authn);
+  await validateSshInstall(authn, args);
 
   const { publicKey, privateKey } = await createKeyPair();
 
-  const response = await request<AwsSsh>(
+  const response = await request<PluginRequest>(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -136,9 +161,7 @@ export const provisionRequest = async (
         destination,
         "--public-key",
         publicKey,
-        // Prefix is required because the backend uses it to determine that this is an AWS request
-        "--provider",
-        "aws",
+        ...(args.provider ? ["--provider", args.provider] : []),
         ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
         ...(args.account ? ["--account", args.account] : []),
@@ -156,20 +179,38 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
-  const provisionedRequest = await waitForProvisioning<AwsSsh>(authn, id);
-  if (provisionedRequest.generated.ssh.publicKey !== publicKey) {
+  const provisionedRequest = await waitForProvisioning<PluginRequest>(
+    authn,
+    id
+  );
+  if (provisionedRequest.permission.spec.publicKey !== publicKey) {
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
   return { request: provisionedRequest, publicKey, privateKey };
 };
 
-export const requestToSsh = (request: AwsSsh): SshRequest => {
-  return {
-    id: request.permission.spec.instanceId,
-    accountId: request.permission.spec.accountId,
-    region: request.permission.spec.region,
-    role: request.generated.name,
-    linuxUserName: request.generated.ssh.linuxUserName,
-  };
+export const requestToSsh = (request: Request<PluginRequest>): SshRequest => {
+  if (request.permission.spec.type === "aws") {
+    const awsRequest = request as AwsSsh;
+    return {
+      id: awsRequest.permission.spec.instanceId,
+      accountId: awsRequest.permission.spec.accountId,
+      region: awsRequest.permission.spec.region,
+      role: awsRequest.generated.name,
+      linuxUserName: awsRequest.generated.ssh.linuxUserName,
+      type: "aws",
+    };
+  } else if (request.permission.spec.type === "gcloud") {
+    const gcpRequest = request as GcpSsh;
+    return {
+      id: gcpRequest.permission.spec.instanceName,
+      projectId: gcpRequest.permission.spec.projectId,
+      zone: gcpRequest.permission.spec.zone,
+      linuxUserName: gcpRequest.generated.ssh.linuxUserName,
+      type: "gcloud",
+    };
+  } else {
+    throw assertNever(request.permission.spec);
+  }
 };

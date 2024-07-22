@@ -8,22 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-type SshItemConfig = {
-  label?: string;
-  state: string;
-};
+import { PermissionSpec } from "../../types/request";
+import { CommonSshGenerated, CommonSshPermissionSpec } from "../ssh/types";
 
-export type SshConfig = {
-  "iam-write": Record<string, SshItemConfig>;
-};
-
-export type CommonSshPermissionSpec = {
-  publicKey: string;
-  sudo?: boolean;
-};
-
-export type CommonSshGenerated = {
-  ssh: {
-    linuxUserName: string;
+export type GcpSshPermission = {
+  spec: CommonSshPermissionSpec & {
+    instanceName: string;
+    projectId: string;
+    zone: string;
+    type: "gcloud";
   };
+  type: "session";
 };
+
+export type GcpSshGenerated = CommonSshGenerated;
+
+export type GcpSsh = PermissionSpec<"ssh", GcpSshPermission, GcpSshGenerated>;

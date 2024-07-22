@@ -63,6 +63,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "string",
           describe: "The account on which the instance is located",
         })
+        .option("provider", {
+          type: "string",
+          describe: "The cloud provider where the instance is hosted",
+          choices: ["aws", "gcloud"],
+        })
         .option("debug", {
           type: "boolean",
           describe:
@@ -89,9 +94,11 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
+  const { request } = result;
+
   await sshOrScp(
     authn,
-    requestToSsh(result.request),
+    requestToSsh(request),
     {
       ...args,
       destination,

@@ -13,9 +13,9 @@ import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
 import {
   ScpCommandArgs,
-  SshRequest,
   provisionRequest,
   requestToSsh,
+  SshRequest,
 } from "./shared";
 import yargs from "yargs";
 
@@ -48,6 +48,11 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("account", {
           type: "string",
           describe: "The account on which the instance is located",
+        })
+        .option("provider", {
+          type: "string",
+          describe: "The cloud provider where the instance is hosted",
+          choices: ["aws", "gcloud"],
         })
         .option("sudo", {
           type: "boolean",

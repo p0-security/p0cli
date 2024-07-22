@@ -11,11 +11,13 @@ You should have received a copy of the GNU General Public License along with @p0
 import {
   ScpCommandArgs,
   SshCommandArgs,
+  AwsSshRequest,
   SshRequest,
 } from "../../../commands/shared";
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
+import { assertNever, throwAssertNever } from "../../../util";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
 import { AwsCredentials } from "../types";
@@ -30,7 +32,7 @@ import { Readable } from "node:stream";
 
 /** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
-const UNPROVISIONED_ACCESS_MESSAGE =
+const UNAUTHORIZED_START_SESSION_MESSAGE =
   /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
 /**
  * Matches the following error messages that AWS SSM print1 when ssh authorized
@@ -39,88 +41,122 @@ const UNPROVISIONED_ACCESS_MESSAGE =
  * - scp: Connection closed
  * - kex_exchange_identification: Connection closed by remote host
  */
-const UNPROVISIONED_SCP_ACCESS_MESSAGE =
+const CONNECTION_CLOSED_MESSAGE =
   /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
-/** Maximum amount of time after AWS SSM process starts to check for {@link UNPROVISIONED_ACCESS_MESSAGE}
+const PUBLIC_KEY_DENIED_MESSAGE = /Permission denied \(publickey\)/;
+const UNAUTHORIZED_TUNNEL_USER_MESSAGE =
+  /Error while connecting \[4033: 'not authorized'\]/;
+const UNAUTHORIZED_INSTANCES_GET_MESSAGE =
+  /Required 'compute\.instances\.get' permission/;
+const DESTINATION_READ_ERROR =
+  /Error while connecting \[4010: 'destination read failed'\]/;
+const GOOGLE_LOGIN_MESSAGE =
+  /You do not currently have an active account selected/;
+
+/** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
  *  in the process's stderr
  */
-const UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS = 5e3;
+const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 
-/** Maximum number of attempts to start an SSM session
+/** Maximum number of attempts to start an SSH session
  *
  * Note that each attempt consumes ~ 1 s.
  */
-const MAX_SSM_RETRIES = 30;
+const MAX_SSH_RETRIES = 30;
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
 
-type SsmArgs = {
-  instance: string;
-  region: string;
-  requestId: string;
-  command?: string;
-  forwardPortAddress?: string;
-  noRemoteCommands?: boolean;
-};
+/**
+ * AWS
+ * There are 2 cases of unprovisioned access in AWS
+ * 1. SSM:StartSession action is missing either on the SSM document (AWS-StartSSHSession) or the EC2 instance
+ * 2. Temporary error when issuing an SCP command
+ * 1: results in UNAUTHORIZED_START_SESSION_MESSAGE
+ * 2: results in CONNECTION_CLOSED_MESSAGE
+ *
+ * Google Cloud
+ * There are 5 cases of unprovisioned access in Google Cloud.
+ * These are all potentially subject to propagation delays.
+ * 1. The linux user name is not present in the user's Google Workspace profile `posixAccounts` attribute
+ * 2. The public key is not present in the user's Google Workspace profile `sshPublicKeys` attribute
+ * 3. The user cannot act as the service account of the compute instance
+ * 4. The user cannot tunnel through the IAP tunnel to the instance
+ * 5. The user doesn't have osLogin or osAdminLogin role to the instance
+ * 5.a. compute.instances.get permission is missing
+ * 5.b. compute.instances.osLogin permission is missing
+ * 6: Rare occurrence, the exact conditions so far undetermined (together with CONNECTION_CLOSED_MESSAGE)
+ *
+ * 1, 2, 3 (yes!), 5b: result in PUBLIC_KEY_DENIED_MESSAGE
+ * 4: results in UNAUTHORIZED_TUNNEL_USER_MESSAGE and also CONNECTION_CLOSED_MESSAGE
+ * 5a: results in UNAUTHORIZED_INSTANCES_GET_MESSAGE
+ * 6: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
+ */
+const UNPROVISIONED_ACCESS_MESSAGES = [
+  { pattern: UNAUTHORIZED_START_SESSION_MESSAGE },
+  { pattern: CONNECTION_CLOSED_MESSAGE },
+  { pattern: PUBLIC_KEY_DENIED_MESSAGE },
+  { pattern: UNAUTHORIZED_TUNNEL_USER_MESSAGE },
+  { pattern: UNAUTHORIZED_INSTANCES_GET_MESSAGE, validationWindowMs: 30e3 },
+  { pattern: DESTINATION_READ_ERROR },
+];
 
 /** Checks if access has propagated through AWS to the SSM agent
  *
- * AWS takes about 8 minutes to fully resolve access after it is granted. During
- * this time, calls to `aws ssm start-session` will fail randomly with an
- * access denied exception.
+ * AWS takes about 8 minutes, GCP takes under 1 minute
+ * to fully resolve access after it is granted.
+ * During this time, calls to `aws ssm start-session` / `gcloud compute start-iap-tunnel`
+ * will fail randomly with an various error messages.
  *
- * This function checks AWS to see if this exception is print1d to the SSM
- * error output within the first 5 seconds of startup. If it is, the returned
- * `isAccessPropagated()` function will return false. When this occurs, the
- * consumer of this function should retry the AWS SSM session.
+ * This function checks the subprocess output to see if any of the error messages
+ * are printed to the error output within the first 5 seconds of startup.
+ * If they are, the returned `isAccessPropagated()` function will return false.
+ * When this occurs, the consumer of this function should retry the `aws` / `gcloud` command.
  *
- * Note that this function requires interception of the AWS SSM stderr stream.
+ * Note that this function requires interception of the subprocess stderr stream.
  * This works because AWS SSM wraps the session in a single-stream pty, so we
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
-  child: ChildProcessByStdio<null, null, Readable>
+  child: ChildProcessByStdio<null, null, Readable>,
+  debug?: boolean
 ) => {
   let isEphemeralAccessDeniedException = false;
+  let isGoogleLoginException = false;
   const beforeStart = Date.now();
 
   child.stderr.on("data", (chunk) => {
-    const chunkString = chunk.toString("utf-8");
-    const match =
-      chunkString.match(UNPROVISIONED_ACCESS_MESSAGE) ||
-      chunkString.match(UNPROVISIONED_SCP_ACCESS_MESSAGE);
+    const chunkString: string = chunk.toString("utf-8");
+
+    if (debug) print2(chunkString);
+
+    const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
+      chunkString.match(message.pattern)
+    );
 
     if (
       match &&
-      Date.now() <= beforeStart + UNPROVISIONED_ACCESS_VALIDATION_WINDOW_MS
+      Date.now() <=
+        beforeStart + (match.validationWindowMs || DEFAULT_VALIDATION_WINDOW_MS)
     ) {
       isEphemeralAccessDeniedException = true;
-      return;
     }
 
-    print2(chunkString);
+    const googleLoginMatch = chunkString.match(GOOGLE_LOGIN_MESSAGE);
+    isGoogleLoginException = isGoogleLoginException || !!googleLoginMatch; // once true, always true
+    if (isGoogleLoginException) {
+      isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
+    }
   });
 
   return {
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
+    isGoogleLoginException: () => isGoogleLoginException,
   };
 };
 
-const createBaseSsmCommand = (args: Pick<SsmArgs, "instance" | "region">) => {
-  return [
-    "aws",
-    "ssm",
-    "start-session",
-    "--region",
-    args.region,
-    "--target",
-    args.instance,
-  ];
-};
-
 const spawnChildProcess = (
-  credential: AwsCredentials,
+  credential: AwsCredentials | undefined,
   command: string,
   args: string[],
   stdio: [StdioNull, StdioNull, StdioPipe]
@@ -135,14 +171,23 @@ const spawnChildProcess = (
   });
 
 type SpawnSsmNodeOptions = {
-  credential: AwsCredentials;
+  credential?: AwsCredentials;
   command: string;
   args: string[];
   attemptsRemaining?: number;
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
+  provider: "aws" | "gcloud";
+  debug?: boolean;
 };
+
+const friendlyProvider = (provider: "aws" | "gcloud") =>
+  provider === "aws"
+    ? "AWS"
+    : provider === "gcloud"
+      ? "Google Cloud"
+      : throwAssertNever(provider);
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
@@ -160,17 +205,24 @@ async function spawnSsmNode(
       options.stdio
     );
 
-    const { isAccessPropagated } = accessPropagationGuard(child);
+    // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
+    const { isAccessPropagated, isGoogleLoginException } =
+      accessPropagationGuard(child, options.debug);
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSM_RETRIES;
+        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSH_RETRIES;
+        if (options.debug) {
+          print2(
+            `Waiting for access to propagate. Retrying SSH session... (remaining attempts: ${attemptsRemaining})`
+          );
+        }
         if (attemptsRemaining <= 0) {
           reject(
-            "Access did not propagate through AWS before max retry attempts were exceeded. Please contact support@p0.dev for assistance."
+            `Access did not propagate through ${friendlyProvider(options.provider)} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
           );
           return;
         }
@@ -181,6 +233,9 @@ async function spawnSsmNode(
         })
           .then((code) => resolve(code))
           .catch(reject);
+        return;
+      } else if (isGoogleLoginException()) {
+        reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
         return;
       }
 
@@ -196,21 +251,44 @@ const createProxyCommands = (
   args: ScpCommandArgs | SshCommandArgs,
   debug?: boolean
 ) => {
-  const ssmCommand = [
-    ...createBaseSsmCommand({
-      region: data.region,
-      instance: "%h",
-    }),
-    "--document-name",
-    START_SSH_SESSION_DOCUMENT_NAME,
-    "--parameters",
-    '"portNumber=%p"',
-  ];
+  let proxyCommand;
+  if (data.type === "aws") {
+    proxyCommand = [
+      "aws",
+      "ssm",
+      "start-session",
+      "--region",
+      data.region,
+      "--target",
+      "%h",
+      "--document-name",
+      START_SSH_SESSION_DOCUMENT_NAME,
+      "--parameters",
+      '"portNumber=%p"',
+    ];
+  } else if (data.type === "gcloud") {
+    proxyCommand = [
+      "gcloud",
+      "compute",
+      "start-iap-tunnel",
+      data.id,
+      "%p",
+      // --listen-on-stdin flag is required for interactive SSH session.
+      // It is undocumented on page https://cloud.google.com/sdk/gcloud/reference/compute/start-iap-tunnel
+      // but mention on page https://cloud.google.com/iap/docs/tcp-by-host
+      // and also found in `gcloud ssh --dry-run` output
+      "--listen-on-stdin",
+      `--zone=${data.zone}`,
+      `--project=${data.projectId}`,
+    ];
+  } else {
+    throw assertNever(data);
+  }
 
   const commonArgs = [
     ...(debug ? ["-v"] : []),
     "-o",
-    `ProxyCommand=${ssmCommand.join(" ")}`,
+    `ProxyCommand=${proxyCommand.join(" ")}`,
   ];
 
   if ("source" in args) {
@@ -262,24 +340,30 @@ const transformForShell = (args: string[]) => {
   });
 };
 
+const awsLogin = async (authn: Authn, data: AwsSshRequest) => {
+  if (!(await ensureSsmInstall())) {
+    throw "Please try again after installing the required AWS utilities";
+  }
+
+  return await assumeRoleWithOktaSaml(authn, {
+    account: data.accountId,
+    role: data.role,
+  });
+};
+
 export const sshOrScp = async (
   authn: Authn,
   data: SshRequest,
   cmdArgs: ScpCommandArgs | SshCommandArgs,
   privateKey: string
 ) => {
-  if (!(await ensureSsmInstall())) {
-    throw "Please try again after installing the required AWS utilities";
-  }
-
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
-  const credential = await assumeRoleWithOktaSaml(authn, {
-    account: data.accountId,
-    role: data.role,
-  });
+  // TODO ENG-2284 support login with Google Cloud
+  const credential: AwsCredentials | undefined =
+    data.type === "aws" ? await awsLogin(authn, data) : undefined;
 
   return withSshAgent(cmdArgs, async () => {
     const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
@@ -288,7 +372,11 @@ export const sshOrScp = async (
       const reproCommands = [
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,
-        `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
+        ...(data.type === "aws"
+          ? [
+              `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
+            ]
+          : []),
         `${command} ${transformForShell(args).join(" ")}`,
       ];
       print2(
@@ -302,6 +390,8 @@ export const sshOrScp = async (
       command,
       args,
       stdio: ["inherit", "inherit", "pipe"],
+      debug: cmdArgs.debug,
+      provider: data.type,
     });
   });
 };
