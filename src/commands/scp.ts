@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { sshOrScp } from "../plugins/aws/ssm";
+import { sshOrScp } from "../plugins/ssh";
 import {
   ScpCommandArgs,
   provisionRequest,

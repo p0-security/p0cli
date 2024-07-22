@@ -13,15 +13,15 @@ import {
   SshCommandArgs,
   AwsSshRequest,
   SshRequest,
-} from "../../../commands/shared";
-import { PRIVATE_KEY_PATH } from "../../../common/keys";
-import { print2 } from "../../../drivers/stdio";
-import { Authn } from "../../../types/identity";
-import { assertNever, throwAssertNever } from "../../../util";
-import { assumeRoleWithOktaSaml } from "../../okta/aws";
-import { withSshAgent } from "../../ssh-agent";
-import { AwsCredentials } from "../types";
-import { ensureSsmInstall } from "./install";
+} from "../../commands/shared";
+import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { print2 } from "../../drivers/stdio";
+import { Authn } from "../../types/identity";
+import { assertNever, throwAssertNever } from "../../util";
+import { ensureSsmInstall } from "../aws/ssm/install";
+import { AwsCredentials } from "../aws/types";
+import { assumeRoleWithOktaSaml } from "../okta/aws";
+import { withSshAgent } from "../ssh-agent";
 import {
   ChildProcessByStdio,
   StdioNull,
@@ -170,7 +170,7 @@ const spawnChildProcess = (
     shell: false,
   });
 
-type SpawnSsmNodeOptions = {
+type SpawnSshNodeOptions = {
   credential?: AwsCredentials;
   command: string;
   args: string[];
@@ -194,8 +194,8 @@ const friendlyProvider = (provider: "aws" | "gcloud") =>
  * Requires `aws ssm` to be installed on the client machine.
  */
 
-async function spawnSsmNode(
-  options: SpawnSsmNodeOptions
+async function spawnSshNode(
+  options: SpawnSshNodeOptions
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const child = spawnChildProcess(
@@ -227,7 +227,7 @@ async function spawnSsmNode(
           return;
         }
 
-        spawnSsmNode({
+        spawnSshNode({
           ...options,
           attemptsRemaining: attemptsRemaining - 1,
         })
@@ -372,6 +372,7 @@ export const sshOrScp = async (
       const reproCommands = [
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,
+        // TODO ENG-2284 support login with Google Cloud
         ...(data.type === "aws"
           ? [
               `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
@@ -384,7 +385,7 @@ export const sshOrScp = async (
       );
     }
 
-    return spawnSsmNode({
+    return spawnSshNode({
       credential,
       abortController: new AbortController(),
       command,
