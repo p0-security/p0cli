@@ -12,10 +12,10 @@ import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/aws/ssm";
 import {
-  ScpCommandArgs,
-  SshRequest,
   provisionRequest,
   requestToSsh,
+  ScpCommandArgs,
+  SshRequest,
 } from "./shared";
 import yargs from "yargs";
 

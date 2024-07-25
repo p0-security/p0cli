@@ -73,5 +73,9 @@ export type AwsSsh = {
       linuxUserName: string;
       publicKey: string;
     };
+    idc?: {
+      region: string;
+      id: string;
+    };
   };
 };

@@ -31,13 +31,21 @@ import yargs from "yargs";
  */
 const GRANT_TIMEOUT_MILLIS = 60e3;
 
-export type SshRequest = {
+export type BaseSshRequest = {
   linuxUserName: string;
-  role: string;
   accountId: string;
   region: string;
   id: string;
 };
+
+export type AwsSshRoleRequest = BaseSshRequest & { role: string };
+export type AwsSshIdcRequest = BaseSshRequest & {
+  permissionSet: string;
+  idcId: string;
+  idcRegion: string;
+};
+
+export type SshRequest = AwsSshRoleRequest | AwsSshIdcRequest;
 
 export type BaseSshCommandArgs = {
   sudo?: boolean;
@@ -165,11 +173,21 @@ export const provisionRequest = async (
 };
 
 export const requestToSsh = (request: AwsSsh): SshRequest => {
-  return {
-    id: request.permission.spec.instanceId,
-    accountId: request.permission.spec.accountId,
-    region: request.permission.spec.region,
-    role: request.generated.name,
-    linuxUserName: request.generated.ssh.linuxUserName,
-  };
+  return !request.generated.idc
+    ? {
+        id: request.permission.spec.instanceId,
+        accountId: request.permission.spec.accountId,
+        region: request.permission.spec.region,
+        role: request.generated.name,
+        linuxUserName: request.generated.ssh.linuxUserName,
+      }
+    : {
+        id: request.permission.spec.instanceId,
+        accountId: request.permission.spec.accountId,
+        region: request.permission.spec.region,
+        permissionSet: request.generated.name,
+        linuxUserName: request.generated.ssh.linuxUserName,
+        idcId: request.generated.idc.id,
+        idcRegion: request.generated.idc.region,
+      };
 };

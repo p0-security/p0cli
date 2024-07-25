@@ -17,7 +17,7 @@ import { sleep, throwAssertNever } from "../../util";
 import { capitalize } from "lodash";
 import open from "open";
 
-const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+export const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export const validateProviderDomain = (org: OrgData) => {
   if (!org.providerDomain) throw "Login requires a configured provider domain.";

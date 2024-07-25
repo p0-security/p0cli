@@ -8,9 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { isFederatedLogin } from "../../../commands/aws/role";
 import {
   ScpCommandArgs,
   SshCommandArgs,
+  AwsSshIdcRequest,
+  AwsSshRoleRequest,
   SshRequest,
 } from "../../../commands/shared";
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
@@ -18,13 +21,15 @@ import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
-import { AwsCredentials } from "../types";
+import { getAwsConfig } from "../config";
+import { assumeRoleWithIdc } from "../idc/index";
+import { AwsCredentials, AwsIdcLogin, AwsItem } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
+  spawn,
   StdioNull,
   StdioPipe,
-  spawn,
 } from "node:child_process";
 import { Readable } from "node:stream";
 
@@ -262,6 +267,16 @@ const transformForShell = (args: string[]) => {
   });
 };
 
+export const isSsoLogin = (
+  config: AwsItem
+): config is AwsItem & { login: AwsIdcLogin } => config.login?.type === "idc";
+
+export const isIdcRequest = (data: SshRequest): data is AwsSshIdcRequest =>
+  "idcId" in data;
+
+export const isRoleRequest = (data: SshRequest): data is AwsSshRoleRequest =>
+  "role" in data;
+
 export const sshOrScp = async (
   authn: Authn,
   data: SshRequest,
@@ -275,16 +290,36 @@ export const sshOrScp = async (
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
-
-  const credential = await assumeRoleWithOktaSaml(authn, {
-    account: data.accountId,
-    role: data.role,
-  });
-
+  const { config } = await getAwsConfig(authn, data.accountId);
+  let credential: AwsCredentials;
+  if (isFederatedLogin(config) && isRoleRequest(data)) {
+    credential = await assumeRoleWithOktaSaml(authn, {
+      account: data.accountId,
+      role: data.role,
+    });
+  } else if (isSsoLogin(config) && isIdcRequest(data)) {
+    credential = await assumeRoleWithIdc(
+      {
+        account: data.accountId,
+        role: data.permissionSet,
+      },
+      {
+        id: data.idcId,
+        region: data.idcRegion,
+      },
+      {
+        account: data.accountId,
+        permissionSet: data.permissionSet,
+      }
+    );
+  } else {
+    throw `Unsupported login type: ${config.login?.type}`;
+  }
   return withSshAgent(cmdArgs, async () => {
     const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
 
-    if (cmdArgs.debug) {
+    // TODO: Modify commands to add the ability to get permission set commands
+    if (cmdArgs.debug && isRoleRequest(data)) {
       const reproCommands = [
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,

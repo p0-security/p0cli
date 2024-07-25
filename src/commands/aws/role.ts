@@ -46,7 +46,7 @@ export const role = (yargs: yargs.Argv<{ account: string | undefined }>) =>
       .demandCommand(1)
   );
 
-const isFederatedLogin = (
+export const isFederatedLogin = (
   config: AwsItem
 ): config is AwsItem & { login: AwsFederatedLogin } =>
   config.login?.type === "federated";
