@@ -45,7 +45,7 @@ export type AwsSshIdcRequest = BaseSshRequest & {
   idcRegion: string;
 };
 
-export type SshRequest = AwsSshRoleRequest | AwsSshIdcRequest;
+export type SshRequest = AwsSshIdcRequest | AwsSshRoleRequest;
 
 export type BaseSshCommandArgs = {
   sudo?: boolean;
