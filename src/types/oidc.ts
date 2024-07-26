@@ -50,3 +50,9 @@ export type TokenErrorResponse = {
     | "not found"
     | "slow_down";
 };
+
+export type OidcLoginSteps<AuthorizeResponse, TokenResponse> = {
+  preValidate?: () => Promise<void>;
+  authorize: () => Promise<AuthorizeResponse>;
+  activate: (response: AuthorizeResponse) => Promise<TokenResponse>;
+};

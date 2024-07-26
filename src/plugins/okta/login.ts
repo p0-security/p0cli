@@ -14,7 +14,11 @@ import { Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { AwsFederatedLogin } from "../aws/types";
-import { oidcLogin, validateProviderDomain } from "../oidc/login";
+import {
+  oidcLogin,
+  oidcLoginSteps,
+  validateProviderDomain,
+} from "../oidc/login";
 import { JSDOM } from "jsdom";
 import { omit } from "lodash";
 
@@ -76,7 +80,7 @@ const fetchSamlResponse = async (
 
 /** Logs in to Okta via OIDC */
 export const oktaLogin = async (org: OrgData) =>
-  oidcLogin(org, "openid email profile okta.apps.sso");
+  oidcLogin(oidcLoginSteps(org, "openid email profile okta.apps.sso"));
 
 /** Retrieves a SAML response for an okta app */
 // TODO: Inject Okta app
