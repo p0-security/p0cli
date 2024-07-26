@@ -19,6 +19,7 @@ import {
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
+import { throwAssertNever } from "../../../util";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
 import { getAwsConfig } from "../config";
@@ -267,12 +268,8 @@ const transformForShell = (args: string[]) => {
   });
 };
 
-export const isSsoLogin = (
-  config: AwsItem
-): config is AwsItem & { login: AwsIdcLogin } => config.login?.type === "idc";
-
 export const isIdcRequest = (data: SshRequest): data is AwsSshIdcRequest =>
-  "idcId" in data;
+  "permissionSet" in data;
 
 export const isRoleRequest = (data: SshRequest): data is AwsSshRoleRequest =>
   "role" in data;
@@ -292,26 +289,22 @@ export const sshOrScp = async (
   }
   const { config } = await getAwsConfig(authn, data.accountId);
   let credential: AwsCredentials;
-  if (isFederatedLogin(config) && isRoleRequest(data)) {
-    credential = await assumeRoleWithOktaSaml(authn, {
-      account: data.accountId,
-      role: data.role,
-    });
-  } else if (isSsoLogin(config) && isIdcRequest(data)) {
+  if (isIdcRequest(data)) {
     credential = await assumeRoleWithIdc(
       {
         account: data.accountId,
-        role: data.permissionSet,
+        permissionSet: data.permissionSet,
       },
       {
         id: data.idcId,
         region: data.idcRegion,
-      },
-      {
-        account: data.accountId,
-        permissionSet: data.permissionSet,
       }
     );
+  } else if (isFederatedLogin(config) && isRoleRequest(data)) {
+    credential = await assumeRoleWithOktaSaml(authn, {
+      account: data.accountId,
+      role: data.role,
+    });
   } else {
     throw `Unsupported login type: ${config.login?.type}`;
   }

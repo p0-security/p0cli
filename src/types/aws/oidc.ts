@@ -8,7 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-export type ClientRegistrationInfo = {
+
+export type AWSClientInformation = {
   authorizationEndpoint: string;
   clientId: string;
   clientIdIssuedAt: number;
@@ -26,4 +27,13 @@ export type AWSTokenResponse = {
   idToken: string;
   refreshToken: string;
   tokenType: string;
+};
+
+export type AWSAuthorizeResponse = {
+  deviceCode: string;
+  expiresIn: number;
+  interval: number;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
 };

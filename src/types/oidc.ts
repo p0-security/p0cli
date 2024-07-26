@@ -52,7 +52,7 @@ export type TokenErrorResponse = {
 };
 
 export type OidcLoginSteps<AuthorizeResponse, TokenResponse> = {
-  preValidate?: () => Promise<void>;
+  setup?: () => Promise<void>;
   authorize: () => Promise<AuthorizeResponse>;
   activate: (response: AuthorizeResponse) => Promise<TokenResponse>;
 };

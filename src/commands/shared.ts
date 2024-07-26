@@ -38,11 +38,12 @@ export type BaseSshRequest = {
   id: string;
 };
 
-export type AwsSshRoleRequest = BaseSshRequest & { role: string };
+export type AwsSshRoleRequest = BaseSshRequest & { role: string; type: "role" };
 export type AwsSshIdcRequest = BaseSshRequest & {
   permissionSet: string;
   idcId: string;
   idcRegion: string;
+  type: "idc";
 };
 
 export type SshRequest = AwsSshIdcRequest | AwsSshRoleRequest;
@@ -180,6 +181,7 @@ export const requestToSsh = (request: AwsSsh): SshRequest => {
         region: request.permission.spec.region,
         role: request.generated.name,
         linuxUserName: request.generated.ssh.linuxUserName,
+        type: "role",
       }
     : {
         id: request.permission.spec.instanceId,
@@ -189,5 +191,6 @@ export const requestToSsh = (request: AwsSsh): SshRequest => {
         linuxUserName: request.generated.ssh.linuxUserName,
         idcId: request.generated.idc.id,
         idcRegion: request.generated.idc.region,
+        type: "idc",
       };
 };

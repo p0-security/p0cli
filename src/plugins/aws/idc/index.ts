@@ -13,7 +13,8 @@ import { cached } from "../../../drivers/auth";
 import { print2 } from "../../../drivers/stdio";
 import {
   AWSTokenResponse,
-  ClientRegistrationInfo,
+  AWSClientInformation,
+  AWSAuthorizeResponse,
 } from "../../../types/aws/oidc";
 import { OidcLoginSteps } from "../../../types/oidc";
 import {
@@ -26,18 +27,19 @@ import {
 import { AwsCredentials } from "../types";
 import open from "open";
 
-export const fetchClientSecrets = async (
+export const registerClient = async (
   region: string
-): Promise<ClientRegistrationInfo> =>
+): Promise<AWSClientInformation> =>
   await cached(
     `aws-idc-client`,
-    async (): Promise<ClientRegistrationInfo> => {
+    async (): Promise<AWSClientInformation> => {
       const init = {
         method: "POST",
         body: JSON.stringify({
           clientName: "p0Cli",
           clientType: "public",
           grantTypes: [DEVICE_GRANT_TYPE],
+          scopes: ["sso:account:access"],
         }),
       };
       const response = await fetch(
@@ -47,17 +49,17 @@ export const fetchClientSecrets = async (
       return await response.json();
     },
     {
-      duration: 6.48e9, // the token has lifetime of 90 days, just to be cautious we have set the cache duration to 75 days
+      duration: 7.776e9, // the token has lifetime of 90 days
     },
     (data) => data.clientSecretExpiresAt < Date.now()
   );
 
-const fetchAWSCredentials = async (
-  oidcResponse: AWSTokenResponse & { expiresAt: number },
+// exchange the oidc response for aws credentials
+const exchangeForAWSCredentials = async (
+  oidcResponse: AWSTokenResponse,
   idc: { id: string; region: string },
   request: { account?: string; permissionSet: string }
 ) => {
-  //curl 'https://portal.sso.eu-central-1.amazonaws.com/federation/credentials?account_id=999999999999&role_name=MyIamRoleName' -H 'x-amz-sso_bearer_token: eyJl...Blw'
   return await retryWithBackOff(
     async () => {
       const init = {
@@ -85,7 +87,7 @@ const fetchAWSCredentials = async (
 const idcRequestBuilder = (
   clientCredentials: { clientId: string; clientSecret: string },
   idc: { id: string; region: string },
-  authorizeResponse: any
+  authorizeResponse: AWSAuthorizeResponse
 ) => {
   const { clientId, clientSecret } = clientCredentials;
   const { region } = idc;
@@ -127,12 +129,12 @@ const idcAuthorizeRequestBuilder = (
 export const idcLoginSteps: (
   clientCredentials: { clientId: string; clientSecret: string },
   idc: { id: string; region: string }
-) => OidcLoginSteps<any, AWSTokenResponse> = (
+) => OidcLoginSteps<AWSAuthorizeResponse, AWSTokenResponse> = (
   clientCredentials: { clientId: string; clientSecret: string },
   idc: { id: string; region: string }
 ) => ({
   authorize: async () => {
-    const authorizeResponse = await authorize<any>(
+    const authorizeResponse = await authorize<AWSAuthorizeResponse>(
       idcAuthorizeRequestBuilder(clientCredentials, idc)
     );
     print2(`Please use the opened browser window to continue your idc device authorization.
@@ -147,7 +149,9 @@ export const idcLoginSteps: (
     return authorizeResponse;
   },
   activate: async (authorizeResponse) =>
-    await waitForActivation<any, AWSTokenResponse>(authorizeResponse)(
+    await waitForActivation<AWSAuthorizeResponse, AWSTokenResponse>(
+      authorizeResponse
+    )(
       (authorize) => authorize.expiresIn,
       (authorize) =>
         fetchOidcToken<AWSTokenResponse>(
@@ -157,16 +161,15 @@ export const idcLoginSteps: (
 });
 
 export const assumeRoleWithIdc = async (
-  args: { account?: string; role: string },
-  idc: { id: string; region: string },
-  request: { account?: string; permissionSet: string }
+  args: { account?: string; permissionSet: string },
+  idc: { id: string; region: string }
 ): Promise<AwsCredentials> =>
   await cached(
-    `aws-idc-${args.account}-${args.role}`,
+    `aws-idc-${args.account}-${args.permissionSet}`,
     async () => {
       const { region } = idc;
       // fetch aws client secrets
-      const clientSecrets = await fetchClientSecrets(region);
+      const clientSecrets = await registerClient(region);
       const oidcResponse = await cached(
         `aws-idc-device-authorization`,
         async () => {
@@ -178,12 +181,11 @@ export const assumeRoleWithIdc = async (
         },
         (data) => data.expiresAt < Date.now()
       );
-
-      print2(`OIDC Response: ${JSON.stringify(oidcResponse, null, 2)}`);
-
       // fetch device authorization
-      const credentials = await fetchAWSCredentials(oidcResponse, idc, request);
-      print2(`${JSON.stringify(credentials, null, 2)}`);
+      const credentials = await exchangeForAWSCredentials(oidcResponse, idc, {
+        account: args.account,
+        permissionSet: args.permissionSet,
+      });
       return {
         AWS_ACCESS_KEY_ID: credentials.roleCredentials.accessKeyId,
         AWS_SECRET_ACCESS_KEY: credentials.roleCredentials.secretAccessKey,

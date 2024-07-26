@@ -138,7 +138,7 @@ export const oidcLoginSteps: (
   org: OrgData,
   scope: string
 ) => ({
-  preValidate: async () => {
+  setup: async () => {
     if (org.providerType === undefined) {
       throw "Login requires a configured provider type.";
     }
@@ -170,7 +170,7 @@ export const oidcLoginSteps: (
 
 /** Logs in to an Identity Provider via OIDC */
 export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A, T>) => {
-  await steps.preValidate?.();
+  await steps.setup?.();
   const response = await steps.authorize();
   return await steps.activate(response);
 };
