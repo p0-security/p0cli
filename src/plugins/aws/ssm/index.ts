@@ -10,21 +10,20 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isFederatedLogin } from "../../../commands/aws/role";
 import {
-  ScpCommandArgs,
-  SshCommandArgs,
   AwsSshIdcRequest,
   AwsSshRoleRequest,
+  ScpCommandArgs,
+  SshCommandArgs,
   SshRequest,
 } from "../../../commands/shared";
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
-import { throwAssertNever } from "../../../util";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
 import { getAwsConfig } from "../config";
 import { assumeRoleWithIdc } from "../idc/index";
-import { AwsCredentials, AwsIdcLogin, AwsItem } from "../types";
+import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
