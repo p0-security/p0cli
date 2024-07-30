@@ -16,16 +16,19 @@ import { SpawnOptionsWithoutStdio, spawn } from "node:child_process";
 /** Spawns a subprocess with given command, args, and options.
  * May write content to its standard input.
  * Stdout and stderr of the subprocess is printed to stderr in debug mode.
- * The returned promise resolves or rejects with the exit code. */
-const asyncSpawn = async (
+ * The returned promise resolves with stdout or rejects with stderr of the subprocess. */
+export const asyncSpawn = async (
   { debug }: AgentArgs,
   command: string,
   args?: ReadonlyArray<string>,
   options?: SpawnOptionsWithoutStdio,
   writeStdin?: string
 ) =>
-  new Promise<number>((resolve, reject) => {
+  new Promise<string>((resolve, reject) => {
     const child = spawn(command, args, options);
+
+    let stdout = "";
+    let stderr = "";
 
     if (writeStdin) {
       if (!child.stdin) return reject("Child process has no stdin");
@@ -33,22 +36,29 @@ const asyncSpawn = async (
     }
 
     child.stdout.on("data", (data) => {
+      const str = data.toString("utf-8");
+      stdout += str;
       if (debug) {
-        print2(data.toString("utf-8"));
+        print2(str);
       }
     });
 
     child.stderr.on("data", (data) => {
+      const str = data.toString("utf-8");
+      stderr += str;
       if (debug) {
         print2(data.toString("utf-8"));
       }
     });
 
     child.on("exit", (code) => {
-      if (code !== 0) {
-        return reject(code);
+      if (debug) {
+        print2("Process exited with code " + code);
       }
-      resolve(code);
+      if (code !== 0) {
+        return reject(stderr);
+      }
+      resolve(stdout);
     });
 
     if (writeStdin) {

@@ -63,6 +63,7 @@ const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
  * Note that each attempt consumes ~ 1 s.
  */
 const MAX_SSH_RETRIES = 30;
+const GCP_MAX_SSH_RETRIES = 120; // GCP requires more time to propagate access
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
@@ -174,7 +175,7 @@ type SpawnSshNodeOptions = {
   credential?: AwsCredentials;
   command: string;
   args: string[];
-  attemptsRemaining?: number;
+  attemptsRemaining: number;
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
@@ -214,7 +215,7 @@ async function spawnSshNode(
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        const attemptsRemaining = options?.attemptsRemaining ?? MAX_SSH_RETRIES;
+        const attemptsRemaining = options.attemptsRemaining;
         if (options.debug) {
           print2(
             `Waiting for access to propagate. Retrying SSH session... (remaining attempts: ${attemptsRemaining})`
@@ -385,6 +386,9 @@ export const sshOrScp = async (
       );
     }
 
+    const maxRetries =
+      data.type === "gcloud" ? GCP_MAX_SSH_RETRIES : MAX_SSH_RETRIES;
+
     return spawnSshNode({
       credential,
       abortController: new AbortController(),
@@ -393,6 +397,7 @@ export const sshOrScp = async (
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: data.type,
+      attemptsRemaining: maxRetries,
     });
   });
 };

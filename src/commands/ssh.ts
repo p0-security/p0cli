@@ -94,15 +94,15 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { request } = result;
+  const { request, privateKey, linuxUserName } = result;
 
   await sshOrScp(
     authn,
-    requestToSsh(request),
+    requestToSsh(request, { gcloud: { linuxUserName } }),
     {
       ...args,
       destination,
     },
-    result.privateKey
+    privateKey
   );
 };

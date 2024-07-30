@@ -12,6 +12,7 @@ import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { AwsSsh } from "../plugins/aws/types";
+import { importSshKey } from "../plugins/google/ssh-key";
 import { GcpSsh } from "../plugins/google/types";
 import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
@@ -59,13 +60,13 @@ export type BaseSshCommandArgs = {
   reason?: string;
   account?: string;
   provider?: "aws" | "gcloud";
+  debug?: boolean;
 };
 
 export type ScpCommandArgs = BaseSshCommandArgs & {
   source: string;
   destination: string;
   recursive?: boolean;
-  debug?: boolean;
 };
 
 export type SshCommandArgs = BaseSshCommandArgs & {
@@ -76,7 +77,6 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   A?: boolean;
   arguments: string[];
   command?: string;
-  debug?: boolean;
 };
 
 const validateSshInstall = async (
@@ -187,10 +187,19 @@ export const provisionRequest = async (
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
-  return { request: provisionedRequest, publicKey, privateKey };
+  const posixAccount =
+    provisionedRequest.permission.spec.type === "gcloud"
+      ? await importSshKey(publicKey, { debug: args.debug })
+      : undefined;
+  const linuxUserName = posixAccount?.username;
+
+  return { request: provisionedRequest, publicKey, privateKey, linuxUserName };
 };
 
-export const requestToSsh = (request: Request<PluginRequest>): SshRequest => {
+export const requestToSsh = (
+  request: Request<PluginRequest>,
+  options: { gcloud: { linuxUserName?: string } }
+): SshRequest => {
   if (request.permission.spec.type === "aws") {
     const awsRequest = request as AwsSsh;
     return {
@@ -202,12 +211,16 @@ export const requestToSsh = (request: Request<PluginRequest>): SshRequest => {
       type: "aws",
     };
   } else if (request.permission.spec.type === "gcloud") {
+    if (!options.gcloud.linuxUserName) {
+      // We already throw a helpful error in ssh-key.ts importSshKey() - we should never hit this code path.
+      throw "Unexpected error: linuxUserName is required for Google Cloud destinations. Please contact support@p0.dev for assistance.";
+    }
     const gcpRequest = request as GcpSsh;
     return {
       id: gcpRequest.permission.spec.instanceName,
       projectId: gcpRequest.permission.spec.projectId,
       zone: gcpRequest.permission.spec.zone,
-      linuxUserName: gcpRequest.generated.ssh.linuxUserName,
+      linuxUserName: options.gcloud.linuxUserName,
       type: "gcloud",
     };
   } else {

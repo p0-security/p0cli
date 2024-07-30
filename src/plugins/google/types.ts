@@ -24,3 +24,28 @@ export type GcpSshPermission = {
 export type GcpSshGenerated = CommonSshGenerated;
 
 export type GcpSsh = PermissionSpec<"ssh", GcpSshPermission, GcpSshGenerated>;
+
+type PosixAccount = {
+  username: string;
+  uid: string;
+  gid: string;
+  operatingSystemType: string;
+  homeDirectory?: string;
+  primary?: boolean;
+};
+
+type SshPublicKey = {
+  key: string;
+  fingerprint?: string; // only returned in response object
+  expirationTimeUsec?: number; // optional
+};
+
+type LoginProfile = {
+  name: string;
+  posixAccounts: PosixAccount[];
+  sshPublicKeys: { [fingerprint: string]: SshPublicKey };
+};
+
+export type ImportSshPublicKeyResponse = {
+  loginProfile: LoginProfile;
+};

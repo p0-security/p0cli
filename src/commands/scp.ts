@@ -84,9 +84,9 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   if (!result) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
-  const { request, privateKey } = result;
+  const { request, privateKey, linuxUserName } = result;
 
-  const data = requestToSsh(request);
+  const data = requestToSsh(request, { gcloud: { linuxUserName } });
 
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(data, args);
