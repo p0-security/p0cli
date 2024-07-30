@@ -8,8 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
-import { asyncSpawn } from "../ssh-agent";
 import { ImportSshPublicKeyResponse } from "./types";
 
 /**
