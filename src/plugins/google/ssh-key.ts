@@ -12,6 +12,7 @@ import { print2 } from "../../drivers/stdio";
 import { asyncSpawn } from "../ssh-agent";
 import { ImportSshPublicKeyResponse } from "./types";
 
+
 /**
  * Adds an ssh public key to the user object's sshPublicKeys array in Google Workspace.
  * GCP OS Login uses these public keys to authenticate the user.
@@ -45,6 +46,7 @@ export const importSshKey = async (
   const url = `https://oslogin.googleapis.com/v1/users/${account}:importSshPublicKey`;
   const response = await fetch(url, {
     method: "POST",
+    // nosemgrep: p0_security.no-stringify-keys
     body: JSON.stringify({
       key: publicKey,
     }),
@@ -65,7 +67,7 @@ export const importSshKey = async (
     loginProfile.posixAccounts.find((account) => account.primary) ||
     loginProfile.posixAccounts[0];
   if (debug) {
-    print2(`Picked linux user name: ${posixAccount}`);
+    print2(`Picked linux user name: ${posixAccount?.username}`);
   }
   if (!posixAccount) {
     throw "No POSIX accounts configured for the user. Ask your Google Workspace administrator to configure the user's POSIX account.";
