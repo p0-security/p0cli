@@ -53,7 +53,7 @@ export const cached = async <T>(
     }
 
     const data = JSON.parse((await fs.readFile(loc)).toString("utf-8")) as T;
-    if (hasExpired && hasExpired(data)) {
+    if (hasExpired?.(data)) {
       await fs.rm(loc);
       return await loadCache();
     }

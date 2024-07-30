@@ -11,13 +11,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
-import {
-  AuthorizeResponse,
-  OidcLoginSteps,
-  TokenResponse,
-} from "../../types/oidc";
+import { AuthorizeResponse, OidcLoginStepHelpers } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { sleep, throwAssertNever } from "../../util";
+import { sleep } from "../../util";
 import { capitalize } from "lodash";
 import open from "open";
 
@@ -29,40 +25,17 @@ export const validateProviderDomain = (org: OrgData) => {
 
 /** Executes the first step of a device-authorization grant flow */
 // cf. https://developer.okta.com/docs/guides/device-authorization-grant/main/
-export const authorize = async <T>(request: {
-  url: string;
-  init: RequestInit;
-}) => {
+export const authorize = async <T>(
+  request: {
+    url: string;
+    init: RequestInit;
+  },
+  validateResponse?: (response: Response) => Promise<Response>
+) => {
   const { url, init } = request;
   const response = await fetch(url, init);
-  await validateResponse(response);
+  await validateResponse?.(response);
   return (await response.json()) as T;
-};
-
-const oidcAuthorizeRequestBuilder = (org: OrgData, scope: string) => {
-  if (org.providerType === undefined) {
-    throw "Login requires a configured provider type.";
-  }
-
-  validateProviderDomain(org);
-  // This is the "org" authorization server; the okta.apps.* scopes are not
-  // available with custom authorization servers
-  return {
-    init: {
-      method: "POST",
-      headers: OIDC_HEADERS,
-      body: urlEncode({
-        client_id: org.clientId,
-        scope,
-      }),
-    },
-    url:
-      org.providerType === "okta"
-        ? `https:${org.providerDomain}/oauth2/v1/device/authorize`
-        : org.providerType === "ping"
-          ? `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`
-          : throwAssertNever(org.providerType),
-  };
 };
 
 /** Attempts to fetch this device's OIDC token
@@ -87,90 +60,126 @@ export const fetchOidcToken = async <T>(request: {
   return (await response.json()) as T;
 };
 
-const oidcRequestBuilder = (org: OrgData, authorize: AuthorizeResponse) => {
+const providerType: (org: OrgData) => NonNullable<string> = (org) => {
   if (org.providerType === undefined) {
     throw "Login requires a configured provider type.";
   }
-  validateProviderDomain(org);
-
-  return {
-    url:
-      org.providerType === "okta"
-        ? `https:${org.providerDomain}/oauth2/v1/token`
-        : org.providerType === "ping"
-          ? `https://${org.providerDomain}/${org.environmentId}/as/token`
-          : throwAssertNever(org.providerType),
-    init: {
-      method: "POST",
-      headers: OIDC_HEADERS,
-      body: urlEncode({
-        client_id: org.clientId,
-        device_code: authorize.device_code,
-        grant_type: DEVICE_GRANT_TYPE,
-      }),
-    },
-  };
+  return org.providerType;
 };
 
 /** Waits until user device authorization is complete
  *
  * Returns the OIDC token after completion.
  */
-export const waitForActivation =
-  <A, T>(authorize: A & { interval: number }) =>
-  async (
-    getExpiry: (authorize: A) => number, // Aws implementation differs from standard OIDC response, need function to extract expiry
-    fetchToken: (authorize: A) => Promise<T | undefined>
-  ) => {
-    const start = Date.now();
-    while (Date.now() - start <= getExpiry(authorize) * 1e3) {
-      const response = await fetchToken(authorize);
-      if (!response) await sleep(authorize.interval * 1e3);
-      else return response;
-    }
-    throw "Expired awaiting in-browser authorization.";
-  };
+export const waitForActivation = async <A, T>(
+  authorize: A,
+  extractExpiryInterval: (authorize: A) => {
+    expires_in: number;
+    interval: number;
+  }, // Aws implementation differs from standard OIDC response, need function to extract expiry
+  tokenRequest: { url: string; init: RequestInit }
+) => {
+  const start = Date.now();
+  const { expires_in, interval } = extractExpiryInterval(authorize);
+  while (Date.now() - start <= expires_in * 1e3) {
+    const response = await fetchOidcToken<T>(tokenRequest);
+    if (!response) await sleep(interval * 1e3);
+    else return response;
+  }
+  throw "Expired awaiting in-browser authorization.";
+};
 
-export const oidcLoginSteps: (
+export const oidcLoginSteps = (
   org: OrgData,
-  scope: string
-) => OidcLoginSteps<AuthorizeResponse, TokenResponse> = (
-  org: OrgData,
-  scope: string
-) => ({
-  setup: async () => {
+  scope: string,
+  urls: () => { deviceAuthorizationUrl: string; tokenUrl: string }
+) => {
+  const { deviceAuthorizationUrl, tokenUrl } = urls();
+
+  const buildOidcAuthorizeRequest = () => {
     if (org.providerType === undefined) {
       throw "Login requires a configured provider type.";
     }
-  },
-  authorize: async () => {
-    const authorizeResponse = await authorize<AuthorizeResponse>(
-      oidcAuthorizeRequestBuilder(org, scope)
-    );
-    print2(`Please use the opened browser window to continue your P0 login.
-  
-      When prompted, confirm that ${capitalize(org.providerType)} displays this code:
-      
-        ${authorizeResponse.user_code}
-      
-      Waiting for authorization...
-      `);
-    void open(authorizeResponse.verification_uri_complete);
-    return authorizeResponse;
-  },
-  activate: async (authorize) =>
-    await waitForActivation<AuthorizeResponse, TokenResponse>(authorize)(
-      (authorizeResponse) => authorizeResponse.expires_in,
-      (authorizeResponse) =>
-        fetchOidcToken<TokenResponse>(
-          oidcRequestBuilder(org, authorizeResponse)
-        )
-    ),
-});
+
+    validateProviderDomain(org);
+    // This is the "org" authorization server; the okta.apps.* scopes are not
+    // available with custom authorization servers
+    return {
+      init: {
+        method: "POST",
+        headers: OIDC_HEADERS,
+        body: urlEncode({
+          client_id: org.clientId,
+          scope,
+        }),
+      },
+      url: deviceAuthorizationUrl,
+    };
+  };
+  const buildOidcTokenRequest = (authorize: AuthorizeResponse) => {
+    if (org.providerType === undefined) {
+      throw "Login requires a configured provider type.";
+    }
+    validateProviderDomain(org);
+
+    return {
+      url: tokenUrl,
+      init: {
+        method: "POST",
+        headers: OIDC_HEADERS,
+        body: urlEncode({
+          client_id: org.clientId,
+          device_code: authorize.device_code,
+          grant_type: DEVICE_GRANT_TYPE,
+        }),
+      },
+    };
+  };
+  return {
+    providerType: providerType(org),
+    validateResponse,
+    buildAuthorizeRequest: buildOidcAuthorizeRequest,
+    buildTokenRequest: buildOidcTokenRequest,
+    processAuthzExpiry: (authorize) => ({
+      expires_in: authorize.expires_in,
+      interval: authorize.interval,
+    }),
+    processAuthzResponse: (authorize) => ({
+      user_code: authorize.user_code,
+      verification_uri_complete: authorize.verification_uri_complete,
+    }),
+  } as OidcLoginStepHelpers<AuthorizeResponse>;
+};
 
 /** Logs in to an Identity Provider via OIDC */
-export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A, T>) => {
-  await steps.setup?.();
-  const response = await steps.authorize();
-  return await steps.activate(response);
+export const oidcLogin = async <A, T>(context: OidcLoginStepHelpers<A>) => {
+  const {
+    providerType,
+    buildAuthorizeRequest,
+    buildTokenRequest,
+    processAuthzExpiry,
+    processAuthzResponse,
+    validateResponse,
+  } = context;
+  const deviceAuthorizationResponse = await authorize<A>(
+    buildAuthorizeRequest(),
+    validateResponse
+  );
+  const { user_code, verification_uri_complete } = processAuthzResponse(
+    deviceAuthorizationResponse
+  );
+  print2(`Please use the opened browser window to continue your P0 login.
+
+    When prompted, confirm that ${capitalize(providerType)} displays this code:
+    
+      ${user_code}
+    
+    Waiting for authorization...
+    `);
+  void open(verification_uri_complete);
+  return await waitForActivation<A, T>(
+    deviceAuthorizationResponse,
+    processAuthzExpiry,
+    buildTokenRequest(deviceAuthorizationResponse)
+  );
 };

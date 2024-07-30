@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { Identity } from "../../types/identity";
-import { TokenResponse } from "../../types/oidc";
+import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { AwsFederatedLogin } from "../aws/types";
 import {
@@ -80,7 +80,17 @@ const fetchSamlResponse = async (
 
 /** Logs in to Okta via OIDC */
 export const oktaLogin = async (org: OrgData) =>
-  oidcLogin(oidcLoginSteps(org, "openid email profile okta.apps.sso"));
+  oidcLogin<AuthorizeResponse, TokenResponse>(
+    oidcLoginSteps(org, "openid email profile okta.apps.sso", () => {
+      if (org.providerType !== "okta") {
+        throw `Invalid provider type ${org.providerType}`;
+      }
+      return {
+        deviceAuthorizationUrl: `https://${org.providerDomain}/oauth2/v1/device/authorize`,
+        tokenUrl: `https://${org.providerDomain}/oauth2/v1/token`,
+      };
+    })
+  );
 
 /** Retrieves a SAML response for an okta app */
 // TODO: Inject Okta app

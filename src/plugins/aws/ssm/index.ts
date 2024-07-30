@@ -19,11 +19,12 @@ import {
 import { PRIVATE_KEY_PATH } from "../../../common/keys";
 import { print2 } from "../../../drivers/stdio";
 import { Authn } from "../../../types/identity";
+import { throwAssertNever } from "../../../util";
 import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
 import { getAwsConfig } from "../config";
 import { assumeRoleWithIdc } from "../idc/index";
-import { AwsCredentials } from "../types";
+import { AwsConfig, AwsCredentials, AwsItem, AwsLogin } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
@@ -267,12 +268,6 @@ const transformForShell = (args: string[]) => {
   });
 };
 
-export const isIdcRequest = (data: SshRequest): data is AwsSshIdcRequest =>
-  "permissionSet" in data;
-
-export const isRoleRequest = (data: SshRequest): data is AwsSshRoleRequest =>
-  "role" in data;
-
 export const sshOrScp = async (
   authn: Authn,
   data: SshRequest,
@@ -287,35 +282,26 @@ export const sshOrScp = async (
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
   const { config } = await getAwsConfig(authn, data.accountId);
-  let credential: AwsCredentials;
-  if (isIdcRequest(data)) {
-    credential = await assumeRoleWithIdc(
-      {
-        account: data.accountId,
-        permissionSet: data.permissionSet,
-      },
-      {
-        id: data.idcId,
-        region: data.idcRegion,
-      }
-    );
-  } else if (isFederatedLogin(config) && isRoleRequest(data)) {
-    credential = await assumeRoleWithOktaSaml(authn, {
-      account: data.accountId,
-      role: data.role,
-    });
-  } else {
-    throw `Unsupported login type: ${config.login?.type}`;
+  if (!config.login?.type || config.login?.type === "iam") {
+    throw "This account is not configured for SSH access via the P0 CLI";
   }
+
+  const credential =
+    config.login?.type === "idc"
+      ? await assumeRoleWithIdc(data as AwsSshIdcRequest)
+      : config.login?.type === "federated"
+        ? await assumeRoleWithOktaSaml(authn, data as AwsSshRoleRequest)
+        : throwAssertNever(config.login);
+
   return withSshAgent(cmdArgs, async () => {
     const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
 
     // TODO: Modify commands to add the ability to get permission set commands
-    if (cmdArgs.debug && isRoleRequest(data)) {
+    if (cmdArgs.debug && isFederatedLogin(config)) {
       const reproCommands = [
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,
-        `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
+        `eval $(p0 aws role assume ${(data as AwsSshRoleRequest).role} --account ${data.accountId})`,
         `${command} ${transformForShell(args).join(" ")}`,
       ];
       print2(

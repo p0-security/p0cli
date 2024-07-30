@@ -13,18 +13,27 @@ import { sleep } from "../util";
 const MAX_RETRIES = 3;
 const MAX_RETRY_BACK_OFF_TIME = 10000;
 
-export async function retryWithBackOff<T>(
-  cb: () => Promise<T>,
-  retryPredicate: (error: any) => boolean,
-  retries: number = MAX_RETRIES
+/**
+ * Retries an operation with a delay between retries
+ * @param operation operation to retry
+ * @param when condition to retry
+ * @param retries number of retries
+ * @param delay time to wait before retrying
+ * @returns
+ */
+export async function retryWithSleep<T>(
+  operation: () => Promise<T>,
+  when: (error: unknown) => boolean,
+  retries: number = MAX_RETRIES,
+  delay: number = MAX_RETRY_BACK_OFF_TIME
 ): Promise<T> {
   try {
-    return await cb();
+    return await operation();
   } catch (error: any) {
-    if (retryPredicate(error)) {
+    if (when(error)) {
       if (retries > 0) {
-        await sleep(MAX_RETRY_BACK_OFF_TIME);
-        return retryWithBackOff(cb, retryPredicate, retries - 1);
+        await sleep(delay);
+        return retryWithSleep(operation, when, retries - 1);
       }
     }
     throw error;

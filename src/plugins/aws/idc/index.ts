@@ -8,30 +8,27 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { retryWithBackOff } from "../../../common/backoff";
+import { validateResponse } from "../../../common/fetch";
+import { retryWithSleep } from "../../../common/retry";
 import { cached } from "../../../drivers/auth";
-import { print2 } from "../../../drivers/stdio";
 import {
-  AWSTokenResponse,
-  AWSClientInformation,
   AWSAuthorizeResponse,
+  AWSClientInformation,
+  AWSTokenResponse,
 } from "../../../types/aws/oidc";
-import { OidcLoginSteps } from "../../../types/oidc";
-import {
-  authorize,
-  DEVICE_GRANT_TYPE,
-  fetchOidcToken,
-  oidcLogin,
-  waitForActivation,
-} from "../../oidc/login";
+import { OidcLoginStepHelpers } from "../../../types/oidc";
+import { DEVICE_GRANT_TYPE, oidcLogin } from "../../oidc/login";
 import { AwsCredentials } from "../types";
-import open from "open";
+
+const AWS_TOKEN_EXPIRY = 3600e3;
+const AWS_CLIENT_TOKEN_EXPIRY = 7.776e9;
+const AWS_SSO_SCOPES = ["sso:account:access"];
 
 export const registerClient = async (
   region: string
 ): Promise<AWSClientInformation> =>
   await cached(
-    `aws-idc-client`,
+    "aws-idc-client",
     async (): Promise<AWSClientInformation> => {
       const init = {
         method: "POST",
@@ -39,7 +36,7 @@ export const registerClient = async (
           clientName: "p0Cli",
           clientType: "public",
           grantTypes: [DEVICE_GRANT_TYPE],
-          scopes: ["sso:account:access"],
+          scopes: AWS_SSO_SCOPES,
         }),
       };
       const response = await fetch(
@@ -48,152 +45,150 @@ export const registerClient = async (
       );
       return await response.json();
     },
-    {
-      duration: 7.776e9, // the token has lifetime of 90 days
-    },
+    { duration: AWS_CLIENT_TOKEN_EXPIRY }, // the token has lifetime of 90 days
     (data) => data.clientSecretExpiresAt < Date.now()
   );
 
-// exchange the oidc response for aws credentials
-const exchangeForAWSCredentials = async (
-  oidcResponse: AWSTokenResponse,
-  idc: { id: string; region: string },
-  request: { account?: string; permissionSet: string }
-) => {
-  return await retryWithBackOff(
-    async () => {
-      const init = {
-        method: "GET",
-        headers: {
-          "x-amz-sso_bearer_token": oidcResponse.accessToken,
-        },
-      };
-      const { account, permissionSet } = request;
-      const { region } = idc;
-      const response = await fetch(
-        `https://portal.sso.${region}.amazonaws.com/federation/credentials?account_id=${account}&role_name=${permissionSet}`,
-        init
-      );
-      if (response.ok) return await response.json();
-      throw new Error(
-        `Failed to fetch AWS credentials: ${response.statusText}`
-      );
-    },
-    () => true,
-    3
-  );
-};
-
-const idcRequestBuilder = (
-  clientCredentials: { clientId: string; clientSecret: string },
-  idc: { id: string; region: string },
-  authorizeResponse: AWSAuthorizeResponse
-) => {
-  const { clientId, clientSecret } = clientCredentials;
-  const { region } = idc;
-
-  return {
-    url: `https://oidc.${region}.amazonaws.com/token`,
-    init: {
-      method: "POST",
-      body: JSON.stringify({
-        clientId,
-        clientSecret,
-        deviceCode: authorizeResponse.deviceCode,
-        grantType: DEVICE_GRANT_TYPE,
-      }),
-    },
-  };
-};
-
-const idcAuthorizeRequestBuilder = (
+const awsIdcHelpers = (
   clientCredentials: { clientId: string; clientSecret: string },
   idc: { id: string; region: string }
 ) => {
   const { clientId, clientSecret } = clientCredentials;
   const { id, region } = idc;
 
+  const buildOidcAuthorizeRequest = () => {
+    return {
+      init: {
+        method: "POST",
+        body: JSON.stringify({
+          clientId,
+          clientSecret,
+          startUrl: `https://${id}.awsapps.com/start`,
+        }),
+      },
+      url: `https://oidc.${region}.amazonaws.com/device_authorization`,
+    };
+  };
+  const buildIdcTokenRequest = (authorizeResponse: AWSAuthorizeResponse) => {
+    return {
+      url: `https://oidc.${region}.amazonaws.com/token`,
+      init: {
+        method: "POST",
+        body: JSON.stringify({
+          clientId,
+          clientSecret,
+          deviceCode: authorizeResponse.deviceCode,
+          grantType: DEVICE_GRANT_TYPE,
+        }),
+      },
+    };
+  };
+  /**
+   * Exchanges the oidc token for AWS credentials for a given account and permission set
+   * @param oidcResponse oidc token response fot he oidc /token endpoint
+   * @param request accountId and permissionSet to exchange for AWS credentials
+   * @returns
+   */
+  const exchangeForAwsCredentials = async (
+    oidcResponse: AWSTokenResponse,
+    request: { accountId?: string; permissionSet: string }
+  ) => {
+    // There is a delay in between aws issuing sso token and it to be exchanged for AWS credentials
+    // encountered unauthorized error when exchanging token immediately
+    return await retryWithSleep(
+      async () => {
+        const init = {
+          method: "GET",
+          headers: {
+            "x-amz-sso_bearer_token": oidcResponse.accessToken,
+          },
+        };
+        const { accountId, permissionSet } = request;
+        if (accountId === undefined)
+          throw new Error("Could not find account Id for AWS SSO");
+        const params = new URLSearchParams();
+        params.append("account_id", accountId);
+        params.append("role_name", permissionSet);
+        const response = await fetch(
+          `https://portal.sso.${region}.amazonaws.com/federation/credentials?${params.toString()}`,
+          init
+        );
+        if (!response.ok)
+          throw new Error(
+            `Failed to fetch AWS credentials: ${response.statusText}`
+          );
+        return await response.json();
+      },
+      () => true,
+      3
+    );
+  };
+
   return {
-    init: {
-      method: "POST",
-      body: JSON.stringify({
-        clientId,
-        clientSecret,
-        startUrl: `https://${id}.awsapps.com/start`,
+    loginSteps: {
+      providerType: "AWS",
+      validateResponse,
+      buildAuthorizeRequest: buildOidcAuthorizeRequest,
+      buildTokenRequest: buildIdcTokenRequest,
+      processAuthzExpiry: (authorize) => ({
+        expires_in: authorize.expiresIn,
+        interval: authorize.interval,
       }),
-    },
-    url: `https://oidc.${region}.amazonaws.com/device_authorization`,
+      processAuthzResponse: (authorize) => ({
+        user_code: authorize.userCode,
+        verification_uri_complete: authorize.verificationUriComplete,
+      }),
+    } as OidcLoginStepHelpers<AWSAuthorizeResponse>,
+    exchangeForAwsCredentials,
   };
 };
 
-export const idcLoginSteps: (
-  clientCredentials: { clientId: string; clientSecret: string },
-  idc: { id: string; region: string }
-) => OidcLoginSteps<AWSAuthorizeResponse, AWSTokenResponse> = (
-  clientCredentials: { clientId: string; clientSecret: string },
-  idc: { id: string; region: string }
-) => ({
-  authorize: async () => {
-    const authorizeResponse = await authorize<AWSAuthorizeResponse>(
-      idcAuthorizeRequestBuilder(clientCredentials, idc)
-    );
-    print2(`Please use the opened browser window to continue your idc device authorization.
-  
-      When prompted, confirm that aws idc page displays this code:
-      
-        ${authorizeResponse.userCode}
-      
-      Waiting for authorization...
-      `);
-    void open(authorizeResponse.verificationUriComplete);
-    return authorizeResponse;
-  },
-  activate: async (authorizeResponse) =>
-    await waitForActivation<AWSAuthorizeResponse, AWSTokenResponse>(
-      authorizeResponse
-    )(
-      (authorize) => authorize.expiresIn,
-      (authorize) =>
-        fetchOidcToken<AWSTokenResponse>(
-          idcRequestBuilder(clientCredentials, idc, authorize)
-        )
-    ),
-});
-
-export const assumeRoleWithIdc = async (
-  args: { account?: string; permissionSet: string },
-  idc: { id: string; region: string }
-): Promise<AwsCredentials> =>
+/**
+ * Returns AWS credentials for the specified account and permission set for the authorized user
+ * @param args accountId, permissionSet and idc to assume role associated with the permission set
+ * @returns
+ */
+export const assumeRoleWithIdc = async (args: {
+  accountId?: string;
+  permissionSet: string;
+  idc: { id: string; region: string };
+}): Promise<AwsCredentials> =>
   await cached(
-    `aws-idc-${args.account}-${args.permissionSet}`,
+    `aws-idc-${args.accountId}-${args.permissionSet}`,
     async () => {
+      const { idc } = args;
       const { region } = idc;
-      // fetch aws client secrets
       const clientSecrets = await registerClient(region);
+
+      const { loginSteps, exchangeForAwsCredentials } = awsIdcHelpers(
+        clientSecrets,
+        idc
+      );
+
       const oidcResponse = await cached(
-        `aws-idc-device-authorization`,
+        "aws-idc-device-authorization",
         async () => {
-          const data = await oidcLogin(idcLoginSteps(clientSecrets, idc));
+          const data = await oidcLogin<AWSAuthorizeResponse, AWSTokenResponse>(
+            loginSteps
+          );
           return { ...data, expiresAt: Date.now() + data.expiresIn * 1e3 };
         },
-        {
-          duration: 3600e3,
-        },
+        { duration: AWS_TOKEN_EXPIRY },
         (data) => data.expiresAt < Date.now()
       );
-      // fetch device authorization
-      const credentials = await exchangeForAWSCredentials(oidcResponse, idc, {
-        account: args.account,
+
+      const credentials = await exchangeForAwsCredentials(oidcResponse, {
+        accountId: args.accountId,
         permissionSet: args.permissionSet,
       });
       return {
         AWS_ACCESS_KEY_ID: credentials.roleCredentials.accessKeyId,
         AWS_SECRET_ACCESS_KEY: credentials.roleCredentials.secretAccessKey,
         AWS_SESSION_TOKEN: credentials.roleCredentials.sessionToken,
-        AWS_SECURITY_TOKEN: credentials.roleCredentials.securityToken ?? "", // portal does not return this value
+        AWS_SECURITY_TOKEN: credentials.roleCredentials.sessionToken, // portal does not return security value, setting it to session token for safety
         expiresAt: credentials.roleCredentials.expiration,
       };
     },
-    { duration: 3600e3 },
+    { duration: AWS_TOKEN_EXPIRY },
     (data) => data.expiresAt < Date.now()
   );

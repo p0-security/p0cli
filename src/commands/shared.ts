@@ -41,8 +41,7 @@ export type BaseSshRequest = {
 export type AwsSshRoleRequest = BaseSshRequest & { role: string; type: "role" };
 export type AwsSshIdcRequest = BaseSshRequest & {
   permissionSet: string;
-  idcId: string;
-  idcRegion: string;
+  idc: { id: string; region: string };
   type: "idc";
 };
 
@@ -174,23 +173,22 @@ export const provisionRequest = async (
 };
 
 export const requestToSsh = (request: AwsSsh): SshRequest => {
-  return !request.generated.idc
-    ? {
-        id: request.permission.spec.instanceId,
-        accountId: request.permission.spec.accountId,
-        region: request.permission.spec.region,
-        role: request.generated.name,
-        linuxUserName: request.generated.ssh.linuxUserName,
-        type: "role",
-      }
+  const { permission, generated } = request;
+  const {
+    spec: { instanceId, accountId, region },
+  } = permission;
+  const {
+    idc,
+    ssh: { linuxUserName },
+    name,
+  } = generated;
+  const common = { linuxUserName, accountId, region, id: instanceId };
+  return !idc
+    ? { ...common, role: name, type: "role" }
     : {
-        id: request.permission.spec.instanceId,
-        accountId: request.permission.spec.accountId,
-        region: request.permission.spec.region,
-        permissionSet: request.generated.name,
-        linuxUserName: request.generated.ssh.linuxUserName,
-        idcId: request.generated.idc.id,
-        idcRegion: request.generated.idc.region,
+        ...common,
+        idc,
+        permissionSet: name,
         type: "idc",
       };
 };

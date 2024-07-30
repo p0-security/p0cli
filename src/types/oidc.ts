@@ -51,8 +51,20 @@ export type TokenErrorResponse = {
     | "slow_down";
 };
 
-export type OidcLoginSteps<AuthorizeResponse, TokenResponse> = {
-  setup?: () => Promise<void>;
-  authorize: () => Promise<AuthorizeResponse>;
-  activate: (response: AuthorizeResponse) => Promise<TokenResponse>;
+export type OidcLoginStepHelpers<A> = {
+  providerType: string;
+  validateResponse: (response: Response) => Promise<Response>;
+  buildAuthorizeRequest: () => { url: string; init: RequestInit };
+  buildTokenRequest: (authorize: A) => {
+    url: string;
+    init: RequestInit;
+  };
+  processAuthzResponse: (authorize: A) => {
+    user_code: string;
+    verification_uri_complete: string;
+  };
+  processAuthzExpiry: (authorize: A) => {
+    expires_in: number;
+    interval: number;
+  };
 };

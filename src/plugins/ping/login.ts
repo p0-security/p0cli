@@ -8,9 +8,20 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { oidcLogin, oidcLoginSteps } from "../oidc/login";
 
 /** Logs in to PingOne via OIDC */
 export const pingLogin = async (org: OrgData) =>
-  oidcLogin(oidcLoginSteps(org, "openid email profile"));
+  oidcLogin<AuthorizeResponse, TokenResponse>(
+    oidcLoginSteps(org, "openid email profile", () => {
+      if (org.providerType !== "ping" || org.providerType === undefined) {
+        throw `Invalid provider type ${org.providerType}`;
+      }
+      return {
+        deviceAuthorizationUrl: `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`,
+        tokenUrl: `https://${org.providerDomain}/${org.environmentId}/as/token`,
+      };
+    })
+  );

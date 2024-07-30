@@ -42,7 +42,7 @@ export type AwsFederatedLogin = {
   };
 };
 
-type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
+export type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
 
 export type AwsItemConfig = {
   label?: string;
