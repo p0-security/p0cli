@@ -24,7 +24,7 @@ import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { withSshAgent } from "../../ssh-agent";
 import { getAwsConfig } from "../config";
 import { assumeRoleWithIdc } from "../idc/index";
-import { AwsConfig, AwsCredentials, AwsItem, AwsLogin } from "../types";
+import { AwsCredentials } from "../types";
 import { ensureSsmInstall } from "./install";
 import {
   ChildProcessByStdio,
