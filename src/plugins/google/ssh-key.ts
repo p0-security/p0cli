@@ -12,7 +12,6 @@ import { print2 } from "../../drivers/stdio";
 import { asyncSpawn } from "../ssh-agent";
 import { ImportSshPublicKeyResponse } from "./types";
 
-
 /**
  * Adds an ssh public key to the user object's sshPublicKeys array in Google Workspace.
  * GCP OS Login uses these public keys to authenticate the user.
