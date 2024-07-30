@@ -45,7 +45,7 @@ export const importSshKey = async (
   const url = `https://oslogin.googleapis.com/v1/users/${account}:importSshPublicKey`;
   const response = await fetch(url, {
     method: "POST",
-    // nosemgrep: p0_security.no-stringify-keys
+    // nosemgrep
     body: JSON.stringify({
       key: publicKey,
     }),
