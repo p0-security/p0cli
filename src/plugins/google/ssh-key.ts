@@ -45,7 +45,6 @@ export const importSshKey = async (
   const url = `https://oslogin.googleapis.com/v1/users/${account}:importSshPublicKey`;
   const response = await fetch(url, {
     method: "POST",
-    // nosemgrep
     body: JSON.stringify({
       key: publicKey,
     }),
@@ -64,6 +63,7 @@ export const importSshKey = async (
   // Find the primary POSIX account for the user, or the first in the array
   const posixAccount =
     loginProfile.posixAccounts.find((account) => account.primary) ||
+    // nosemgrep no-stringify-keys
     loginProfile.posixAccounts[0];
   if (debug) {
     print2(`Picked linux user name: ${posixAccount?.username}`);
