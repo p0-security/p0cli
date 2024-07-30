@@ -11,19 +11,22 @@ You should have received a copy of the GNU General Public License along with @p0
 import { createKeyPair } from "../common/keys";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
+import { awsRequestToSsh } from "../plugins/aws/ssh";
 import { AwsSsh } from "../plugins/aws/types";
+import { gcpRequestToSsh } from "../plugins/google/ssh";
 import { importSshKey } from "../plugins/google/ssh-key";
 import { GcpSsh } from "../plugins/google/types";
 import { SshConfig } from "../plugins/ssh/types";
 import { Authn } from "../types/identity";
 import {
+  CliRequest,
   DENIED_STATUSES,
   DONE_STATUSES,
   ERROR_STATUSES,
   PluginRequest,
   Request,
 } from "../types/request";
-import { assertNever } from "../util";
+import { assertNever, throwAssertNever } from "../util";
 import { request } from "./request";
 import { getDoc, onSnapshot } from "firebase/firestore";
 import { pick } from "lodash";
@@ -143,6 +146,21 @@ const waitForProvisioning = async <P extends PluginRequest>(
   return result;
 };
 
+const pluginToCliRequest = async (
+  request: Request<PluginRequest>
+): Promise<Request<CliRequest>> => {
+  return request.permission.spec.type === "gcloud"
+    ? ({
+        ...request,
+        cliLocalData: {
+          linuxUserName: await importSshKey(request.permission.spec.publicKey),
+        },
+      } as Request<GcpSsh>)
+    : request.permission.spec.type === "aws"
+      ? (request as Request<AwsSsh>)
+      : throwAssertNever(request.permission.spec);
+};
+
 export const provisionRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
@@ -187,42 +205,16 @@ export const provisionRequest = async (
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
-  const posixAccount =
-    provisionedRequest.permission.spec.type === "gcloud"
-      ? await importSshKey(publicKey, { debug: args.debug })
-      : undefined;
-  const linuxUserName = posixAccount?.username;
+  const cliRequest = await pluginToCliRequest(provisionedRequest);
 
-  return { request: provisionedRequest, publicKey, privateKey, linuxUserName };
+  return { request: cliRequest, publicKey, privateKey };
 };
 
-export const requestToSsh = (
-  request: Request<PluginRequest>,
-  options: { gcloud: { linuxUserName?: string } }
-): SshRequest => {
+export const requestToSsh = (request: Request<CliRequest>): SshRequest => {
   if (request.permission.spec.type === "aws") {
-    const awsRequest = request as AwsSsh;
-    return {
-      id: awsRequest.permission.spec.instanceId,
-      accountId: awsRequest.permission.spec.accountId,
-      region: awsRequest.permission.spec.region,
-      role: awsRequest.generated.name,
-      linuxUserName: awsRequest.generated.ssh.linuxUserName,
-      type: "aws",
-    };
+    return awsRequestToSsh(request as AwsSsh);
   } else if (request.permission.spec.type === "gcloud") {
-    if (!options.gcloud.linuxUserName) {
-      // We already throw a helpful error in ssh-key.ts importSshKey() - we should never hit this code path.
-      throw "Unexpected error: linuxUserName is required for Google Cloud destinations. Please contact support@p0.dev for assistance.";
-    }
-    const gcpRequest = request as GcpSsh;
-    return {
-      id: gcpRequest.permission.spec.instanceName,
-      projectId: gcpRequest.permission.spec.projectId,
-      zone: gcpRequest.permission.spec.zone,
-      linuxUserName: options.gcloud.linuxUserName,
-      type: "gcloud",
-    };
+    return gcpRequestToSsh(request as GcpSsh);
   } else {
     throw assertNever(request.permission.spec);
   }

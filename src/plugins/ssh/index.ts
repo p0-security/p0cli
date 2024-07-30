@@ -62,7 +62,7 @@ const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
  *
  * Note that each attempt consumes ~ 1 s.
  */
-const MAX_SSH_RETRIES = 30;
+const DEFAULT_MAX_SSH_RETRIES = 30;
 const GCP_MAX_SSH_RETRIES = 120; // GCP requires more time to propagate access
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
@@ -73,6 +73,7 @@ const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
  * There are 2 cases of unprovisioned access in AWS
  * 1. SSM:StartSession action is missing either on the SSM document (AWS-StartSSHSession) or the EC2 instance
  * 2. Temporary error when issuing an SCP command
+ *
  * 1: results in UNAUTHORIZED_START_SESSION_MESSAGE
  * 2: results in CONNECTION_CLOSED_MESSAGE
  *
@@ -387,7 +388,7 @@ export const sshOrScp = async (
     }
 
     const maxRetries =
-      data.type === "gcloud" ? GCP_MAX_SSH_RETRIES : MAX_SSH_RETRIES;
+      data.type === "gcloud" ? GCP_MAX_SSH_RETRIES : DEFAULT_MAX_SSH_RETRIES;
 
     return spawnSshNode({
       credential,

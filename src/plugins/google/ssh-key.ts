@@ -61,9 +61,11 @@ export const importSshKey = async (
   }
   const { loginProfile } = data;
   // Find the primary POSIX account for the user, or the first in the array
+  const linuxAccounts = loginProfile.posixAccounts.filter(
+    (account) => account.operatingSystemType === "LINUX"
+  );
   const posixAccount =
-    loginProfile.posixAccounts.find((account) => account.primary) ||
-    // nosemgrep no-stringify-keys
+    linuxAccounts.find((account) => account.primary) ||
     loginProfile.posixAccounts[0];
   if (debug) {
     print2(`Picked linux user name: ${posixAccount?.username}`);
@@ -71,5 +73,5 @@ export const importSshKey = async (
   if (!posixAccount) {
     throw "No POSIX accounts configured for the user. Ask your Google Workspace administrator to configure the user's POSIX account.";
   }
-  return posixAccount;
+  return posixAccount.username;
 };

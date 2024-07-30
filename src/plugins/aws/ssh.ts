@@ -8,16 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-type SshItemConfig = {
-  label?: string;
-  state: string;
-};
+import { SshRequest } from "../../commands/shared";
+import { AwsSsh } from "./types";
 
-export type SshConfig = {
-  "iam-write": Record<string, SshItemConfig>;
-};
-
-export type CommonSshPermissionSpec = {
-  publicKey: string;
-  sudo?: boolean;
+export const awsRequestToSsh: (request: AwsSsh) => SshRequest = (request) => {
+  return {
+    id: request.permission.spec.instanceId,
+    accountId: request.permission.spec.accountId,
+    region: request.permission.spec.region,
+    role: request.generated.name,
+    linuxUserName: request.generated.ssh.linuxUserName,
+    type: "aws",
+  };
 };

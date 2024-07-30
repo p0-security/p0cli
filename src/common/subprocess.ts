@@ -15,7 +15,10 @@ import { spawn, SpawnOptionsWithoutStdio } from "node:child_process";
 /** Spawns a subprocess with given command, args, and options.
  * May write content to its standard input.
  * Stdout and stderr of the subprocess is printed to stderr in debug mode.
- * The returned promise resolves with stdout or rejects with stderr of the subprocess. */
+ * The returned promise resolves with stdout or rejects with stderr of the subprocess.
+ *
+ * The captured output is expected to be relatively small.
+ * For larger outputs we should implement this with streams. */
 export const asyncSpawn = async (
   { debug }: AgentArgs,
   command: string,
@@ -26,6 +29,7 @@ export const asyncSpawn = async (
   new Promise<string>((resolve, reject) => {
     const child = spawn(command, args, options);
 
+    // Use streams for larger output
     let stdout = "";
     let stderr = "";
 

@@ -8,8 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { PermissionSpec } from "../../types/request";
-import { CommonSshGenerated, CommonSshPermissionSpec } from "../ssh/types";
+import { CliPermissionSpec, PermissionSpec } from "../../types/request";
+import { CommonSshPermissionSpec } from "../ssh/types";
 
 export type AwsCredentials = {
   AWS_ACCESS_KEY_ID: string;
@@ -71,8 +71,17 @@ export type AwsSshPermission = {
   type: "session";
 };
 
-export type AwsSshGenerated = CommonSshGenerated & {
+export type AwsSshGenerated = {
   name: string;
+  ssh: {
+    linuxUserName: string;
+  };
 };
 
-export type AwsSsh = PermissionSpec<"ssh", AwsSshPermission, AwsSshGenerated>;
+export type AwsPermissionSpec = PermissionSpec<
+  "ssh",
+  AwsSshPermission,
+  AwsSshGenerated
+>;
+
+export type AwsSsh = CliPermissionSpec<AwsPermissionSpec>;
