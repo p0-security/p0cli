@@ -41,14 +41,25 @@ export const SUPPORTED_PROVIDERS = ["aws", "gcloud"];
 
 export type SshRequest = AwsSshRequest | GcpSshRequest;
 
-export type AwsSshRequest = {
+export type BaseAwsSshRequest = {
   linuxUserName: string;
-  role: string;
   accountId: string;
   region: string;
   id: string;
   type: "aws";
 };
+
+export type AwsSshRoleRequest = BaseAwsSshRequest & {
+  role: string;
+  access: "role";
+};
+export type AwsSshIdcRequest = BaseAwsSshRequest & {
+  permissionSet: string;
+  idc: { id: string; region: string };
+  access: "idc";
+};
+
+export type AwsSshRequest = AwsSshIdcRequest | AwsSshRoleRequest;
 
 export type GcpSshRequest = {
   linuxUserName: string;

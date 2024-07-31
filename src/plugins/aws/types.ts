@@ -45,7 +45,7 @@ export type AwsFederatedLogin = {
   };
 };
 
-type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
+export type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
 
 export type AwsItemConfig = {
   label?: string;
@@ -75,6 +75,10 @@ export type AwsSshGenerated = {
   name: string;
   ssh: {
     linuxUserName: string;
+  };
+  idc?: {
+    region: string;
+    id: string;
   };
 };
 

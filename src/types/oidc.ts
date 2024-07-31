@@ -1,3 +1,5 @@
+import { LoginPluginType } from "../plugins/login";
+
 /** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
@@ -49,4 +51,22 @@ export type TokenErrorResponse = {
     | "missing parameter"
     | "not found"
     | "slow_down";
+};
+
+export type OidcLoginSteps<A> = {
+  providerType: LoginPluginType;
+  validateResponse: (response: Response) => Promise<Response>;
+  buildAuthorizeRequest: () => { url: string; init: RequestInit };
+  buildTokenRequest: (authorize: A) => {
+    url: string;
+    init: RequestInit;
+  };
+  processAuthzResponse: (authorize: A) => {
+    user_code: string;
+    verification_uri_complete: string;
+  };
+  processAuthzExpiry: (authorize: A) => {
+    expires_in: number;
+    interval: number;
+  };
 };

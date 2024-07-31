@@ -12,9 +12,9 @@ import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
 import {
-  ScpCommandArgs,
   provisionRequest,
   requestToSsh,
+  ScpCommandArgs,
   SshRequest,
   SUPPORTED_PROVIDERS,
 } from "./shared";

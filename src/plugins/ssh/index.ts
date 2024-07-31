@@ -13,11 +13,15 @@ import {
   SshCommandArgs,
   AwsSshRequest,
   SshRequest,
+  AwsSshRoleRequest,
+  AwsSshIdcRequest,
 } from "../../commands/shared";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { assertNever, throwAssertNever } from "../../util";
+import { getAwsConfig } from "../aws/config";
+import { assumeRoleWithIdc } from "../aws/idc";
 import { ensureSsmInstall } from "../aws/ssm/install";
 import { AwsCredentials } from "../aws/types";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -347,10 +351,16 @@ const awsLogin = async (authn: Authn, data: AwsSshRequest) => {
     throw "Please try again after installing the required AWS utilities";
   }
 
-  return await assumeRoleWithOktaSaml(authn, {
-    account: data.accountId,
-    role: data.role,
-  });
+  const { config } = await getAwsConfig(authn, data.accountId);
+  if (!config.login?.type || config.login?.type === "iam") {
+    throw "This account is not configured for SSH access via the P0 CLI";
+  }
+
+  return config.login?.type === "idc"
+    ? await assumeRoleWithIdc(data as AwsSshIdcRequest)
+    : config.login?.type === "federated"
+      ? await assumeRoleWithOktaSaml(authn, data as AwsSshRoleRequest)
+      : throwAssertNever(config.login);
 };
 
 export const sshOrScp = async (
@@ -375,7 +385,8 @@ export const sshOrScp = async (
         `eval $(ssh-agent)`,
         `ssh-add "${PRIVATE_KEY_PATH}"`,
         // TODO ENG-2284 support login with Google Cloud
-        ...(data.type === "aws"
+        // TODO: Modify commands to add the ability to get permission set commands
+        ...(data.type === "aws" && data.access !== "idc"
           ? [
               `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
             ]

@@ -26,7 +26,8 @@ export const IDENTITY_FILE_PATH = path.join(P0_PATH, "identity.json");
 export const cached = async <T>(
   name: string,
   loader: () => Promise<T>,
-  options: { duration: number }
+  options: { duration: number },
+  hasExpired?: (data: T) => boolean
 ): Promise<T> => {
   const cachePath = path.join(path.dirname(IDENTITY_FILE_PATH), "cache");
   // Following lines sanitize input
@@ -50,8 +51,13 @@ export const cached = async <T>(
       await fs.rm(loc);
       return await loadCache();
     }
-    const data = await fs.readFile(loc);
-    return JSON.parse(data.toString("utf-8")) as T;
+
+    const data = JSON.parse((await fs.readFile(loc)).toString("utf-8")) as T;
+    if (hasExpired?.(data)) {
+      await fs.rm(loc);
+      return await loadCache();
+    }
+    return data;
   } catch (error: any) {
     if (error?.code !== "ENOENT")
       print2(

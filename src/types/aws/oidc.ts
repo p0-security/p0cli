@@ -8,31 +8,32 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { TokenResponse } from "../types/oidc";
-import { OrgData } from "../types/org";
-import { googleLogin } from "./google/login";
-import { oktaLogin } from "./okta/login";
-import { pingLogin } from "./ping/login";
 
-const loginPlugins = [
-  "google",
-  "okta",
-  "ping",
-  "oidc-pkce",
-  "microsoft",
-  "azure-oidc",
-  "google-oidc",
-  "aws-oidc",
-] as const;
+export type AWSClientInformation = {
+  authorizationEndpoint: string;
+  clientId: string;
+  clientIdIssuedAt: number;
+  clientSecret: string;
+  clientSecretExpiresAt: number;
+  tokenEndpoint: string;
+};
 
-export type LoginPluginType = (typeof loginPlugins)[number];
+/**
+ * AWS OIDC token response uses camelCase instead of snake_case
+ */
+export type AWSTokenResponse = {
+  accessToken: string;
+  expiresIn: number;
+  idToken: string;
+  refreshToken: string;
+  tokenType: string;
+};
 
-export const pluginLoginMap: Record<
-  string,
-  (org: OrgData) => Promise<TokenResponse>
-> = {
-  google: googleLogin,
-  okta: oktaLogin,
-  ping: pingLogin,
-  "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
+export type AWSAuthorizeResponse = {
+  deviceCode: string;
+  expiresIn: number;
+  interval: number;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
 };
