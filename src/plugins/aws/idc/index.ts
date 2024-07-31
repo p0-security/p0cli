@@ -49,7 +49,10 @@ export const registerClient = async (
       return await response.json();
     },
     { duration: AWS_CLIENT_TOKEN_EXPIRY },
-    (data) => data.clientSecretExpiresAt < Date.now()
+    (data) =>
+      data.clientSecretExpiresAt
+        ? data.clientSecretExpiresAt < Date.now()
+        : true
   );
 
 const awsIdcHelpers = (
@@ -177,7 +180,7 @@ export const assumeRoleWithIdc = async (args: {
           return { ...data, expiresAt: Date.now() + data.expiresIn * 1e3 };
         },
         { duration: AWS_TOKEN_EXPIRY },
-        (data) => data.expiresAt < Date.now()
+        (data) => (data.expiresAt ? data.expiresAt < Date.now() : true)
       );
 
       const credentials = await exchangeForAwsCredentials(oidcResponse, {
@@ -193,5 +196,5 @@ export const assumeRoleWithIdc = async (args: {
       };
     },
     { duration: AWS_TOKEN_EXPIRY },
-    (data) => data.expiresAt < Date.now()
+    (data) => (data.expiresAt ? data.expiresAt < Date.now() : true)
   );

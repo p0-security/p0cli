@@ -56,7 +56,7 @@ export const authorize = async <T>(
 ) => {
   const { url, init } = request;
   const response = await fetch(url, init);
-  await validateResponse?.(response);
+  await validateResponse(response);
   return (await response.json()) as T;
 };
 
@@ -76,6 +76,7 @@ export const fetchOidcToken = async <T>(request: {
     if (response.status === 400) {
       const data = await response.json();
       if (data.error === "authorization_pending") return undefined;
+      if (data.error === "access_denied") throw "Access denied, try again";
     }
     await validateResponse(response);
   }
