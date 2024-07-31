@@ -28,7 +28,8 @@ export const importSshKey = async (
   options?: { debug?: boolean }
 ) => {
   const debug = options?.debug ?? false;
-  const accessToken = await asyncSpawn({ debug }, "gcloud", [
+  // Force debug=false otherwise it prints the access token
+  const accessToken = await asyncSpawn({ debug: false }, "gcloud", [
     "auth",
     "print-access-token",
   ]);

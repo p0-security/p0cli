@@ -147,13 +147,17 @@ const waitForProvisioning = async <P extends PluginRequest>(
 };
 
 const pluginToCliRequest = async (
-  request: Request<PluginRequest>
+  request: Request<PluginRequest>,
+  options?: { debug?: boolean }
 ): Promise<Request<CliRequest>> => {
   return request.permission.spec.type === "gcloud"
     ? ({
         ...request,
         cliLocalData: {
-          linuxUserName: await importSshKey(request.permission.spec.publicKey),
+          linuxUserName: await importSshKey(
+            request.permission.spec.publicKey,
+            options
+          ),
         },
       } as Request<GcpSsh>)
     : request.permission.spec.type === "aws"
@@ -205,7 +209,9 @@ export const provisionRequest = async (
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
-  const cliRequest = await pluginToCliRequest(provisionedRequest);
+  const cliRequest = await pluginToCliRequest(provisionedRequest, {
+    debug: args.debug,
+  });
 
   return { request: cliRequest, publicKey, privateKey };
 };
