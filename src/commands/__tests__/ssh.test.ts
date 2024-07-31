@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
-import { sshOrScp } from "../../plugins/aws/ssm";
+import { sshOrScp } from "../../plugins/ssh";
 import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
@@ -22,7 +22,7 @@ import yargs from "yargs";
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
-jest.mock("../../plugins/aws/ssm");
+jest.mock("../../plugins/ssh");
 jest.mock("../../common/keys");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
@@ -36,7 +36,6 @@ const MOCK_REQUEST = {
     name: "name",
     ssh: {
       linuxUserName: "linuxUserName",
-      publicKey: TEST_PUBLIC_KEY,
     },
   },
   permission: {
@@ -44,6 +43,8 @@ const MOCK_REQUEST = {
       instanceId: "instanceId",
       accountId: "accountId",
       region: "region",
+      publicKey: TEST_PUBLIC_KEY,
+      type: "aws",
     },
   },
 };
@@ -83,7 +84,9 @@ describe("ssh", () => {
     });
 
     it("should call p0 request with reason arg", async () => {
-      void sshCommand(yargs()).parse(`ssh some-instance --reason reason`);
+      void sshCommand(yargs()).parse(
+        `ssh some-instance --reason reason --provider aws`
+      );
       await sleep(100);
       const hiddenFilenameRequestArgs = omit(
         mockFetchCommand.mock.calls[0][1],
