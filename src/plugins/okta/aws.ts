@@ -15,14 +15,14 @@ import { assumeRoleWithSaml } from "../aws/assumeRole";
 
 export const assumeRoleWithOktaSaml = async (
   authn: Authn,
-  args: { account?: string; role: string }
+  args: { accountId?: string; role: string }
 ) =>
   await cached(
-    `aws-okta-${args.account}-${args.role}`,
+    `aws-okta-${args.accountId}-${args.role}`,
     async () => {
       const { account, config, samlResponse } = await initOktaSaml(
         authn,
-        args.account
+        args.accountId
       );
       const { roles } = rolesFromSaml(account, samlResponse);
       if (!roles.includes(args.role))

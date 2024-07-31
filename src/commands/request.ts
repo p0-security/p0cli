@@ -13,7 +13,7 @@ import { authenticate } from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { Authn } from "../types/identity";
-import { Request, RequestResponse } from "../types/request";
+import { PluginRequest, Request, RequestResponse } from "../types/request";
 import { onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -70,7 +70,7 @@ const waitForRequest = async (
     if (logMessage)
       print2("Will wait up to 5 minutes for this request to complete...");
     let cancel: NodeJS.Timeout | undefined = undefined;
-    const unsubscribe = onSnapshot<Request, object>(
+    const unsubscribe = onSnapshot<Request<PluginRequest>, object>(
       doc(`o/${tenantId}/permission-requests/${requestId}`),
       (snap) => {
         const data = snap.data();

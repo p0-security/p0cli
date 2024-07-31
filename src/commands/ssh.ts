@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { sshOrScp } from "../plugins/aws/ssm";
+import { sshOrScp } from "../plugins/ssh";
 import { SshCommandArgs, provisionRequest, requestToSsh } from "./shared";
 import yargs from "yargs";
 
@@ -63,6 +63,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "string",
           describe: "The account on which the instance is located",
         })
+        .option("provider", {
+          type: "string",
+          describe: "The cloud provider where the instance is hosted",
+          choices: ["aws", "gcloud"],
+        })
         .option("debug", {
           type: "boolean",
           describe:
@@ -89,13 +94,15 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
+  const { request, privateKey } = result;
+
   await sshOrScp(
     authn,
-    requestToSsh(result.request),
+    requestToSsh(request),
     {
       ...args,
       destination,
     },
-    result.privateKey
+    privateKey
   );
 };
