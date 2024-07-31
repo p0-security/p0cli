@@ -13,14 +13,36 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { sleep } from "../../util";
-import { capitalize } from "lodash";
+import { assertNever, sleep } from "../../util";
+import { LoginPluginType } from "../login";
 import open from "open";
 
 export const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export const validateProviderDomain = (org: OrgData) => {
   if (!org.providerDomain) throw "Login requires a configured provider domain.";
+};
+
+const oidcProviderLabels = (providerType: LoginPluginType) => {
+  switch (providerType) {
+    case "okta":
+      return "Okta";
+    case "ping":
+      return "PingOne";
+    case "google":
+    case "google-oidc":
+      return "Google";
+    case "oidc-pkce":
+      return "OIDC";
+    case "aws-oidc":
+      return "AWS";
+    case "azure-oidc":
+    case "microsoft":
+      return "Entra ID";
+
+    default:
+      assertNever(providerType);
+  }
 };
 
 /** Executes the first step of a device-authorization grant flow */
@@ -58,13 +80,6 @@ export const fetchOidcToken = async <T>(request: {
     await validateResponse(response);
   }
   return (await response.json()) as T;
-};
-
-const providerType: (org: OrgData) => string = (org) => {
-  if (org.providerType === undefined) {
-    throw "Login requires a configured provider type.";
-  }
-  return org.providerType;
 };
 
 /** Waits until user device authorization is complete
@@ -129,7 +144,7 @@ export const oidcLoginSteps = (
     };
   };
   return {
-    providerType: providerType(org),
+    providerType: org.providerType,
     validateResponse,
     buildAuthorizeRequest: buildOidcAuthorizeRequest,
     buildTokenRequest: buildOidcTokenRequest,
@@ -163,7 +178,7 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
   );
   print2(`Please use the opened browser window to continue your P0 login.
 
-    When prompted, confirm that ${capitalize(providerType)} displays this code:
+    When prompted, confirm that ${oidcProviderLabels(providerType)} displays this code:
     
       ${user_code}
     

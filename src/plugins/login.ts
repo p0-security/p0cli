@@ -14,6 +14,19 @@ import { googleLogin } from "./google/login";
 import { oktaLogin } from "./okta/login";
 import { pingLogin } from "./ping/login";
 
+const loginPlugins = [
+  "google",
+  "okta",
+  "ping",
+  "oidc-pkce",
+  "microsoft",
+  "azure-oidc",
+  "google-oidc",
+  "aws-oidc",
+] as const;
+
+export type LoginPluginType = (typeof loginPlugins)[number];
+
 export const pluginLoginMap: Record<
   string,
   (org: OrgData) => Promise<TokenResponse>

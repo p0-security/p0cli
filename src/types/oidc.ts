@@ -1,3 +1,5 @@
+import { LoginPluginType } from "../plugins/login";
+
 /** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
@@ -52,7 +54,7 @@ export type TokenErrorResponse = {
 };
 
 export type OidcLoginSteps<A> = {
-  providerType: string;
+  providerType: LoginPluginType;
   validateResponse: (response: Response) => Promise<Response>;
   buildAuthorizeRequest: () => { url: string; init: RequestInit };
   buildTokenRequest: (authorize: A) => {

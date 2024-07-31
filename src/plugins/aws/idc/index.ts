@@ -129,7 +129,7 @@ const awsIdcHelpers = (
 
   return {
     loginSteps: {
-      providerType: "AWS",
+      providerType: "aws-oidc",
       validateResponse,
       buildAuthorizeRequest: buildOidcAuthorizeRequest,
       buildTokenRequest: buildIdcTokenRequest,
