@@ -13,7 +13,7 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { assertNever, sleep } from "../../util";
+import { sleep, throwAssertNever } from "../../util";
 import { LoginPluginType } from "../login";
 import open from "open";
 
@@ -39,10 +39,10 @@ const oidcProviderLabels = (providerType: LoginPluginType) => {
     case "azure-oidc":
     case "microsoft":
       return "Entra ID";
-
     default:
-      assertNever(providerType);
+      throwAssertNever(providerType);
   }
+  throw "Invalid provider type";
 };
 
 /** Executes the first step of a device-authorization grant flow */
