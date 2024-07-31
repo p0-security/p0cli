@@ -37,7 +37,7 @@ import yargs from "yargs";
  */
 const GRANT_TIMEOUT_MILLIS = 60e3;
 // The prefix of installed SSH accounts in P0 is the provider name
-const SUPPORTED_PROVIDERS = ["aws", "gcloud"];
+export const SUPPORTED_PROVIDERS = ["aws", "gcloud"];
 
 export type SshRequest = AwsSshRequest | GcpSshRequest;
 

@@ -16,6 +16,7 @@ import {
   provisionRequest,
   requestToSsh,
   SshRequest,
+  SUPPORTED_PROVIDERS,
 } from "./shared";
 import yargs from "yargs";
 
@@ -52,7 +53,7 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("provider", {
           type: "string",
           describe: "The cloud provider where the instance is hosted",
-          choices: ["aws", "gcloud"],
+          choices: SUPPORTED_PROVIDERS,
         })
         .option("sudo", {
           type: "boolean",
