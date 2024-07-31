@@ -16,12 +16,15 @@ import {
   AWSClientInformation,
   AWSTokenResponse,
 } from "../../../types/aws/oidc";
-import { OidcLoginStepHelpers } from "../../../types/oidc";
+import { OidcLoginSteps } from "../../../types/oidc";
 import { DEVICE_GRANT_TYPE, oidcLogin } from "../../oidc/login";
 import { AwsCredentials } from "../types";
 
-const AWS_TOKEN_EXPIRY = 3600e3;
-const AWS_CLIENT_TOKEN_EXPIRY = 7.776e9;
+const HOURS = 60 * 60 * 1000;
+const DAYS = 24 * HOURS;
+
+const AWS_TOKEN_EXPIRY = 1 * HOURS;
+const AWS_CLIENT_TOKEN_EXPIRY = 90 * DAYS; // the token has lifetime of 90 days
 const AWS_SSO_SCOPES = ["sso:account:access"];
 
 export const registerClient = async (
@@ -45,7 +48,7 @@ export const registerClient = async (
       );
       return await response.json();
     },
-    { duration: AWS_CLIENT_TOKEN_EXPIRY }, // the token has lifetime of 90 days
+    { duration: AWS_CLIENT_TOKEN_EXPIRY },
     (data) => data.clientSecretExpiresAt < Date.now()
   );
 
@@ -56,33 +59,29 @@ const awsIdcHelpers = (
   const { clientId, clientSecret } = clientCredentials;
   const { id, region } = idc;
 
-  const buildOidcAuthorizeRequest = () => {
-    return {
-      init: {
-        method: "POST",
-        body: JSON.stringify({
-          clientId,
-          clientSecret,
-          startUrl: `https://${id}.awsapps.com/start`,
-        }),
-      },
-      url: `https://oidc.${region}.amazonaws.com/device_authorization`,
-    };
-  };
-  const buildIdcTokenRequest = (authorizeResponse: AWSAuthorizeResponse) => {
-    return {
-      url: `https://oidc.${region}.amazonaws.com/token`,
-      init: {
-        method: "POST",
-        body: JSON.stringify({
-          clientId,
-          clientSecret,
-          deviceCode: authorizeResponse.deviceCode,
-          grantType: DEVICE_GRANT_TYPE,
-        }),
-      },
-    };
-  };
+  const buildOidcAuthorizeRequest = () => ({
+    init: {
+      method: "POST",
+      body: JSON.stringify({
+        clientId,
+        clientSecret,
+        startUrl: `https://${id}.awsapps.com/start`,
+      }),
+    },
+    url: `https://oidc.${region}.amazonaws.com/device_authorization`,
+  });
+  const buildIdcTokenRequest = (authorizeResponse: AWSAuthorizeResponse) => ({
+    url: `https://oidc.${region}.amazonaws.com/token`,
+    init: {
+      method: "POST",
+      body: JSON.stringify({
+        clientId,
+        clientSecret,
+        deviceCode: authorizeResponse.deviceCode,
+        grantType: DEVICE_GRANT_TYPE,
+      }),
+    },
+  });
   /**
    * Exchanges the oidc token for AWS credentials for a given account and permission set
    * @param oidcResponse oidc token response fot he oidc /token endpoint
@@ -93,8 +92,9 @@ const awsIdcHelpers = (
     oidcResponse: AWSTokenResponse,
     request: { accountId?: string; permissionSet: string }
   ) => {
-    // There is a delay in between aws issuing sso token and it to be exchanged for AWS credentials
-    // encountered unauthorized error when exchanging token immediately
+    // There is a delay in between aws issuing the sso token and it being available for exchange for AWS credentials
+    // When exchanging token immediately, an "unauthorized" may will be thrown, so retry with sleep.
+
     return await retryWithSleep(
       async () => {
         const init = {
@@ -105,7 +105,10 @@ const awsIdcHelpers = (
         };
         const { accountId, permissionSet } = request;
         if (accountId === undefined)
-          throw new Error("Could not find account Id for AWS SSO");
+          throw new Error(
+            "Could not find an AWS account ID for this access request"
+          );
+
         const params = new URLSearchParams();
         params.append("account_id", accountId);
         params.append("role_name", permissionSet);
@@ -115,7 +118,7 @@ const awsIdcHelpers = (
         );
         if (!response.ok)
           throw new Error(
-            `Failed to fetch AWS credentials: ${response.statusText}`
+            `Failed to fetch AWS credentials: ${response.statusText}: ${await response.text()}`
           );
         return await response.json();
       },
@@ -138,7 +141,7 @@ const awsIdcHelpers = (
         user_code: authorize.userCode,
         verification_uri_complete: authorize.verificationUriComplete,
       }),
-    } as OidcLoginStepHelpers<AWSAuthorizeResponse>,
+    } as OidcLoginSteps<AWSAuthorizeResponse>,
     exchangeForAwsCredentials,
   };
 };

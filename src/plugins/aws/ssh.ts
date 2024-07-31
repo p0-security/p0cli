@@ -13,22 +13,17 @@ import { AwsSsh } from "./types";
 
 export const awsRequestToSsh: (request: AwsSsh) => SshRequest = (request) => {
   const { permission, generated } = request;
-  const {
-    spec: { instanceId, accountId, region },
-  } = permission;
-  const {
-    idc,
-    ssh: { linuxUserName },
-    name,
-  } = generated;
+  const { instanceId, accountId, region } = permission.spec;
+  const { idc, ssh, name } = generated;
+  const { linuxUserName } = ssh;
   const common = { linuxUserName, accountId, region, id: instanceId };
   return !idc
-    ? { ...common, role: name, type: "aws", subType: "role" }
+    ? { ...common, role: name, type: "aws", access: "role" }
     : {
         ...common,
         idc,
         permissionSet: name,
         type: "aws",
-        subType: "idc",
+        access: "idc",
       };
 };

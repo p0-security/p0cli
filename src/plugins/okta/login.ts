@@ -83,7 +83,7 @@ export const oktaLogin = async (org: OrgData) =>
   oidcLogin<AuthorizeResponse, TokenResponse>(
     oidcLoginSteps(org, "openid email profile okta.apps.sso", () => {
       if (org.providerType !== "okta") {
-        throw `Invalid provider type ${org.providerType}`;
+        throw `Invalid provider type ${org.providerType} (expected "okta")`;
       }
       return {
         deviceAuthorizationUrl: `https://${org.providerDomain}/oauth2/v1/device/authorize`,

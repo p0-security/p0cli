@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
-import { AuthorizeResponse, OidcLoginStepHelpers } from "../../types/oidc";
+import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { sleep } from "../../util";
 import { capitalize } from "lodash";
@@ -30,7 +30,7 @@ export const authorize = async <T>(
     url: string;
     init: RequestInit;
   },
-  validateResponse?: (response: Response) => Promise<Response>
+  validateResponse: (response: Response) => Promise<Response>
 ) => {
   const { url, init } = request;
   const response = await fetch(url, init);
@@ -60,7 +60,7 @@ export const fetchOidcToken = async <T>(request: {
   return (await response.json()) as T;
 };
 
-const providerType: (org: OrgData) => NonNullable<string> = (org) => {
+const providerType: (org: OrgData) => string = (org) => {
   if (org.providerType === undefined) {
     throw "Login requires a configured provider type.";
   }
@@ -74,8 +74,8 @@ const providerType: (org: OrgData) => NonNullable<string> = (org) => {
 export const waitForActivation = async <A, T>(
   authorize: A,
   extractExpiryInterval: (authorize: A) => {
-    expires_in: number;
-    interval: number;
+    expires_in: number; // seconds until expiry
+    interval: number; // seconds between polling
   }, // Aws implementation differs from standard OIDC response, need function to extract expiry
   tokenRequest: { url: string; init: RequestInit }
 ) => {
@@ -95,15 +95,11 @@ export const oidcLoginSteps = (
   urls: () => { deviceAuthorizationUrl: string; tokenUrl: string }
 ) => {
   const { deviceAuthorizationUrl, tokenUrl } = urls();
-
+  if (org.providerType === undefined) {
+    throw "Your organization's login configuration does not support this access. Your P0 admin will need to install a supported OIDC provider in order for you to use this command.";
+  }
   const buildOidcAuthorizeRequest = () => {
-    if (org.providerType === undefined) {
-      throw "Login requires a configured provider type.";
-    }
-
     validateProviderDomain(org);
-    // This is the "org" authorization server; the okta.apps.* scopes are not
-    // available with custom authorization servers
     return {
       init: {
         method: "POST",
@@ -117,9 +113,6 @@ export const oidcLoginSteps = (
     };
   };
   const buildOidcTokenRequest = (authorize: AuthorizeResponse) => {
-    if (org.providerType === undefined) {
-      throw "Login requires a configured provider type.";
-    }
     validateProviderDomain(org);
 
     return {
@@ -148,11 +141,11 @@ export const oidcLoginSteps = (
       user_code: authorize.user_code,
       verification_uri_complete: authorize.verification_uri_complete,
     }),
-  } as OidcLoginStepHelpers<AuthorizeResponse>;
+  } as OidcLoginSteps<AuthorizeResponse>;
 };
 
 /** Logs in to an Identity Provider via OIDC */
-export const oidcLogin = async <A, T>(context: OidcLoginStepHelpers<A>) => {
+export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
   const {
     providerType,
     buildAuthorizeRequest,
@@ -160,7 +153,7 @@ export const oidcLogin = async <A, T>(context: OidcLoginStepHelpers<A>) => {
     processAuthzExpiry,
     processAuthzResponse,
     validateResponse,
-  } = context;
+  } = steps;
   const deviceAuthorizationResponse = await authorize<A>(
     buildAuthorizeRequest(),
     validateResponse

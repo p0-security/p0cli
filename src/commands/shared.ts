@@ -51,12 +51,12 @@ export type BaseAwsSshRequest = {
 
 export type AwsSshRoleRequest = BaseAwsSshRequest & {
   role: string;
-  subType: "role";
+  access: "role";
 };
 export type AwsSshIdcRequest = BaseAwsSshRequest & {
   permissionSet: string;
   idc: { id: string; region: string };
-  subType: "idc";
+  access: "idc";
 };
 
 export type AwsSshRequest = AwsSshIdcRequest | AwsSshRoleRequest;

@@ -17,7 +17,7 @@ export const pingLogin = async (org: OrgData) =>
   oidcLogin<AuthorizeResponse, TokenResponse>(
     oidcLoginSteps(org, "openid email profile", () => {
       if (org.providerType !== "ping" || org.providerType === undefined) {
-        throw `Invalid provider type ${org.providerType}`;
+        throw `Invalid provider type ${org.providerType} (expected "ping")`;
       }
       return {
         deviceAuthorizationUrl: `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`,

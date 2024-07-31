@@ -16,24 +16,24 @@ const MAX_RETRY_BACK_OFF_TIME = 10000;
 /**
  * Retries an operation with a delay between retries
  * @param operation operation to retry
- * @param when condition to retry
+ * @param shouldRetry predicate to evaluate on error; will retry only if this is true
  * @param retries number of retries
  * @param delay time to wait before retrying
  * @returns
  */
 export async function retryWithSleep<T>(
   operation: () => Promise<T>,
-  when: (error: unknown) => boolean,
-  retries: number = MAX_RETRIES,
-  delay: number = MAX_RETRY_BACK_OFF_TIME
+  shouldRetry: (error: unknown) => boolean,
+  retries = MAX_RETRIES,
+  delayMs: number = MAX_RETRY_BACK_OFF_TIME
 ): Promise<T> {
   try {
     return await operation();
   } catch (error: any) {
-    if (when(error)) {
+    if (shouldRetry(error)) {
       if (retries > 0) {
-        await sleep(delay);
-        return retryWithSleep(operation, when, retries - 1);
+        await sleep(delayMs);
+        return await retryWithSleep(operation, shouldRetry, retries - 1);
       }
     }
     throw error;

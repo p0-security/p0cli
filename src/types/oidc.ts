@@ -51,7 +51,7 @@ export type TokenErrorResponse = {
     | "slow_down";
 };
 
-export type OidcLoginStepHelpers<A> = {
+export type OidcLoginSteps<A> = {
   providerType: string;
   validateResponse: (response: Response) => Promise<Response>;
   buildAuthorizeRequest: () => { url: string; init: RequestInit };

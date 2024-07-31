@@ -386,7 +386,7 @@ export const sshOrScp = async (
         `ssh-add "${PRIVATE_KEY_PATH}"`,
         // TODO ENG-2284 support login with Google Cloud
         // TODO: Modify commands to add the ability to get permission set commands
-        ...(data.type === "aws" && data.subType !== "idc"
+        ...(data.type === "aws" && data.access !== "idc"
           ? [
               `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
             ]
