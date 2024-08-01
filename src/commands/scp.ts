@@ -17,7 +17,7 @@ import {
   ScpCommandArgs,
   SshRequest,
   SUPPORTED_PROVIDERS,
-} from "./shared";
+} from "./shared/ssh";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>

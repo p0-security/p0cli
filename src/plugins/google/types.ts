@@ -28,6 +28,14 @@ export type GcpSsh = CliPermissionSpec<
   { linuxUserName: string }
 >;
 
+export type GcpSshRequest = {
+  linuxUserName: string;
+  projectId: string;
+  zone: string;
+  id: string;
+  type: "gcloud";
+};
+
 type PosixAccount = {
   username: string;
   uid: string;

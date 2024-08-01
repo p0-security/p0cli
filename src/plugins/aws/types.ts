@@ -89,3 +89,23 @@ export type AwsPermissionSpec = PermissionSpec<
 >;
 
 export type AwsSsh = CliPermissionSpec<AwsPermissionSpec>;
+
+export type BaseAwsSshRequest = {
+  linuxUserName: string;
+  accountId: string;
+  region: string;
+  id: string;
+  type: "aws";
+};
+
+export type AwsSshRoleRequest = BaseAwsSshRequest & {
+  role: string;
+  access: "role";
+};
+export type AwsSshIdcRequest = BaseAwsSshRequest & {
+  permissionSet: string;
+  idc: { id: string; region: string };
+  access: "idc";
+};
+
+export type AwsSshRequest = AwsSshIdcRequest | AwsSshRoleRequest;

@@ -8,15 +8,30 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { SshRequest } from "../../commands/shared";
-import { GcpSsh } from "./types";
+import { CliRequest, Request } from "../../types/request";
+import { importSshKey } from "./ssh-key";
+import { GcpPermissionSpec, GcpSsh, GcpSshRequest } from "./types";
 
-export const gcpRequestToSsh: (request: GcpSsh) => SshRequest = (request) => {
-  return {
-    id: request.permission.spec.instanceName,
-    projectId: request.permission.spec.projectId,
-    zone: request.permission.spec.zone,
-    linuxUserName: request.cliLocalData.linuxUserName,
-    type: "gcloud",
-  };
+export const gcpSshProvider = {
+  requestToSsh: (request: GcpSsh): GcpSshRequest => {
+    return {
+      id: request.permission.spec.instanceName,
+      projectId: request.permission.spec.projectId,
+      zone: request.permission.spec.zone,
+      linuxUserName: request.cliLocalData.linuxUserName,
+      type: "gcloud",
+    };
+  },
+  toCliRequest: async (
+    request: Request<GcpPermissionSpec>,
+    options?: { debug?: boolean }
+  ): Promise<Request<CliRequest>> => ({
+    ...request,
+    cliLocalData: {
+      linuxUserName: await importSshKey(
+        request.permission.spec.publicKey,
+        options
+      ),
+    },
+  }),
 };
