@@ -8,22 +8,21 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  ScpCommandArgs,
-  SshCommandArgs,
-  AwsSshRequest,
-  SshRequest,
-  AwsSshRoleRequest,
-  AwsSshIdcRequest,
-} from "../../commands/shared";
+import { ScpCommandArgs, SshCommandArgs } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
+import { SshRequest } from "../../types/ssh";
 import { assertNever, throwAssertNever } from "../../util";
 import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
 import { ensureSsmInstall } from "../aws/ssm/install";
-import { AwsCredentials } from "../aws/types";
+import {
+  AwsCredentials,
+  AwsSshIdcRequest,
+  AwsSshRequest,
+  AwsSshRoleRequest,
+} from "../aws/types";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { withSshAgent } from "../ssh-agent";
 import {

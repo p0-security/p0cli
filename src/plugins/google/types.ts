@@ -8,7 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CliPermissionSpec, PermissionSpec } from "../../types/request";
+import { PermissionSpec } from "../../types/request";
+import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
 export type GcpSshPermission = {
@@ -21,12 +22,20 @@ export type GcpSshPermission = {
   type: "session";
 };
 
-export type GcpPermissionSpec = PermissionSpec<"ssh", GcpSshPermission>;
+export type GcpSshPermissionSpec = PermissionSpec<"ssh", GcpSshPermission>;
 
 export type GcpSsh = CliPermissionSpec<
-  GcpPermissionSpec,
+  GcpSshPermissionSpec,
   { linuxUserName: string }
 >;
+
+export type GcpSshRequest = {
+  linuxUserName: string;
+  projectId: string;
+  zone: string;
+  id: string;
+  type: "gcloud";
+};
 
 type PosixAccount = {
   username: string;

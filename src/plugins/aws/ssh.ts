@@ -8,22 +8,29 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { SshRequest } from "../../commands/shared";
-import { AwsSsh } from "./types";
+import { SshProvider } from "../../types/ssh";
+import { AwsSshPermissionSpec, AwsSshRequest } from "./types";
 
-export const awsRequestToSsh: (request: AwsSsh) => SshRequest = (request) => {
-  const { permission, generated } = request;
-  const { instanceId, accountId, region } = permission.spec;
-  const { idc, ssh, name } = generated;
-  const { linuxUserName } = ssh;
-  const common = { linuxUserName, accountId, region, id: instanceId };
-  return !idc
-    ? { ...common, role: name, type: "aws", access: "role" }
-    : {
-        ...common,
-        idc,
-        permissionSet: name,
-        type: "aws",
-        access: "idc",
-      };
+export const awsSshProvider: SshProvider<
+  AwsSshPermissionSpec,
+  undefined,
+  AwsSshRequest
+> = {
+  requestToSsh: (request) => {
+    const { permission, generated } = request;
+    const { instanceId, accountId, region } = permission.spec;
+    const { idc, ssh, name } = generated;
+    const { linuxUserName } = ssh;
+    const common = { linuxUserName, accountId, region, id: instanceId };
+    return !idc
+      ? { ...common, role: name, type: "aws", access: "role" }
+      : {
+          ...common,
+          idc,
+          permissionSet: name,
+          type: "aws",
+          access: "idc",
+        };
+  },
+  toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
 };

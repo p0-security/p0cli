@@ -8,8 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { AwsPermissionSpec, AwsSsh } from "../plugins/aws/types";
-import { GcpPermissionSpec, GcpSsh } from "../plugins/google/types";
+import { PluginSshRequest } from "./ssh";
 
 export const DONE_STATUSES = ["DONE", "DONE_NOTIFIED"] as const;
 export const DENIED_STATUSES = ["DENIED", "DENIED_NOTIFIED"] as const;
@@ -18,16 +17,6 @@ export const ERROR_STATUSES = [
   "ERRORED",
   "ERRORED_NOTIFIED",
 ] as const;
-
-export type CliRequest = AwsSsh | GcpSsh;
-export type PluginRequest = AwsPermissionSpec | GcpPermissionSpec;
-
-export type CliPermissionSpec<
-  P extends PluginRequest,
-  C extends object | undefined = undefined,
-> = P & {
-  cliLocalData: C;
-};
 
 export type PermissionSpec<
   K extends string,
@@ -38,6 +27,8 @@ export type PermissionSpec<
   permission: P;
   generated: G;
 };
+
+export type PluginRequest = PluginSshRequest;
 
 export type Request<P extends PluginRequest> = P & {
   status: string;

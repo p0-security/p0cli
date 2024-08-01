@@ -11,13 +11,8 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
-import {
-  provisionRequest,
-  requestToSsh,
-  ScpCommandArgs,
-  SshRequest,
-  SUPPORTED_PROVIDERS,
-} from "./shared";
+import { SshRequest, SupportedSshProviders } from "../types/ssh";
+import { provisionRequest, requestToSsh, ScpCommandArgs } from "./shared/ssh";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -53,7 +48,7 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("provider", {
           type: "string",
           describe: "The cloud provider where the instance is hosted",
-          choices: SUPPORTED_PROVIDERS,
+          choices: SupportedSshProviders,
         })
         .option("sudo", {
           type: "boolean",
