@@ -8,14 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  ScpCommandArgs,
-  SshCommandArgs,
-  SshRequest,
-} from "../../commands/shared/ssh";
+import { ScpCommandArgs, SshCommandArgs } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
+import { SshRequest } from "../../types/ssh";
 import { assertNever, throwAssertNever } from "../../util";
 import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";

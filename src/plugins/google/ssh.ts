@@ -8,12 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CliRequest, Request } from "../../types/request";
+import { SshProvider } from "../../types/ssh";
 import { importSshKey } from "./ssh-key";
-import { GcpPermissionSpec, GcpSsh, GcpSshRequest } from "./types";
+import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
 
-export const gcpSshProvider = {
-  requestToSsh: (request: GcpSsh): GcpSshRequest => {
+export const gcpSshProvider: SshProvider<
+  GcpSshPermissionSpec,
+  { linuxUserName: string },
+  GcpSshRequest
+> = {
+  requestToSsh: (request) => {
     return {
       id: request.permission.spec.instanceName,
       projectId: request.permission.spec.projectId,
@@ -22,10 +26,7 @@ export const gcpSshProvider = {
       type: "gcloud",
     };
   },
-  toCliRequest: async (
-    request: Request<GcpPermissionSpec>,
-    options?: { debug?: boolean }
-  ): Promise<Request<CliRequest>> => ({
+  toCliRequest: async (request, options) => ({
     ...request,
     cliLocalData: {
       linuxUserName: await importSshKey(

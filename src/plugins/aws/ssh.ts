@@ -8,11 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CliRequest, Request } from "../../types/request";
-import { AwsPermissionSpec, AwsSsh, AwsSshRequest } from "./types";
+import { SshProvider } from "../../types/ssh";
+import { AwsSshPermissionSpec, AwsSshRequest } from "./types";
 
-export const awsSshProvider = {
-  requestToSsh: (request: AwsSsh): AwsSshRequest => {
+export const awsSshProvider: SshProvider<
+  AwsSshPermissionSpec,
+  undefined,
+  AwsSshRequest
+> = {
+  requestToSsh: (request) => {
     const { permission, generated } = request;
     const { instanceId, accountId, region } = permission.spec;
     const { idc, ssh, name } = generated;
@@ -28,7 +32,5 @@ export const awsSshProvider = {
           access: "idc",
         };
   },
-  toCliRequest: async (
-    request: Request<AwsPermissionSpec>
-  ): Promise<Request<CliRequest>> => ({ ...request, cliLocalData: undefined }),
+  toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
 };

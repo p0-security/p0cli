@@ -13,27 +13,28 @@ import { createKeyPair } from "../../common/keys";
 import { doc } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
-import { AwsSshRequest } from "../../plugins/aws/types";
 import { gcpSshProvider } from "../../plugins/google/ssh";
-import { GcpSshRequest } from "../../plugins/google/types";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
-import { CliRequest, PluginRequest, Request } from "../../types/request";
+import { Request } from "../../types/request";
+import {
+  CliSshRequest,
+  PluginSshRequest,
+  SshProvider,
+  SshRequest,
+  SupportedSshProvider,
+  SupportedSshProviders,
+} from "../../types/ssh";
 import { request } from "../request";
 import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-// The prefix of installed SSH accounts in P0 is the provider name
-export const SUPPORTED_PROVIDERS = ["aws", "gcloud"];
-
-export type SshRequest = AwsSshRequest | GcpSshRequest;
-
 export type BaseSshCommandArgs = {
   sudo?: boolean;
   reason?: string;
   account?: string;
-  provider?: (typeof SUPPORTED_PROVIDERS)[number];
+  provider?: SupportedSshProvider;
   debug?: boolean;
 };
 
@@ -48,12 +49,15 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   destination: string;
   L?: string; // Port forwarding option
   N?: boolean; // No remote command
-  A?: boolean;
+  A?: boolean; // Agent forwarding
   arguments: string[];
   command?: string;
 };
 
-const SSH_PROVIDERS = {
+const SSH_PROVIDERS: Record<
+  SupportedSshProvider,
+  SshProvider<any, any, any>
+> = {
   aws: awsSshProvider,
   gcloud: gcpSshProvider,
 };
@@ -69,7 +73,7 @@ const validateSshInstall = async (
 
   const providersToCheck = args.provider
     ? [args.provider]
-    : SUPPORTED_PROVIDERS;
+    : SupportedSshProviders;
 
   const items = Object.entries(configItems ?? {}).filter(
     ([key, value]) =>
@@ -82,9 +86,9 @@ const validateSshInstall = async (
 };
 
 const pluginToCliRequest = async (
-  request: Request<PluginRequest>,
+  request: Request<PluginSshRequest>,
   options?: { debug?: boolean }
-): Promise<Request<CliRequest>> =>
+): Promise<Request<CliSshRequest>> =>
   await SSH_PROVIDERS[request.permission.spec.type].toCliRequest(
     request as any,
     options
@@ -99,7 +103,7 @@ export const provisionRequest = async (
 
   const { publicKey, privateKey } = await createKeyPair();
 
-  const response = await request<PluginRequest>(
+  const response = await request<PluginSshRequest>(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -126,7 +130,7 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
 
-  const provisionedRequest = await waitForProvisioning<PluginRequest>(
+  const provisionedRequest = await waitForProvisioning<PluginSshRequest>(
     authn,
     id
   );
@@ -141,5 +145,5 @@ export const provisionRequest = async (
   return { request: cliRequest, publicKey, privateKey };
 };
 
-export const requestToSsh = (request: Request<CliRequest>): SshRequest =>
+export const requestToSsh = (request: Request<CliSshRequest>): SshRequest =>
   SSH_PROVIDERS[request.permission.spec.type].requestToSsh(request as any);
