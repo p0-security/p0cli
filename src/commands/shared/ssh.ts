@@ -25,7 +25,7 @@ import {
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
-import { request } from "../request";
+import { request } from "./request";
 import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
@@ -103,7 +103,7 @@ export const provisionRequest = async (
 
   const { publicKey, privateKey } = await createKeyPair();
 
-  const response = await request<PluginSshRequest>(
+  const response = await request("request")<PluginSshRequest>(
     {
       ...pick(args, "$0", "_"),
       arguments: [

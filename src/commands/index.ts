@@ -12,6 +12,7 @@ import { print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
+import { grantCommand } from "./grant";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
@@ -23,6 +24,7 @@ import { hideBin } from "yargs/helpers";
 
 const commands = [
   awsCommand,
+  grantCommand,
   loginCommand,
   lsCommand,
   requestCommand,

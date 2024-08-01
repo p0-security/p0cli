@@ -12,10 +12,10 @@ import { guard } from "../drivers/firestore";
 import { request, requestArgs } from "./shared/request";
 import yargs from "yargs";
 
-export const requestCommand = (yargs: yargs.Argv) =>
+export const grantCommand = (yargs: yargs.Argv) =>
   yargs.command<{ arguments: string[] }>(
-    "request [arguments..]",
-    "Manually request permissions on a resource",
+    "grant [arguments..]",
+    "Grant access to another identity",
     requestArgs,
-    guard(request("request"))
+    guard(request("grant"))
   );
