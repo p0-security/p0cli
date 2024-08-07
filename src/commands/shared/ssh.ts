@@ -54,9 +54,11 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   command?: string;
 };
 
-const SSH_PROVIDERS: Record<
+export type CommandArgs = ScpCommandArgs | SshCommandArgs;
+
+export const SSH_PROVIDERS: Record<
   SupportedSshProvider,
-  SshProvider<any, any, any>
+  SshProvider<any, any, any, any>
 > = {
   aws: awsSshProvider,
   gcloud: gcpSshProvider,

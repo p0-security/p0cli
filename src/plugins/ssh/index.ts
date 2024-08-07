@@ -8,22 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { ScpCommandArgs, SshCommandArgs } from "../../commands/shared/ssh";
+import { CommandArgs, SSH_PROVIDERS } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { SshRequest } from "../../types/ssh";
-import { assertNever, throwAssertNever } from "../../util";
-import { getAwsConfig } from "../aws/config";
-import { assumeRoleWithIdc } from "../aws/idc";
-import { ensureSsmInstall } from "../aws/ssm/install";
-import {
-  AwsCredentials,
-  AwsSshIdcRequest,
-  AwsSshRequest,
-  AwsSshRoleRequest,
-} from "../aws/types";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
+import { SshRequest, SupportedSshProvider } from "../../types/ssh";
+import { AwsCredentials } from "../aws/types";
 import { withSshAgent } from "../ssh-agent";
 import {
   ChildProcessByStdio,
@@ -55,21 +45,12 @@ const DESTINATION_READ_ERROR =
   /Error while connecting \[4010: 'destination read failed'\]/;
 const GOOGLE_LOGIN_MESSAGE =
   /You do not currently have an active account selected/;
+const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `sudo -v` when the user is not allowed to run sudo
 
 /** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
  *  in the process's stderr
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
-
-/** Maximum number of attempts to start an SSH session
- *
- * Note that each attempt consumes ~ 1 s.
- */
-const DEFAULT_MAX_SSH_RETRIES = 30;
-const GCP_MAX_SSH_RETRIES = 120; // GCP requires more time to propagate access
-
-/** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
-const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
 
 /**
  * AWS
@@ -81,7 +62,7 @@ const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
  * 2: results in CONNECTION_CLOSED_MESSAGE
  *
  * Google Cloud
- * There are 5 cases of unprovisioned access in Google Cloud.
+ * There are 7 cases of unprovisioned access in Google Cloud.
  * These are all potentially subject to propagation delays.
  * 1. The linux user name is not present in the user's Google Workspace profile `posixAccounts` attribute
  * 2. The public key is not present in the user's Google Workspace profile `sshPublicKeys` attribute
@@ -90,17 +71,20 @@ const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
  * 5. The user doesn't have osLogin or osAdminLogin role to the instance
  * 5.a. compute.instances.get permission is missing
  * 5.b. compute.instances.osLogin permission is missing
- * 6: Rare occurrence, the exact conditions so far undetermined (together with CONNECTION_CLOSED_MESSAGE)
+ * 6. compute.instances.osAdminLogin is not provisioned but compute.instances.osLogin is - happens when a user upgrades existing access to sudo
+ * 7: Rare occurrence, the exact conditions so far undetermined (together with CONNECTION_CLOSED_MESSAGE)
  *
  * 1, 2, 3 (yes!), 5b: result in PUBLIC_KEY_DENIED_MESSAGE
  * 4: results in UNAUTHORIZED_TUNNEL_USER_MESSAGE and also CONNECTION_CLOSED_MESSAGE
  * 5a: results in UNAUTHORIZED_INSTANCES_GET_MESSAGE
- * 6: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
+ * 6: results in SUDO_MESSAGE
+ * 7: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
  */
 const UNPROVISIONED_ACCESS_MESSAGES = [
   { pattern: UNAUTHORIZED_START_SESSION_MESSAGE },
   { pattern: CONNECTION_CLOSED_MESSAGE },
   { pattern: PUBLIC_KEY_DENIED_MESSAGE },
+  { pattern: SUDO_MESSAGE },
   { pattern: UNAUTHORIZED_TUNNEL_USER_MESSAGE },
   { pattern: UNAUTHORIZED_INSTANCES_GET_MESSAGE, validationWindowMs: 30e3 },
   { pattern: DESTINATION_READ_ERROR },
@@ -183,16 +167,10 @@ type SpawnSshNodeOptions = {
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
-  provider: "aws" | "gcloud";
+  provider: SupportedSshProvider;
   debug?: boolean;
+  isAccessPropagationPreTest?: boolean;
 };
-
-const friendlyProvider = (provider: "aws" | "gcloud") =>
-  provider === "aws"
-    ? "AWS"
-    : provider === "gcloud"
-      ? "Google Cloud"
-      : throwAssertNever(provider);
 
 /** Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
  *
@@ -203,6 +181,7 @@ async function spawnSshNode(
   options: SpawnSshNodeOptions
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
+    const provider = SSH_PROVIDERS[options.provider];
     const child = spawnChildProcess(
       options.credential,
       options.command,
@@ -227,7 +206,7 @@ async function spawnSshNode(
         }
         if (attemptsRemaining <= 0) {
           reject(
-            `Access did not propagate through ${friendlyProvider(options.provider)} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
+            `Access did not propagate through ${provider.friendlyName} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
           );
           return;
         }
@@ -245,53 +224,19 @@ async function spawnSshNode(
       }
 
       options.abortController?.abort(code);
-      print2(`SSH session terminated`);
+      if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
       resolve(code);
     });
   });
 }
 
-const createProxyCommands = (
+const createCommand = (
   data: SshRequest,
-  args: ScpCommandArgs | SshCommandArgs,
-  debug?: boolean
+  args: CommandArgs,
+  proxyCommand: string[]
 ) => {
-  let proxyCommand;
-  if (data.type === "aws") {
-    proxyCommand = [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      data.region,
-      "--target",
-      "%h",
-      "--document-name",
-      START_SSH_SESSION_DOCUMENT_NAME,
-      "--parameters",
-      '"portNumber=%p"',
-    ];
-  } else if (data.type === "gcloud") {
-    proxyCommand = [
-      "gcloud",
-      "compute",
-      "start-iap-tunnel",
-      data.id,
-      "%p",
-      // --listen-on-stdin flag is required for interactive SSH session.
-      // It is undocumented on page https://cloud.google.com/sdk/gcloud/reference/compute/start-iap-tunnel
-      // but mention on page https://cloud.google.com/iap/docs/tcp-by-host
-      // and also found in `gcloud ssh --dry-run` output
-      "--listen-on-stdin",
-      `--zone=${data.zone}`,
-      `--project=${data.projectId}`,
-    ];
-  } else {
-    throw assertNever(data);
-  }
-
   const commonArgs = [
-    ...(debug ? ["-v"] : []),
+    ...(args.debug ? ["-v"] : []),
     "-o",
     `ProxyCommand=${proxyCommand.join(" ")}`,
   ];
@@ -345,60 +290,79 @@ const transformForShell = (args: string[]) => {
   });
 };
 
-const awsLogin = async (authn: Authn, data: AwsSshRequest) => {
-  if (!(await ensureSsmInstall())) {
-    throw "Please try again after installing the required AWS utilities";
+/** Construct another command to use for testing access propagation prior to actually logging in the user to the ssh session */
+const preTestAccessPropagationIfNeeded = async (
+  request: SshRequest,
+  cmdArgs: CommandArgs,
+  proxyCommand: string[],
+  credential: AwsCredentials | undefined
+) => {
+  const sshProvider = SSH_PROVIDERS[request.type];
+  const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
+  // Pre-testing comes at a performance cost because we have to execute another ssh subprocess after
+  // a successful test. Only do when absolutely necessary.
+  if (testCmdArgs) {
+    const { command, args } = createCommand(request, testCmdArgs, proxyCommand);
+    // Assumes that this is a non-interactive ssh command that exits automatically
+    return spawnSshNode({
+      credential,
+      abortController: new AbortController(),
+      command,
+      args,
+      stdio: ["inherit", "inherit", "pipe"],
+      debug: cmdArgs.debug,
+      provider: request.type,
+      attemptsRemaining: sshProvider.maxRetries,
+      isAccessPropagationPreTest: true,
+    });
   }
-
-  const { config } = await getAwsConfig(authn, data.accountId);
-  if (!config.login?.type || config.login?.type === "iam") {
-    throw "This account is not configured for SSH access via the P0 CLI";
-  }
-
-  return config.login?.type === "idc"
-    ? await assumeRoleWithIdc(data as AwsSshIdcRequest)
-    : config.login?.type === "federated"
-      ? await assumeRoleWithOktaSaml(authn, data as AwsSshRoleRequest)
-      : throwAssertNever(config.login);
+  return null;
 };
 
 export const sshOrScp = async (
   authn: Authn,
-  data: SshRequest,
-  cmdArgs: ScpCommandArgs | SshCommandArgs,
+  request: SshRequest,
+  cmdArgs: CommandArgs,
   privateKey: string
 ) => {
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
-  // TODO ENG-2284 support login with Google Cloud
+  const sshProvider = SSH_PROVIDERS[request.type];
+
   const credential: AwsCredentials | undefined =
-    data.type === "aws" ? await awsLogin(authn, data) : undefined;
+    await sshProvider.cloudProviderLogin(authn, request);
+
+  const proxyCommand = sshProvider.proxyCommand(request);
 
   return withSshAgent(cmdArgs, async () => {
-    const { command, args } = createProxyCommands(data, cmdArgs, cmdArgs.debug);
+    const { command, args } = createCommand(request, cmdArgs, proxyCommand);
 
     if (cmdArgs.debug) {
-      const reproCommands = [
-        `eval $(ssh-agent)`,
-        `ssh-add "${PRIVATE_KEY_PATH}"`,
-        // TODO ENG-2284 support login with Google Cloud
-        // TODO: Modify commands to add the ability to get permission set commands
-        ...(data.type === "aws" && data.access !== "idc"
-          ? [
-              `eval $(p0 aws role assume ${data.role} --account ${data.accountId})`,
-            ]
-          : []),
-        `${command} ${transformForShell(args).join(" ")}`,
-      ];
-      print2(
-        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${reproCommands.join("\n")}\n*** COMMANDS END ***"\n`
-      );
+      const reproCommands = sshProvider.reproCommands(request);
+      if (reproCommands) {
+        const repro = [
+          `eval $(ssh-agent)`,
+          `ssh-add "${PRIVATE_KEY_PATH}"`,
+          ...reproCommands,
+          `${command} ${transformForShell(args).join(" ")}`,
+        ].join("\n");
+        print2(
+          `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
+        );
+      }
     }
 
-    const maxRetries =
-      data.type === "gcloud" ? GCP_MAX_SSH_RETRIES : DEFAULT_MAX_SSH_RETRIES;
+    const exitCode = await preTestAccessPropagationIfNeeded(
+      request,
+      cmdArgs,
+      proxyCommand,
+      credential
+    );
+    if (exitCode && exitCode !== 0) {
+      return exitCode; // Only exit if there was an error when pre-testing
+    }
 
     return spawnSshNode({
       credential,
@@ -407,8 +371,8 @@ export const sshOrScp = async (
       args,
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
-      provider: data.type,
-      attemptsRemaining: maxRetries,
+      provider: request.type,
+      attemptsRemaining: sshProvider.maxRetries,
     });
   });
 };
