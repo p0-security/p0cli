@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
@@ -60,7 +61,7 @@ export const gcpSshProvider: SshProvider<
   },
   reproCommands: () => undefined, // TODO @ENG-2284 support login with Google Cloud
   preTestAccessPropagationArgs: (cmdArgs) => {
-    if (cmdArgs.sudo || ("command" in cmdArgs && cmdArgs.command === "sudo")) {
+    if (isSudoCommand(cmdArgs)) {
       return {
         ...cmdArgs,
         // `sudo -v` prints `Sorry, user <user> may not run sudo on <hostname>.` to stderr when user is not a sudoer.

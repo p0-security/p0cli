@@ -43,14 +43,19 @@ export type SshProvider<
   C extends object | undefined = undefined, // credentials object
 > = {
   requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;
+  /** Converts a backend request to a CLI request */
   toCliRequest: (
     request: Request<PR>,
     options?: { debug?: boolean }
   ) => Promise<Request<CliSshRequest>>;
+  /** Logs in the user to the cloud provider */
   cloudProviderLogin: (authn: Authn, request: SR) => Promise<C>;
+  /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
   proxyCommand: (request: SR) => string[];
+  /** Each element in the returned array is a command that can be run to reproduce the
+   * steps of logging in the user to the ssh session. */
   reproCommands: (request: SR) => string[] | undefined;
-  /** Arguments for an pre-test command to verify access propagation prior
+  /** Arguments for a pre-test command to verify access propagation prior
    * to actually logging in the user to the ssh session.
    * This must return arguments for a non-interactive command - meaning the `command`
    * and potentially the `args` props must be specified in the returned scp/ssh command.

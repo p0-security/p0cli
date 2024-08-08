@@ -86,8 +86,8 @@ export const awsSshProvider: SshProvider<
     ];
   },
   reproCommands: (request) => {
-    // TODO: Modify commands to add the ability to get permission set commands
-    if (request.type === "aws" && request.access !== "idc") {
+    // TODO: Add manual commands for IDC login
+    if (request.access !== "idc") {
       return [
         `eval $(p0 aws role assume ${request.role} --account ${request.accountId})`,
       ];

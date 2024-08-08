@@ -12,7 +12,7 @@ import { CommandArgs, SSH_PROVIDERS } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { SshRequest, SupportedSshProvider } from "../../types/ssh";
+import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
 import { AwsCredentials } from "../aws/types";
 import { withSshAgent } from "../ssh-agent";
 import {
@@ -291,13 +291,17 @@ const transformForShell = (args: string[]) => {
 };
 
 /** Construct another command to use for testing access propagation prior to actually logging in the user to the ssh session */
-const preTestAccessPropagationIfNeeded = async (
+const preTestAccessPropagationIfNeeded = async <
+  P extends SshProvider<any, any, any, any>,
+>(
+  sshProvider: P,
   request: SshRequest,
   cmdArgs: CommandArgs,
   proxyCommand: string[],
-  credential: AwsCredentials | undefined
+  credential: P extends SshProvider<infer _PR, infer _O, infer _SR, infer C>
+    ? C
+    : undefined
 ) => {
-  const sshProvider = SSH_PROVIDERS[request.type];
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
   // Pre-testing comes at a performance cost because we have to execute another ssh subprocess after
   // a successful test. Only do when absolutely necessary.
@@ -355,6 +359,7 @@ export const sshOrScp = async (
     }
 
     const exitCode = await preTestAccessPropagationIfNeeded(
+      sshProvider,
       request,
       cmdArgs,
       proxyCommand,
