@@ -54,9 +54,11 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   command?: string;
 };
 
-const SSH_PROVIDERS: Record<
+export type CommandArgs = ScpCommandArgs | SshCommandArgs;
+
+export const SSH_PROVIDERS: Record<
   SupportedSshProvider,
-  SshProvider<any, any, any>
+  SshProvider<any, any, any, any>
 > = {
   aws: awsSshProvider,
   gcloud: gcpSshProvider,
@@ -94,6 +96,9 @@ const pluginToCliRequest = async (
     options
   );
 
+export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
+  args.sudo || args.command === "sudo";
+
 export const provisionRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
@@ -113,7 +118,7 @@ export const provisionRequest = async (
         "--public-key",
         publicKey,
         ...(args.provider ? ["--provider", args.provider] : []),
-        ...(args.sudo || args.command === "sudo" ? ["--sudo"] : []),
+        ...(isSudoCommand(args) ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
         ...(args.account ? ["--account", args.account] : []),
       ],
