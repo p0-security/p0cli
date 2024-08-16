@@ -96,3 +96,6 @@ export const assertNever = (value: never) => {
 
 export const unexpectedValueError = (value: any) =>
   new Error(`Unexpected code state: value ${value} had unexpected type`);
+
+export const stricmp = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
