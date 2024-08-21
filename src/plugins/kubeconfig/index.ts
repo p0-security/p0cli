@@ -16,6 +16,7 @@ import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { Request } from "../../types/request";
 import { assertNever } from "../../util";
+import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
 import { AwsCredentials } from "../aws/types";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -32,11 +33,15 @@ import yargs from "yargs";
 export const getAndValidateK8sIntegration = async (
   authn: Authn,
   clusterId: string
-): Promise<EksClusterConfig> => {
+): Promise<{
+  clusterConfig: EksClusterConfig;
+  awsLoginType: "federated" | "idc";
+}> => {
   const configDoc = await getDoc<K8sConfig, object>(
     doc(`o/${authn.identity.org.tenantId}/integrations/k8s`)
   );
 
+  // Validation done here in lieu of the backend, since the backend doesn't validate until approval. TODO: ENG-2365.
   const clusterConfig = configDoc
     .data()
     ?.workflows.items.find(
@@ -56,10 +61,21 @@ export const getAndValidateK8sIntegration = async (
     );
   }
 
+  const { config: awsConfig } = await getAwsConfig(authn, awsAccountId);
+  const { login: awsLogin } = awsConfig;
+
+  // Verify that the AWS auth type is supported before issuing the requests
+  if (!awsLogin?.type || awsLogin?.type === "iam") {
+    throw "This AWS account is not configured for kubectl access via the P0 CLI.\nYou can request access to the cluster using the `p0 request k8s` command.";
+  }
+
   return {
-    ...clusterConfig,
-    awsAccountId,
-    awsClusterArn,
+    clusterConfig: {
+      ...clusterConfig,
+      awsAccountId,
+      awsClusterArn,
+    },
+    awsLoginType: awsLogin.type,
   };
 };
 

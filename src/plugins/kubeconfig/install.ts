@@ -65,6 +65,5 @@ const EksInstall: Readonly<Record<EksItem, InstallMetadata>> = {
   },
 };
 
-export const ensureEksInstall = async () => {
-  return await ensureInstall(EksItems, EksInstall);
-};
+export const ensureEksInstall = async () =>
+  await ensureInstall(EksItems, EksInstall);

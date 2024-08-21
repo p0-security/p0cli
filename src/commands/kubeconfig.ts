@@ -12,7 +12,6 @@ import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { getAwsConfig } from "../plugins/aws/config";
 import {
   awsCloudAuth,
   profileName,
@@ -20,7 +19,7 @@ import {
   getAndValidateK8sIntegration,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
-import { exec, stricmp } from "../util";
+import { ciEquals, exec } from "../util";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./aws/files";
 import yargs from "yargs";
 
@@ -70,10 +69,6 @@ export const kubeconfigCommand = (yargs: yargs.Argv) =>
 const kubeconfigAction = async (
   args: yargs.ArgumentsCamelCase<KubeconfigCommandArgs>
 ) => {
-  if (!(await ensureEksInstall())) {
-    throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
-  }
-
   const role = normalizeRoleArg(args.role);
 
   if (args.resource) {
@@ -82,18 +77,15 @@ const kubeconfigAction = async (
 
   const authn = await authenticate();
 
-  const clusterConfig = await getAndValidateK8sIntegration(authn, args.cluster);
-
+  const { clusterConfig, awsLoginType } = await getAndValidateK8sIntegration(
+    authn,
+    args.cluster
+  );
   const { clusterId, awsAccountId, awsClusterArn } = clusterConfig;
-  const { config } = await getAwsConfig(authn, awsAccountId);
-  const { login } = config;
 
-  // Verify that the AWS auth type is supported before issuing the requests
-  if (!login?.type || login?.type === "iam") {
-    throw "This AWS account is not configured for kubectl access via the P0 CLI.\nYou can request access to the cluster using the `p0 request k8s` command.";
+  if (!(await ensureEksInstall())) {
+    throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
   }
-
-  const { type: loginType } = login;
 
   const request = await requestAccessToCluster(authn, args, clusterId, role);
 
@@ -101,7 +93,7 @@ const kubeconfigAction = async (
     authn,
     awsAccountId,
     request.generated,
-    loginType
+    awsLoginType
   );
 
   const profile = profileName(clusterId);
@@ -131,8 +123,8 @@ const kubeconfigAction = async (
     const awsResult = await retryWithSleep(
       async () => await exec("aws", updateKubeconfigArgs, { check: true }),
       () => true,
-      2,
-      10000
+      8,
+      2500
     );
     print2(awsResult.stdout);
   } catch (error: any) {
@@ -164,7 +156,11 @@ const kubeconfigAction = async (
  * Normalize the role argument to the format expected by the P0 backend,
  * matching the way the Slack modal formats the role. Also validates that the
  * role argument contains the components expected by the backend without having
- * to make the API call.
+ * to make the request first.
+ *
+ * Currently, the P0 backend does not validate request arguments until after a
+ * request is approved; this function allows the validation to be done up-front
+ * pending a future backend change. TODO: ENG-2365.
  *
  * @param role The role argument to normalize
  * @returns The normalized role value to pass to the backend
@@ -187,11 +183,11 @@ const normalizeRoleArg = (role: string): string => {
     throw `Role kind must be specified.\n${SYNTAX_HINT}`;
   }
 
-  if (stricmp(items[0], "ClusterRole")) {
+  if (ciEquals(items[0], "ClusterRole")) {
     return `ClusterRole ${SEPARATOR} ${items[1]}`;
-  } else if (stricmp(items[0], "CuratedRole")) {
+  } else if (ciEquals(items[0], "CuratedRole")) {
     return `CuratedRole ${SEPARATOR} ${items[1]}`;
-  } else if (stricmp(items[0], "Role")) {
+  } else if (ciEquals(items[0], "Role")) {
     if (items.length !== 3) {
       throw `Invalid format for role argument.\n${SYNTAX_HINT}`;
     }
@@ -204,6 +200,10 @@ const normalizeRoleArg = (role: string): string => {
 /**
  * Validate that the resource argument is of the format expected by the P0
  * backend, again matching the way the Slack modal formats the resource.
+ *
+ * Currently, the P0 backend does not validate request arguments until after a
+ * request is approved; this function allows the validation to be done up-front
+ * pending a future backend change. TODO: ENG-2365.
  *
  * @param resource The resource argument to validate
  */

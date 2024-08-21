@@ -18,7 +18,6 @@ export type K8sConfig = {
 
 export type BaseK8sClusterConfig = {
   clusterId: string;
-
   clusterServer: string;
   clusterCertificate: string;
   state: string;

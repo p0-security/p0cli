@@ -97,5 +97,15 @@ export const assertNever = (value: never) => {
 export const unexpectedValueError = (value: any) =>
   new Error(`Unexpected code state: value ${value} had unexpected type`);
 
-export const stricmp = (a: string, b: string) =>
+/**
+ * Performs a case-insensitive comparison of two strings. This uses
+ * `localeCompare()`, which is safer than `toLowerCase()` or `toUpperCase()` for
+ * non-ASCII characters and is the generally-accepted best practice. See:
+ * https://stackoverflow.com/a/2140723
+ *
+ * @param a The first string to compare
+ * @param b The second string to compare
+ * @returns true if the strings are equal, ignoring case
+ */
+export const ciEquals = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;

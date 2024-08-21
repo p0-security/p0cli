@@ -9,9 +9,9 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { AwsCredentials } from "../../plugins/aws/types";
-import { EncodeOptions, parse, stringify } from "ini";
-import fs from "node:fs/promises";
-import os from "node:os";
+import * as ini from "ini";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import path from "node:path";
 import tmp from "tmp-promise";
 
@@ -29,11 +29,12 @@ export const AWS_CREDENTIALS_FILE = path.join(AWS_CONFIG_PATH, "credentials");
  * @returns Arbitrary object representing the contents of the file, or an empty
  * object if the file is empty or does not exist
  */
-export const readIniFile = async (path: string): Promise<any> => {
-  let data;
-
+export const readIniFile = async (
+  path: string
+): Promise<{ [key: string]: any }> => {
   try {
-    data = await fs.readFile(path, { encoding: "utf-8" });
+    const data = await fs.readFile(path, { encoding: "utf-8" });
+    return data ? ini.parse(data) : {};
   } catch (err: any) {
     if (err.code === "ENOENT") {
       return {};
@@ -41,12 +42,6 @@ export const readIniFile = async (path: string): Promise<any> => {
 
     throw err;
   }
-
-  if (!data) {
-    return {};
-  }
-
-  return parse(data);
 };
 
 /**
@@ -65,9 +60,9 @@ export const readIniFile = async (path: string): Promise<any> => {
 export const atomicWriteIniFile = async (
   path: string,
   obj: any,
-  iniEncodeOptions?: EncodeOptions
+  iniEncodeOptions?: ini.EncodeOptions
 ): Promise<void> => {
-  const data = stringify(obj, iniEncodeOptions);
+  const data = ini.stringify(obj, iniEncodeOptions);
 
   // Permissions will be moved along with the file
   const { path: tmpPath } = await tmp.file({ mode: 0o600, prefix: "p0cli-" });
