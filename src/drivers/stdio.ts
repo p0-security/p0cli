@@ -39,6 +39,7 @@ export function print2(message: any) {
 const AnsiCodes = {
   Reset: "00",
   Dim: "02",
+  Yellow: "33",
 } as const;
 
 export const Ansi = mapValues(AnsiCodes, (v) => `\u001b[${v}m`);
