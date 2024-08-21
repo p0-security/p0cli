@@ -16,21 +16,17 @@ export type K8sConfig = {
   };
 };
 
-export type BaseK8sClusterConfig = {
+export type K8sClusterConfig = {
   clusterId: string;
   clusterServer: string;
   clusterCertificate: string;
   state: string;
-} & (KubernetesProxyComponentConfig | KubernetesPublicComponentConfig);
-
-// k8s clusters that are not EKS clusters will not have these set...
-export type K8sClusterConfig = BaseK8sClusterConfig & {
   awsAccountId?: string;
   awsClusterArn?: string;
-};
+} & (KubernetesProxyComponentConfig | KubernetesPublicComponentConfig);
 
-// ...But all EKS clusters must have both set
-export type EksClusterConfig = BaseK8sClusterConfig & {
+// These are optional in general for k8s clusters, but required for EKS
+export type EksClusterConfig = K8sClusterConfig & {
   awsAccountId: string;
   awsClusterArn: string;
 };
