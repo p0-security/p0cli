@@ -13,6 +13,7 @@ import { checkVersion } from "../middlewares/version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
+import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
 import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
@@ -31,6 +32,7 @@ const commands = [
   allowCommand,
   sshCommand,
   scpCommand,
+  kubeconfigCommand,
 ];
 
 export const cli = commands

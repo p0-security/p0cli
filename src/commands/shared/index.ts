@@ -57,7 +57,7 @@ export const waitForProvisioning = async <P extends PluginRequest>(
     cancel = setTimeout(() => {
       if (!isResolved) {
         unsubscribe();
-        reject("Timeout awaiting SSH access grant");
+        reject("Timeout awaiting access grant. Please try again.");
       }
     }, GRANT_TIMEOUT_MILLIS);
   });
