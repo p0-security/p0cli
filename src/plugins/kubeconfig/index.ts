@@ -45,16 +45,12 @@ export const getAndValidateK8sIntegration = async (
   if (!config) {
     throw `Cluster with ID ${clusterId} not found`;
   }
-  const clusterConfig = config.state === "installed" ? config : undefined;
-  if (!clusterConfig) {
+
+  if (config.state !== "installed" || config.provider.type !== "aws") {
     throw `Cluster with ID ${clusterId} is not installed`;
   }
 
-  if (clusterConfig.provider.type !== "aws") {
-    throw `Cluster with ID ${clusterId} is not installed`;
-  }
-
-  const { provider } = clusterConfig;
+  const { provider } = config;
   const { accountId: awsAccountId, clusterArn: awsClusterArn } = provider;
 
   if (!awsAccountId || !awsClusterArn) {
