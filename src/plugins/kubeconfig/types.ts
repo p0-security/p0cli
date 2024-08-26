@@ -16,7 +16,7 @@ export type K8sClusterConfig = {
   clusterCertificate: string;
   isProxy: boolean;
   token: string;
-  publicJwk: string;
+  publicJwk?: string; // only present for proxy installs
   provider:
     | { type: "aws"; clusterArn: string; accountId: string }
     | { type: "email" };
