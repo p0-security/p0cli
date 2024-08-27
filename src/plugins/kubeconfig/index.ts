@@ -20,12 +20,7 @@ import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
 import { AwsCredentials } from "../aws/types";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
-import {
-  EksClusterConfig,
-  K8sConfig,
-  K8sGenerated,
-  K8sPermissionSpec,
-} from "./types";
+import { K8sConfig, K8sGenerated, K8sPermissionSpec } from "./types";
 import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
@@ -34,7 +29,11 @@ export const getAndValidateK8sIntegration = async (
   authn: Authn,
   clusterId: string
 ): Promise<{
-  clusterConfig: EksClusterConfig;
+  clusterConfig: {
+    clusterId: string;
+    awsAccountId: string;
+    awsClusterArn: string;
+  };
   awsLoginType: "federated" | "idc";
 }> => {
   const configDoc = await getDoc<K8sConfig, object>(
@@ -42,17 +41,17 @@ export const getAndValidateK8sIntegration = async (
   );
 
   // Validation done here in lieu of the backend, since the backend doesn't validate until approval. TODO: ENG-2365.
-  const clusterConfig = configDoc
-    .data()
-    ?.workflows.items.find(
-      (c) => c.clusterId === clusterId && c.state === "installed"
-    );
-
-  if (!clusterConfig) {
+  const config = configDoc.data()?.["iam-write"]?.[clusterId];
+  if (!config) {
     throw `Cluster with ID ${clusterId} not found`;
   }
 
-  const { awsAccountId, awsClusterArn } = clusterConfig;
+  if (config.state !== "installed" || config.provider.type !== "aws") {
+    throw `Cluster with ID ${clusterId} is not installed`;
+  }
+
+  const { provider } = config;
+  const { accountId: awsAccountId, clusterArn: awsClusterArn } = provider;
 
   if (!awsAccountId || !awsClusterArn) {
     throw (
@@ -71,7 +70,7 @@ export const getAndValidateK8sIntegration = async (
 
   return {
     clusterConfig: {
-      ...clusterConfig,
+      clusterId,
       awsAccountId,
       awsClusterArn,
     },

@@ -10,34 +10,21 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { PermissionSpec } from "../../types/request";
 
-export type K8sConfig = {
-  workflows: {
-    items: K8sClusterConfig[];
-  };
-};
-
 export type K8sClusterConfig = {
-  clusterId: string;
+  label?: string;
   clusterServer: string;
   clusterCertificate: string;
+  isProxy: boolean;
+  token: string;
+  publicJwk?: string; // only present for proxy installs
+  provider:
+    | { type: "aws"; clusterArn: string; accountId: string }
+    | { type: "email" };
   state: string;
-  awsAccountId?: string;
-  awsClusterArn?: string;
-} & (KubernetesProxyComponentConfig | KubernetesPublicComponentConfig);
-
-// These are optional in general for k8s clusters, but required for EKS
-export type EksClusterConfig = K8sClusterConfig & {
-  awsAccountId: string;
-  awsClusterArn: string;
 };
 
-type KubernetesProxyComponentConfig = {
-  isProxy: true;
-  publicJwk: string;
-};
-
-export type KubernetesPublicComponentConfig = {
-  isProxy: false;
+export type K8sConfig = {
+  "iam-write": Record<string, K8sClusterConfig>;
 };
 
 export type K8sPermissionSpec = PermissionSpec<
