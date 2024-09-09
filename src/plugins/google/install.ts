@@ -23,10 +23,14 @@ const GcpSshInstall: Readonly<Record<GcpSshItem, InstallMetadata>> = {
         // See https://cloud.google.com/sdk/docs/install-sdk
         "architecture=$(arch)",
         'package=$([ $architecture = "arm64" ] && echo "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz" || "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-x86_64.tar.gz" )',
-        "wget -O google-cloud-cli.tar.gz $package",
-        "tar -xzf google-cloud-cli.tar.gz",
-        "./google-cloud-sdk/install.sh",
-        "rm -rf google-cloud-cli.tar.gz",
+        "wget -O ~/google-cloud-cli.tar.gz $package",
+        "tar -xzf ~/google-cloud-cli.tar.gz -C ~", // Extract to home directory
+        "~/google-cloud-sdk/install.sh",
+        "rm -rf ~/google-cloud-cli.tar.gz",
+        // Symlink gcloud to /usr/local/bin - assumes /usr/local/bin is already in $PATH so next time `gcloud` is run it will be found
+        "sudo mkdir -p /usr/local/bin",
+        "sudo ln -s ~/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud",
+        "sudo chown root: /usr/local/bin/gcloud",
       ],
     },
   },

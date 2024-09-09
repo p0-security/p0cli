@@ -8,22 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  CommandArgs,
-  pluginToCliRequest,
-  requestToSsh,
-  SSH_PROVIDERS,
-} from "../../commands/shared/ssh";
+import { CommandArgs, SSH_PROVIDERS } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { Request } from "../../types/request";
-import {
-  PluginSshRequest,
-  SshProvider,
-  SshRequest,
-  SupportedSshProvider,
-} from "../../types/ssh";
+import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
 import { AwsCredentials } from "../aws/types";
 import { withSshAgent } from "../ssh-agent";
 import {
@@ -339,26 +328,17 @@ const preTestAccessPropagationIfNeeded = async <
   return null;
 };
 
-export const sshOrScp = async (
-  authn: Authn,
-  pluginRequest: Request<PluginSshRequest>,
-  cmdArgs: CommandArgs,
-  privateKey: string
-) => {
+export const sshOrScp = async (args: {
+  authn: Authn;
+  request: SshRequest;
+  cmdArgs: CommandArgs;
+  privateKey: string;
+  sshProvider: SshProvider<any, any, any, any>;
+}) => {
+  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
-
-  const type = pluginRequest.permission.spec.type;
-  const sshProvider = SSH_PROVIDERS[type];
-
-  print2("temp - ensureInstall");
-  await sshProvider.ensureInstall();
-
-  const cliRequest = await pluginToCliRequest(pluginRequest, {
-    debug: cmdArgs.debug,
-  });
-  const request = requestToSsh(cliRequest);
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);

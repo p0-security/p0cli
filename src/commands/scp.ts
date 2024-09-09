@@ -12,7 +12,7 @@ import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
 import { SshRequest, SupportedSshProviders } from "../types/ssh";
-import { provisionRequest, requestToSsh, ScpCommandArgs } from "./shared/ssh";
+import { prepareRequest, ScpCommandArgs } from "./shared/ssh";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -75,28 +75,26 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Could not determine host identifier from source or destination";
   }
 
-  const result = await provisionRequest(authn, args, host);
-
-  if (!result) {
-    throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
-  }
-  const { request, privateKey } = result;
-
-  const data = requestToSsh(request);
+  const { request, privateKey, sshProvider } = await prepareRequest(
+    authn,
+    args,
+    host
+  );
 
   // replace the host with the linuxUserName@instanceId
-  const { source, destination } = replaceHostWithInstance(data, args);
+  const { source, destination } = replaceHostWithInstance(request, args);
 
-  await sshOrScp(
+  await sshOrScp({
     authn,
-    data,
-    {
+    request,
+    cmdArgs: {
       ...args,
       source,
       destination,
     },
-    privateKey
-  );
+    privateKey,
+    sshProvider,
+  });
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */

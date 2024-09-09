@@ -10,9 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { print1, print2 } from "../drivers/stdio";
 import { sshOrScp } from "../plugins/ssh";
-import { SshCommandArgs, provisionRequest, requestToSsh } from "./shared/ssh";
+import { SshCommandArgs, prepareRequest } from "./shared/ssh";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -88,23 +87,17 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
 
-  const destination = args.destination;
-  print2("temp - provisionRequest");
-  const result = await provisionRequest(authn, args, destination);
-  if (!result) {
-    throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
-  }
+  const { request, privateKey, sshProvider } = await prepareRequest(
+    authn,
+    args,
+    args.destination
+  );
 
-  const { request, privateKey } = result;
-
-  print2("temp - sshOrScp");
-  await sshOrScp(
+  await sshOrScp({
     authn,
     request,
-    {
-      ...args,
-      destination,
-    },
-    privateKey
-  );
+    cmdArgs: args,
+    privateKey,
+    sshProvider,
+  });
 };
