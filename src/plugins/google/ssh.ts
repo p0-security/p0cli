@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
+import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
 
@@ -42,6 +43,11 @@ export const gcpSshProvider: SshProvider<
       ),
     },
   }),
+  ensureInstall: async () => {
+    if (!(await ensureGcpSshInstall())) {
+      throw "Please try again after installing the required GCP utilities";
+    }
+  },
   cloudProviderLogin: async () => undefined, // TODO @ENG-2284 support login with Google Cloud
   proxyCommand: (request) => {
     return [

@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
+import { print1, print2 } from "../drivers/stdio";
 import { sshOrScp } from "../plugins/ssh";
 import { SshCommandArgs, provisionRequest, requestToSsh } from "./shared/ssh";
 import yargs from "yargs";
@@ -88,7 +89,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   const authn = await authenticate();
 
   const destination = args.destination;
-
+  print2("temp - provisionRequest");
   const result = await provisionRequest(authn, args, destination);
   if (!result) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
@@ -96,9 +97,10 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
 
   const { request, privateKey } = result;
 
+  print2("temp - sshOrScp");
   await sshOrScp(
     authn,
-    requestToSsh(request),
+    request,
     {
       ...args,
       destination,

@@ -8,11 +8,22 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs, SSH_PROVIDERS } from "../../commands/shared/ssh";
+import {
+  CommandArgs,
+  pluginToCliRequest,
+  requestToSsh,
+  SSH_PROVIDERS,
+} from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
+import { Request } from "../../types/request";
+import {
+  PluginSshRequest,
+  SshProvider,
+  SshRequest,
+  SupportedSshProvider,
+} from "../../types/ssh";
 import { AwsCredentials } from "../aws/types";
 import { withSshAgent } from "../ssh-agent";
 import {
@@ -182,6 +193,17 @@ async function spawnSshNode(
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const provider = SSH_PROVIDERS[options.provider];
+
+    const attemptsRemaining = options.attemptsRemaining;
+    if (options.debug) {
+      const gerund = options.isAccessPropagationPreTest
+        ? "Pre-testing"
+        : "Trying";
+      print2(
+        `Waiting for access to propagate. ${gerund} SSH session... (remaining attempts: ${attemptsRemaining})`
+      );
+    }
+
     const child = spawnChildProcess(
       options.credential,
       options.command,
@@ -198,12 +220,6 @@ async function spawnSshNode(
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        const attemptsRemaining = options.attemptsRemaining;
-        if (options.debug) {
-          print2(
-            `Waiting for access to propagate. Retrying SSH session... (remaining attempts: ${attemptsRemaining})`
-          );
-        }
         if (attemptsRemaining <= 0) {
           reject(
             `Access did not propagate through ${provider.friendlyName} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
@@ -325,7 +341,7 @@ const preTestAccessPropagationIfNeeded = async <
 
 export const sshOrScp = async (
   authn: Authn,
-  request: SshRequest,
+  pluginRequest: Request<PluginSshRequest>,
   cmdArgs: CommandArgs,
   privateKey: string
 ) => {
@@ -333,7 +349,16 @@ export const sshOrScp = async (
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
-  const sshProvider = SSH_PROVIDERS[request.type];
+  const type = pluginRequest.permission.spec.type;
+  const sshProvider = SSH_PROVIDERS[type];
+
+  print2("temp - ensureInstall");
+  await sshProvider.ensureInstall();
+
+  const cliRequest = await pluginToCliRequest(pluginRequest, {
+    debug: cmdArgs.debug,
+  });
+  const request = requestToSsh(cliRequest);
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);

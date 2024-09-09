@@ -126,8 +126,10 @@ export const ensureInstall = async <
   installItems: readonly T[],
   installData: U
 ): Promise<boolean> => {
+  print2("temp - ensureInstall");
   const toInstall = await requiredInstalls(installItems);
 
+  print2("temp - requiredInstalls");
   if (toInstall.length === 0) {
     return true;
   }
