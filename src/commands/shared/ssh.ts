@@ -21,7 +21,6 @@ import {
   CliSshRequest,
   PluginSshRequest,
   SshProvider,
-  SshRequest,
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
