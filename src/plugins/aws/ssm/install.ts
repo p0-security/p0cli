@@ -13,10 +13,7 @@ import {
   AwsItems,
   ensureInstall,
   InstallMetadata,
-  SupportedPlatforms,
 } from "../../../common/install";
-import { isa } from "../../../types";
-import os from "node:os";
 
 const SsmItems = [...AwsItems, "session-manager-plugin"] as const;
 type SsmItem = (typeof SsmItems)[number];

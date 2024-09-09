@@ -87,7 +87,7 @@ const validateSshInstall = async (
   }
 };
 
-export const pluginToCliRequest = async (
+const pluginToCliRequest = async (
   request: Request<PluginSshRequest>,
   options?: { debug?: boolean }
 ): Promise<Request<CliSshRequest>> =>
