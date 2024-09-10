@@ -63,7 +63,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("o", {
           type: "string",
           describe:
-            "Can be used to give options in the format used in the configuration file.",
+            "Can be used to give options in the format used in the SSH configuration file.",
         })
         // Match `p0 request --reason`
         .option("reason", {
