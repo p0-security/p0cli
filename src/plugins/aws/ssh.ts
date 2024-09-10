@@ -54,11 +54,12 @@ export const awsSshProvider: SshProvider<
         };
   },
   toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
-  cloudProviderLogin: async (authn, request) => {
+  ensureInstall: async () => {
     if (!(await ensureSsmInstall())) {
       throw "Please try again after installing the required AWS utilities";
     }
-
+  },
+  cloudProviderLogin: async (authn, request) => {
     const { config } = await getAwsConfig(authn, request.accountId);
     if (!config.login?.type || config.login?.type === "iam") {
       throw "This account is not configured for SSH access via the P0 CLI";

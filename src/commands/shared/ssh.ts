@@ -21,7 +21,6 @@ import {
   CliSshRequest,
   PluginSshRequest,
   SshProvider,
-  SshRequest,
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
@@ -145,12 +144,28 @@ export const provisionRequest = async (
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
+  return { provisionedRequest, publicKey, privateKey };
+};
+
+export const prepareRequest = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
+  destination: string
+) => {
+  const result = await provisionRequest(authn, args, destination);
+  if (!result) {
+    throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
+  }
+
+  const { provisionedRequest } = result;
+
+  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.spec.type];
+  await sshProvider.ensureInstall();
+
   const cliRequest = await pluginToCliRequest(provisionedRequest, {
     debug: args.debug,
   });
+  const request = sshProvider.requestToSsh(cliRequest);
 
-  return { request: cliRequest, publicKey, privateKey };
+  return { ...result, request, sshProvider };
 };
-
-export const requestToSsh = (request: Request<CliSshRequest>): SshRequest =>
-  SSH_PROVIDERS[request.permission.spec.type].requestToSsh(request as any);

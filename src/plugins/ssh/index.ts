@@ -182,6 +182,17 @@ async function spawnSshNode(
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const provider = SSH_PROVIDERS[options.provider];
+
+    const attemptsRemaining = options.attemptsRemaining;
+    if (options.debug) {
+      const gerund = options.isAccessPropagationPreTest
+        ? "Pre-testing"
+        : "Trying";
+      print2(
+        `Waiting for access to propagate. ${gerund} SSH session... (remaining attempts: ${attemptsRemaining})`
+      );
+    }
+
     const child = spawnChildProcess(
       options.credential,
       options.command,
@@ -198,12 +209,6 @@ async function spawnSshNode(
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        const attemptsRemaining = options.attemptsRemaining;
-        if (options.debug) {
-          print2(
-            `Waiting for access to propagate. Retrying SSH session... (remaining attempts: ${attemptsRemaining})`
-          );
-        }
         if (attemptsRemaining <= 0) {
           reject(
             `Access did not propagate through ${provider.friendlyName} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
@@ -325,17 +330,17 @@ const preTestAccessPropagationIfNeeded = async <
   return null;
 };
 
-export const sshOrScp = async (
-  authn: Authn,
-  request: SshRequest,
-  cmdArgs: CommandArgs,
-  privateKey: string
-) => {
+export const sshOrScp = async (args: {
+  authn: Authn;
+  request: SshRequest;
+  cmdArgs: CommandArgs;
+  privateKey: string;
+  sshProvider: SshProvider<any, any, any, any>;
+}) => {
+  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
-
-  const sshProvider = SSH_PROVIDERS[request.type];
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);

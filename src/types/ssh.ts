@@ -48,6 +48,7 @@ export type SshProvider<
     request: Request<PR>,
     options?: { debug?: boolean }
   ) => Promise<Request<CliSshRequest>>;
+  ensureInstall: () => Promise<void>;
   /** Logs in the user to the cloud provider */
   cloudProviderLogin: (authn: Authn, request: SR) => Promise<C>;
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */

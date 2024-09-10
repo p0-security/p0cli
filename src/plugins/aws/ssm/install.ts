@@ -13,10 +13,7 @@ import {
   AwsItems,
   ensureInstall,
   InstallMetadata,
-  SupportedPlatforms,
 } from "../../../common/install";
-import { isa } from "../../../types";
-import os from "node:os";
 
 const SsmItems = [...AwsItems, "session-manager-plugin"] as const;
 type SsmItem = (typeof SsmItems)[number];
@@ -42,12 +39,4 @@ const SsmInstall: Readonly<Record<SsmItem, InstallMetadata>> = {
  * the user declines, or if not a TTY, the installation commands are printed to
  * stdout.
  */
-export const ensureSsmInstall = async () => {
-  const platform = os.platform();
-
-  // Preserve existing behavior of a hard error on unsupported platforms
-  if (!isa(SupportedPlatforms)(platform))
-    throw "SSH to AWS managed instances is only available on MacOS";
-
-  return await ensureInstall(SsmItems, SsmInstall);
-};
+export const ensureSsmInstall = () => ensureInstall(SsmItems, SsmInstall);
