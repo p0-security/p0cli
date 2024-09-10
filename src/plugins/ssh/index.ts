@@ -265,7 +265,9 @@ const createCommand = (
       ...commonArgs,
       ...(args.A ? ["-A"] : []),
       ...(args.L ? ["-L", args.L] : []),
+      ...(args.R ? ["-R", args.R] : []),
       ...(args.N ? ["-N"] : []),
+      ...(args.o ? ["-o", args.o] : []),
       `${data.linuxUserName}@${data.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
