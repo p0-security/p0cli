@@ -48,8 +48,10 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   sudo?: boolean;
   destination: string;
   L?: string; // Port forwarding option
+  R?: string; // Reverse port forwarding option
   N?: boolean; // No remote command
   A?: boolean; // Agent forwarding
+  o?: string; // Configuration options
   arguments: string[];
   command?: string;
 };

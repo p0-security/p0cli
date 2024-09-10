@@ -24,10 +24,6 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "string",
           demandOption: true,
         })
-        .option("sudo", {
-          type: "boolean",
-          describe: "Add user to sudoers file",
-        })
         .positional("command", {
           type: "string",
           describe: "Pass command to the shell",
@@ -38,11 +34,21 @@ export const sshCommand = (yargs: yargs.Argv) =>
           string: true,
           default: [] as string[],
         })
+        .option("sudo", {
+          type: "boolean",
+          describe: "Add user to sudoers file",
+        })
         .option("L", {
           type: "string",
           // Copied from `man ssh`
           describe:
             "Specifies that connections to the given TCP port or Unix socket on the local (client) host are to be forwarded to the given host and port, or Unix socket, on the remote side.",
+        })
+        .option("R", {
+          type: "string",
+          // Copied from `man ssh`
+          describe:
+            "Specifies that connections to the given TCP port or Unix socket on the remote (server) host are to be forwarded to the local side.",
         })
         .option("N", {
           type: "boolean",
@@ -53,6 +59,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe:
             "Enables forwarding of connections from an authentication agent such as ssh-agent",
+        })
+        .option("o", {
+          type: "string",
+          describe:
+            "Can be used to give options in the format used in the SSH configuration file.",
         })
         // Match `p0 request --reason`
         .option("reason", {
