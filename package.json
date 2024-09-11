@@ -12,6 +12,9 @@
   "bin": {
     "p0": "p0"
   },
+  "engines": {
+    "node": ">=20.14"
+  },
   "files": [
     "dist",
     "p0",
