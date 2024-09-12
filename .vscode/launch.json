@@ -19,7 +19,7 @@
             "sourceMaps": true,
             "runtimeExecutable": "ts-node",
             "env": {
-                "NODE_ENV": "dev"
+                "NODE_DEBUG": "true"
             }
         }
     ]

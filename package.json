@@ -35,7 +35,7 @@
     "pluralize": "^8.0.0",
     "semver": "^7.6.0",
     "tmp-promise": "^3.0.3",
-    "typescript": "^5.6.2",
+    "typescript": "^4.8.4",
     "which": "^4.0.0",
     "yargs": "^17.6.0"
   },
