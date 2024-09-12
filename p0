@@ -13,7 +13,7 @@ process.emit = function (name, data, ...args) {
   return originalEmit.apply(process, arguments);
 };
 
-if (process.env.NODE_ENV === 'dev') {
+if (process.env.NODE_ENV === "dev") {
   require(`${__dirname}/src/index.ts`).main();
 } else {
   require(`${__dirname}/dist/index.js`).main();
