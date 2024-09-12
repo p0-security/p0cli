@@ -13,7 +13,6 @@
             ],
             "program": "${workspaceFolder}/p0",
             "preLaunchTask": "tsc: build - tsconfig.json",
-            "args": ["ssh","dev-instance-fabian-joya"],
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
