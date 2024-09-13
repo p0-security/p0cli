@@ -29,14 +29,21 @@ export const asyncSpawn = async (
   new Promise<string>((resolve, reject) => {
     const child = spawn(command, args, options);
 
-    // Use streams for larger output
-    let stdout = "";
-    let stderr = "";
+    child.on("error", (error: Error) => {
+      if (debug) {
+        print2("Process error: " + error.message);
+      }
+      return reject(`Failed to run: ${error.message}`);
+    });
 
     if (writeStdin) {
       if (!child.stdin) return reject("Child process has no stdin");
       child.stdin.write(writeStdin);
     }
+
+    // Use streams for larger output
+    let stdout = "";
+    let stderr = "";
 
     child.stdout.on("data", (data) => {
       const str = data.toString("utf-8");
