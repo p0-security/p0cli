@@ -8,14 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { cli } from "./commands";
-import { noop } from "lodash";
 
-export const main = () => {
-  // We can suppress output here, as .fail() already print2 errors
-  void (cli.parse() as any).catch(noop);
-};
+export class CliError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CliError";
+    Object.setPrototypeOf(this, CliError.prototype);
+  }
+}
 
-if (require.main === module) {
-  main();
+export class NetworkError extends CliError {
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkError";
+    Object.setPrototypeOf(this, NetworkError.prototype);
+  }
 }

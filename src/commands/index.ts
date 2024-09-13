@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
+import { CliError } from "../types/errors";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
@@ -41,8 +42,13 @@ export const cli = commands
   .strict()
   .demandCommand(1)
   .fail((message, error, yargs) => {
-    if (error) print2(error);
-    else {
+    if (error) {
+      if (error instanceof CliError) {
+        print2(error.message);
+      } else {
+        print2(error);
+      }
+    } else {
       print2(yargs.help());
       print2(`\n${message}`);
     }
