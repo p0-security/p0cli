@@ -33,16 +33,19 @@ export const importSshKey = async (
     "auth",
     "print-access-token",
   ]);
+
   const account = await asyncSpawn({ debug }, "gcloud", [
     "config",
     "get-value",
     "account",
   ]);
+
   if (debug) {
     print2(
       `Retrieved access token ${accessToken.slice(0, 10)}... for account ${account}`
     );
   }
+
   const url = `https://oslogin.googleapis.com/v1/users/${account}:importSshPublicKey`;
   const response = await fetch(url, {
     method: "POST",
@@ -54,25 +57,36 @@ export const importSshKey = async (
       "Content-Type": "application/json",
     },
   });
+
+  if (!response.ok) {
+    throw `Import of SSH public key failed. HTTP error ${response.status}: ${await response.text()}`;
+  }
+
   const data: ImportSshPublicKeyResponse = await response.json();
   if (debug) {
     print2(
       `Login profile for user after importing public key: ${JSON.stringify(data)}`
     );
   }
+
   const { loginProfile } = data;
+
   // Find the primary POSIX account for the user, or the first in the array
   const linuxAccounts = loginProfile.posixAccounts.filter(
     (account) => account.operatingSystemType === "LINUX"
   );
+
   const posixAccount =
     linuxAccounts.find((account) => account.primary) ||
     loginProfile.posixAccounts[0];
+
   if (debug) {
     print2(`Picked linux user name: ${posixAccount?.username}`);
   }
+
   if (!posixAccount) {
     throw "No POSIX accounts configured for the user. Ask your Google Workspace administrator to configure the user's POSIX account.";
   }
+
   return posixAccount.username;
 };
