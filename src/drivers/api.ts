@@ -57,7 +57,7 @@ export const baseFetch = async <T>(
     }
     return data as T;
   } catch (error) {
-    if (error instanceof TypeError) {
+    if (error instanceof TypeError && error.message === "fetch failed") {
       throw new NetworkError(
         `Network error: Unable to reach the server at ${url}.`
       );
