@@ -9,7 +9,6 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { config } from "../drivers/env";
-import { NetworkError } from "../types/errors";
 import { Authn } from "../types/identity";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -58,9 +57,7 @@ export const baseFetch = async <T>(
     return data as T;
   } catch (error) {
     if (error instanceof TypeError && error.message === "fetch failed") {
-      throw new NetworkError(
-        `Network error: Unable to reach the server at ${url}.`
-      );
+      throw `Network error: Unable to reach the server at ${url}.`;
     } else {
       throw error;
     }
