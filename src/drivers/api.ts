@@ -39,18 +39,27 @@ export const baseFetch = async <T>(
   body: string
 ) => {
   const token = await authn.userCredential.user.getIdToken();
-  const response = await fetch(url, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-  const text = await response.text();
-  const data = JSON.parse(text);
-  if ("error" in data) {
-    throw data.error;
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const text = await response.text();
+    const data = JSON.parse(text);
+    if ("error" in data) {
+      throw data.error;
+    }
+    return data as T;
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "fetch failed") {
+      throw `Network error: Unable to reach the server at ${url}.`;
+    } else {
+      throw error;
+    }
   }
-  return data as T;
 };

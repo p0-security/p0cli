@@ -41,8 +41,9 @@ export const cli = commands
   .strict()
   .demandCommand(1)
   .fail((message, error, yargs) => {
-    if (error) print2(error);
-    else {
+    if (error) {
+      print2(error);
+    } else {
       print2(yargs.help());
       print2(`\n${message}`);
     }
