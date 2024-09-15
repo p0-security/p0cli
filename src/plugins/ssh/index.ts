@@ -52,9 +52,6 @@ const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 
-/** Delay between retries */
-const RETRY_DELAY_MS = 2000;
-
 /**
  * AWS
  * There are 2 cases of unprovisioned access in AWS
@@ -219,16 +216,12 @@ async function spawnSshNode(
           return;
         }
 
-        new Promise<void>((resolve) =>
-          setTimeout(resolve, RETRY_DELAY_MS)
-        ).then(() =>
-          spawnSshNode({
-            ...options,
-            attemptsRemaining: attemptsRemaining - 1,
-          })
-            .then((code) => resolve(code))
-            .catch(reject)
-        );
+        spawnSshNode({
+          ...options,
+          attemptsRemaining: attemptsRemaining - 1,
+        })
+          .then((code) => resolve(code))
+          .catch(reject);
 
         return;
       } else if (isGoogleLoginException()) {
