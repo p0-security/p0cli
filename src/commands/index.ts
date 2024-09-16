@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import Sentry from "../common/sentry";
 import { print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
 import { allowCommand } from "./allow";
@@ -43,20 +42,10 @@ export const cli = commands
   .demandCommand(1)
   .fail((message, error, yargs) => {
     if (error) {
-      // TODO: Convert expected errors to a subtype of Error
-      if (typeof error === "string") {
-        print2(error);
-      } else {
-        const errorId = Sentry.captureException(error);
-        const message = unknownErrorMessage(errorId);
-        print2(message);
-      }
+      print2(error);
     } else {
       print2(yargs.help());
       print2(`\n${message}`);
     }
     sys.exit(1);
   });
-
-const unknownErrorMessage = (errorId: string) =>
-  `P0 encountered an unknown error. Please contact support@p0.dev for assistance. (Error ID ${errorId})`;

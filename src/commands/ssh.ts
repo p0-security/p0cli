@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { errorBoundary } from "../common/error";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
@@ -95,20 +96,24 @@ export const sshCommand = (yargs: yargs.Argv) =>
  * - AWS EC2 via SSM with Okta SAML
  */
 const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
-  // Prefix is required because the backend uses it to determine that this is an AWS request
-  const authn = await authenticate();
+  try {
+    // Prefix is required because the backend uses it to determine that this is an AWS request
+    const authn = await authenticate();
 
-  const { request, privateKey, sshProvider } = await prepareRequest(
-    authn,
-    args,
-    args.destination
-  );
+    const { request, privateKey, sshProvider } = await prepareRequest(
+      authn,
+      args,
+      args.destination
+    );
 
-  await sshOrScp({
-    authn,
-    request,
-    cmdArgs: args,
-    privateKey,
-    sshProvider,
-  });
+    await sshOrScp({
+      authn,
+      request,
+      cmdArgs: args,
+      privateKey,
+      sshProvider,
+    });
+  } catch (error) {
+    throw errorBoundary(error, {}, args.debug);
+  }
 };
