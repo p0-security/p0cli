@@ -32,6 +32,7 @@ type LsResponse = {
 const lsArgs = <T>(yargs: yargs.Argv<T>) =>
   yargs
     .parserConfiguration({ "unknown-options-as-args": true })
+    .help(false)
     .option("arguments", {
       array: true,
       string: true,
