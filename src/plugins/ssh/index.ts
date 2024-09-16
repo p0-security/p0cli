@@ -222,6 +222,7 @@ async function spawnSshNode(
         })
           .then((code) => resolve(code))
           .catch(reject);
+
         return;
       } else if (isGoogleLoginException()) {
         reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
@@ -242,6 +243,10 @@ const createCommand = (
 ) => {
   const commonArgs = [
     ...(args.debug ? ["-v"] : []),
+    // Explicitly specify which private key to use to avoid "Too many authentication failures"
+    // error caused by SSH trying every available key
+    "-i",
+    PRIVATE_KEY_PATH,
     "-o",
     `ProxyCommand=${proxyCommand.join(" ")}`,
   ];
