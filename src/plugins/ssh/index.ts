@@ -243,8 +243,10 @@ const createCommand = (
 ) => {
   const commonArgs = [
     ...(args.debug ? ["-v"] : []),
+    // Explicitly specify which private key to use to avoid "Too many authentication failures"
+    // error caused by SSH trying every available key
     "-i",
-    PRIVATE_KEY_PATH, // ENG-2319 Explicitly specify which private key to use
+    PRIVATE_KEY_PATH,
     "-o",
     `ProxyCommand=${proxyCommand.join(" ")}`,
   ];
