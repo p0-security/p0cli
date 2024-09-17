@@ -9,8 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../drivers/stdio";
-import { AgentArgs } from "../plugins/ssh-agent/types";
 import { spawn, SpawnOptionsWithoutStdio } from "node:child_process";
+
+export type SubprocessArgs = {
+  debug?: boolean;
+};
 
 /** Spawns a subprocess with given command, args, and options.
  * May write content to its standard input.
@@ -20,7 +23,7 @@ import { spawn, SpawnOptionsWithoutStdio } from "node:child_process";
  * The captured output is expected to be relatively small.
  * For larger outputs we should implement this with streams. */
 export const asyncSpawn = async (
-  { debug }: AgentArgs,
+  { debug }: SubprocessArgs,
   command: string,
   args?: ReadonlyArray<string>,
   options?: SpawnOptionsWithoutStdio,

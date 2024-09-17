@@ -81,8 +81,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .option("debug", {
           type: "boolean",
-          describe:
-            "Print debug information. The ssh-agent subprocess is not terminated automatically.",
+          describe: "Print debug information.",
         }),
     guard(sshAction)
   );

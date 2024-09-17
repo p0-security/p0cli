@@ -14,7 +14,6 @@ import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
 import { AwsCredentials } from "../aws/types";
-import { withSshAgent } from "../ssh-agent";
 import {
   ChildProcessByStdio,
   StdioNull,
@@ -247,6 +246,9 @@ const createCommand = (
     // error caused by SSH trying every available key
     "-i",
     PRIVATE_KEY_PATH,
+    // Only use the authentication identity specified by -i above
+    "-o",
+    "IdentitiesOnly=yes",
     "-o",
     `ProxyCommand=${proxyCommand.join(" ")}`,
   ];
@@ -352,44 +354,44 @@ export const sshOrScp = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(request);
 
-  return withSshAgent(cmdArgs, async () => {
-    const { command, args } = createCommand(request, cmdArgs, proxyCommand);
+  const { command, args: commandArgs } = createCommand(
+    request,
+    cmdArgs,
+    proxyCommand
+  );
 
-    if (cmdArgs.debug) {
-      const reproCommands = sshProvider.reproCommands(request);
-      if (reproCommands) {
-        const repro = [
-          `eval $(ssh-agent)`,
-          `ssh-add "${PRIVATE_KEY_PATH}"`,
-          ...reproCommands,
-          `${command} ${transformForShell(args).join(" ")}`,
-        ].join("\n");
-        print2(
-          `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
-        );
-      }
+  if (cmdArgs.debug) {
+    const reproCommands = sshProvider.reproCommands(request);
+    if (reproCommands) {
+      const repro = [
+        ...reproCommands,
+        `${command} ${transformForShell(commandArgs).join(" ")}`,
+      ].join("\n");
+      print2(
+        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
+      );
     }
+  }
 
-    const exitCode = await preTestAccessPropagationIfNeeded(
-      sshProvider,
-      request,
-      cmdArgs,
-      proxyCommand,
-      credential
-    );
-    if (exitCode && exitCode !== 0) {
-      return exitCode; // Only exit if there was an error when pre-testing
-    }
+  const exitCode = await preTestAccessPropagationIfNeeded(
+    sshProvider,
+    request,
+    cmdArgs,
+    proxyCommand,
+    credential
+  );
+  if (exitCode && exitCode !== 0) {
+    return exitCode; // Only exit if there was an error when pre-testing
+  }
 
-    return spawnSshNode({
-      credential,
-      abortController: new AbortController(),
-      command,
-      args,
-      stdio: ["inherit", "inherit", "pipe"],
-      debug: cmdArgs.debug,
-      provider: request.type,
-      attemptsRemaining: sshProvider.maxRetries,
-    });
+  return spawnSshNode({
+    credential,
+    abortController: new AbortController(),
+    command,
+    args: commandArgs,
+    stdio: ["inherit", "inherit", "pipe"],
+    debug: cmdArgs.debug,
+    provider: request.type,
+    attemptsRemaining: sshProvider.maxRetries,
   });
 };
