@@ -34,4 +34,5 @@ export const config = {
       env.P0_GOOGLE_OIDC_CLIENT_SECRET ?? "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",
   },
   appUrl: env.P0_APP_URL ?? "https://api.p0.app",
+  ENV: env.P0_ENV ?? "production",
 };
