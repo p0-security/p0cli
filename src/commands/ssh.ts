@@ -38,33 +38,6 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Add user to sudoers file",
         })
-        .option("L", {
-          type: "string",
-          // Copied from `man ssh`
-          describe:
-            "Specifies that connections to the given TCP port or Unix socket on the local (client) host are to be forwarded to the given host and port, or Unix socket, on the remote side.",
-        })
-        .option("R", {
-          type: "string",
-          // Copied from `man ssh`
-          describe:
-            "Specifies that connections to the given TCP port or Unix socket on the remote (server) host are to be forwarded to the local side.",
-        })
-        .option("N", {
-          type: "boolean",
-          describe:
-            "Do not execute a remote command. Useful for forwarding ports.",
-        })
-        .option("A", {
-          type: "boolean",
-          describe:
-            "Enables forwarding of connections from an authentication agent such as ssh-agent",
-        })
-        .option("o", {
-          type: "string",
-          describe:
-            "Can be used to give options in the format used in the SSH configuration file.",
-        })
         // Match `p0 request --reason`
         .option("reason", {
           describe: "Reason access is needed",
@@ -82,6 +55,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
+        })
+        // Enable populate-- to capture SSH-specific options after `--`
+        .parserConfiguration({
+          "populate--": true,
         }),
     guard(sshAction)
   );
@@ -96,6 +73,9 @@ export const sshCommand = (yargs: yargs.Argv) =>
 const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
+
+  const sshOptions = (args["--"] ?? []) as string[];
+  args.sshOptions = sshOptions;
 
   const { request, privateKey, sshProvider } = await prepareRequest(
     authn,

@@ -68,6 +68,9 @@ export const scpCommand = (yargs: yargs.Argv) =>
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   const authn = await authenticate();
 
+  const sshOptions = (args["--"] ?? []) as string[];
+  args.sshOptions = sshOptions;
+
   const host = getHostIdentifier(args.source, args.destination);
 
   if (!host) {
