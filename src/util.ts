@@ -15,7 +15,7 @@ import path from "node:path";
 
 export const P0_PATH = path.join(
   os.homedir(),
-  config.environment === "dev" ? ".p0-dev" : ".p0"
+  config.environment === "development" ? ".p0-dev" : ".p0"
 );
 
 /** Waits the specified delay (in ms)
