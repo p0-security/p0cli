@@ -24,6 +24,7 @@
   ],
   "dependencies": {
     "@rgrove/parse-xml": "^4.1.0",
+    "@sentry/node": "^7.47.0",
     "@types/ini": "^4.1.1",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
