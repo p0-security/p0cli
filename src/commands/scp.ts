@@ -57,6 +57,10 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
+        })
+        // Enable populate-- to capture SSH-specific options after `--`
+        .parserConfiguration({
+          "populate--": true,
         }),
     guard(scpAction)
   );
@@ -67,6 +71,9 @@ export const scpCommand = (yargs: yargs.Argv) =>
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   const authn = await authenticate();
+
+  const sshOptions = (args["--"] ?? []) as string[];
+  args.sshOptions = sshOptions;
 
   const host = getHostIdentifier(args.source, args.destination);
 

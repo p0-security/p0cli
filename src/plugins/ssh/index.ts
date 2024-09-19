@@ -240,31 +240,15 @@ const createCommand = (
   args: CommandArgs,
   proxyCommand: string[]
 ) => {
-  const commonArgs = [
-    ...(args.debug ? ["-v"] : []),
-    // Explicitly specify which private key to use to avoid "Too many authentication failures"
-    // error caused by SSH trying every available key
-    "-i",
-    PRIVATE_KEY_PATH,
-    // Only use the authentication identity specified by -i above
-    "-o",
-    "IdentitiesOnly=yes",
-    "-o",
-    `ProxyCommand=${proxyCommand.join(" ")}`,
-  ];
+  addCommonArgs(args, proxyCommand);
 
   if ("source" in args) {
+    addScpArgs(args);
+
     return {
       command: "scp",
       args: [
-        ...commonArgs,
-        // if a response is not received after three 5 minute attempts,
-        // the connection will be closed.
-        "-o",
-        "ServerAliveCountMax=3",
-        `-o`,
-        "ServerAliveInterval=300",
-        ...(args.recursive ? ["-r"] : []),
+        ...(args.sshOptions ? args.sshOptions : []),
         args.source,
         args.destination,
       ],
@@ -274,12 +258,7 @@ const createCommand = (
   return {
     command: "ssh",
     args: [
-      ...commonArgs,
-      ...(args.A ? ["-A"] : []),
-      ...(args.L ? ["-L", args.L] : []),
-      ...(args.R ? ["-R", args.R] : []),
-      ...(args.N ? ["-N"] : []),
-      ...(args.o ? ["-o", args.o] : []),
+      ...(args.sshOptions ? args.sshOptions : []),
       `${data.linuxUserName}@${data.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
@@ -290,6 +269,78 @@ const createCommand = (
       ),
     ],
   };
+};
+
+/** Add common args used by both SSH & SCP to args.sshOptions.
+ *
+ * These common args are only added if they have not been explicitly specified by the end user.
+ */
+const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
+  const sshOptions = args.sshOptions ? args.sshOptions : [];
+
+  const identityFileOptionExists = sshOptions.some(
+    (opt, idx) =>
+      (opt === "-i" && sshOptions[idx + 1]) ||
+      (opt === "-o" && sshOptions[idx + 1]?.startsWith("IdentityFile"))
+  );
+
+  const identitiesOnlyOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("IdentitiesOnly")
+  );
+
+  // Explicitly specify which private key to use to avoid "Too many authentication failures"
+  // error caused by SSH trying every available key
+  if (!identityFileOptionExists) {
+    sshOptions.push("-i", PRIVATE_KEY_PATH);
+    // Only use the authentication identity specified by -i above
+    if (!identitiesOnlyOptionExists) {
+      sshOptions.push("-o", "IdentitiesOnly=yes");
+    }
+  }
+
+  const proxyCommandExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ProxyCommand")
+  );
+
+  if (!proxyCommandExists) {
+    sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
+  }
+
+  const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
+  if (!verboseOptionExists) {
+    sshOptions.push("-v");
+  }
+};
+
+const addScpArgs = (args: CommandArgs) => {
+  const sshOptions = args.sshOptions ? args.sshOptions : [];
+
+  // if a response is not received after three 5 minute attempts,
+  // the connection will be closed.
+  const serverAliveCountMaxOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveCountMax")
+  );
+
+  if (!serverAliveCountMaxOptionExists) {
+    sshOptions.push("-o", "ServerAliveCountMax=3");
+  }
+
+  const serverAliveIntervalOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveInterval")
+  );
+
+  if (!serverAliveIntervalOptionExists) {
+    sshOptions.push("-o", "ServerAliveInterval=300");
+  }
+
+  const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
+  if (!recursiveOptionExists) {
+    sshOptions.push("-r");
+  }
 };
 
 /** Converts arguments for manual execution - arguments may have to be quoted or certain characters escaped when executing the commands from a shell */
@@ -345,6 +396,7 @@ export const sshOrScp = async (args: {
   sshProvider: SshProvider<any, any, any, any>;
 }) => {
   const { authn, request, cmdArgs, privateKey, sshProvider } = args;
+
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
