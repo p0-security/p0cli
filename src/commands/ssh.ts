@@ -56,10 +56,19 @@ export const sshCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Print debug information.",
         })
+        .usage("$0 ssh <destination> [command [arguments..]] [-- SSH_ARGS ...]")
         // Enable populate-- to capture SSH-specific options after `--`
         .parserConfiguration({
           "populate--": true,
-        }),
+        })
+        .epilogue(
+          `[-- SSH_ARGS ...]
+  Flags and positionals passed to the underlying ssh implementation.
+  The '--' argument must be specified between P0-specific args on the left and SSH_ARGS on the right. Example;
+
+  $ p0 ssh example-instance --provider gcloud -- -NR '*:8080:localhost:8088' -o 'GatewayPorts yes'`
+        ),
+
     guard(sshAction)
   );
 

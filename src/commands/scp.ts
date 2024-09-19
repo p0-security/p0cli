@@ -58,10 +58,17 @@ export const scpCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Print debug information.",
         })
+        .usage("scp <source> <destination> [-- SCP_ARGS ...]")
         // Enable populate-- to capture SSH-specific options after `--`
         .parserConfiguration({
           "populate--": true,
-        }),
+        })
+        .epilogue(
+          `[-- SCP_ARGS ...]
+  Flags and positionals passed to the underlying scp implementation.
+  The '--' argument must be specified between P0-specific args on the left and SCP_ARGS on the right.`
+        ),
+
     guard(scpAction)
   );
 
