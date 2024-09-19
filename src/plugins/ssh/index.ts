@@ -13,6 +13,7 @@ import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
+import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
   ChildProcessByStdio,
@@ -51,7 +52,7 @@ const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 
-const RETRY_DELAY_MS = 3000;
+const RETRY_DELAY_MS = 1000;
 
 /**
  * AWS
@@ -400,5 +401,3 @@ export const sshOrScp = async (args: {
     attemptsRemaining: sshProvider.maxRetries,
   });
 };
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

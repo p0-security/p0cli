@@ -113,3 +113,6 @@ export const unexpectedValueError = (value: any) =>
  */
 export const ciEquals = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
+
+export const delay = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
