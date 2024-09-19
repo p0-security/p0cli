@@ -83,7 +83,9 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate();
 
-  const sshOptions = (args["--"] ?? []) as string[];
+  const sshOptions: string[] = Array.isArray(args["--"])
+    ? args["--"].map(String)
+    : [];
   args.sshOptions = sshOptions;
 
   const { request, privateKey, sshProvider } = await prepareRequest(
