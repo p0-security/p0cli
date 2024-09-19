@@ -57,6 +57,10 @@ export const scpCommand = (yargs: yargs.Argv) =>
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
+        })
+        // Enable populate-- to capture SSH-specific options after `--`
+        .parserConfiguration({
+          "populate--": true,
         }),
     guard(scpAction)
   );
