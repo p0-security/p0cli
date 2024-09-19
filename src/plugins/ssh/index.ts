@@ -243,17 +243,12 @@ const createCommand = (
   addCommonArgs(args, proxyCommand);
 
   if ("source" in args) {
+    addScpArgs(args);
+
     return {
       command: "scp",
       args: [
         ...(args.sshOptions ? args.sshOptions : []),
-        // if a response is not received after three 5 minute attempts,
-        // the connection will be closed.
-        "-o",
-        "ServerAliveCountMax=3",
-        `-o`,
-        "ServerAliveInterval=300",
-        ...(args.recursive ? ["-r"] : []),
         args.source,
         args.destination,
       ],
@@ -316,6 +311,35 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
   if (!verboseOptionExists) {
     sshOptions.push("-v");
+  }
+};
+
+const addScpArgs = (args: CommandArgs) => {
+  const sshOptions = args.sshOptions ? args.sshOptions : [];
+
+  // if a response is not received after three 5 minute attempts,
+  // the connection will be closed.
+  const serverAliveCountMaxOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveCountMax")
+  );
+
+  if (!serverAliveCountMaxOptionExists) {
+    sshOptions.push("-o", "ServerAliveCountMax=3");
+  }
+
+  const serverAliveIntervalOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveInterval")
+  );
+
+  if (!serverAliveIntervalOptionExists) {
+    sshOptions.push("-o", "ServerAliveInterval=300");
+  }
+
+  const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
+  if (!recursiveOptionExists) {
+    sshOptions.push("-r");
   }
 };
 
