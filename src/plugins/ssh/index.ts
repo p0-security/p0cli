@@ -217,14 +217,15 @@ async function spawnSshNode(
           return;
         }
 
-        delay(RETRY_DELAY_MS).then(() =>
-          spawnSshNode({
-            ...options,
-            attemptsRemaining: attemptsRemaining - 1,
-          })
-            .then((code) => resolve(code))
-            .catch(reject)
-        );
+        delay(RETRY_DELAY_MS)
+          .then(() =>
+            spawnSshNode({
+              ...options,
+              attemptsRemaining: attemptsRemaining - 1,
+            })
+          )
+          .then((code) => resolve(code))
+          .catch(reject);
 
         return;
       } else if (isGoogleLoginException()) {
