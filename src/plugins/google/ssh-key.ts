@@ -59,7 +59,15 @@ export const importSshKey = async (
   });
 
   if (!response.ok) {
-    throw `Import of SSH public key failed. HTTP error ${response.status}: ${await response.text()}`;
+    if (debug) {
+      print2(`HTTP error ${response.status}: ${await response.text()}`);
+    }
+
+    if (response.status === 401) {
+      throw `Authentication failed. Please login to Google Cloud CLI with 'gcloud auth login'`;
+    } else {
+      throw `Import of SSH public key failed.`;
+    }
   }
 
   const data: ImportSshPublicKeyResponse = await response.json();
