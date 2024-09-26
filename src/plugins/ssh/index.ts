@@ -52,7 +52,7 @@ const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 
-const RETRY_DELAY_MS = 1000;
+const RETRY_DELAY_MS = 5000;
 
 /**
  * AWS
@@ -315,7 +315,7 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
   }
 
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
-  if (!verboseOptionExists) {
+  if (!verboseOptionExists && args.debug) {
     sshOptions.push("-v");
   }
 };
