@@ -15,6 +15,11 @@ import {
   AwsSshRequest,
 } from "../plugins/aws/types";
 import {
+  AzureSsh,
+  AzureSshPermissionSpec,
+  AzureSshRequest,
+} from "../plugins/azure/types";
+import {
   GcpSsh,
   GcpSshPermissionSpec,
   GcpSshRequest,
@@ -22,8 +27,11 @@ import {
 import { Authn } from "./identity";
 import { Request } from "./request";
 
-export type CliSshRequest = AwsSsh | GcpSsh;
-export type PluginSshRequest = AwsSshPermissionSpec | GcpSshPermissionSpec;
+export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh;
+export type PluginSshRequest =
+  | AwsSshPermissionSpec
+  | AzureSshPermissionSpec
+  | GcpSshPermissionSpec;
 
 export type CliPermissionSpec<
   P extends PluginSshRequest,
@@ -33,7 +41,7 @@ export type CliPermissionSpec<
 };
 
 // The prefix of installed SSH accounts in P0 is the provider name
-export const SupportedSshProviders = ["aws", "gcloud"] as const;
+export const SupportedSshProviders = ["aws", "gcloud", "azure"] as const;
 export type SupportedSshProvider = (typeof SupportedSshProviders)[number];
 
 export type SshProvider<
@@ -70,4 +78,4 @@ export type SshProvider<
   friendlyName: string;
 };
 
-export type SshRequest = AwsSshRequest | GcpSshRequest;
+export type SshRequest = AwsSshRequest | AzureSshRequest | GcpSshRequest;

@@ -13,6 +13,7 @@ import { createKeyPair } from "../../common/keys";
 import { doc } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
+import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
@@ -59,6 +60,7 @@ export const SSH_PROVIDERS: Record<
 > = {
   aws: awsSshProvider,
   gcloud: gcpSshProvider,
+  azure: azureSshProvider,
 };
 
 const validateSshInstall = async (

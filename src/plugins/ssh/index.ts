@@ -46,6 +46,9 @@ const DESTINATION_READ_ERROR =
 const GOOGLE_LOGIN_MESSAGE =
   /You do not currently have an active account selected/;
 const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `sudo -v` when the user is not allowed to run sudo
+const UNAUTHORIZED_SCOPE_ACCESS_MESSAGE =
+  /The client '([^']+)' with object id '([^']+)' does not have authorization to perform action '([^']+)' over scope '([^']+)' or the scope is invalid/;
+const AZURE_LOGIN_MESSAGE = /Please run 'az login' to setup account/;
 
 /** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
  *  in the process's stderr
@@ -55,6 +58,7 @@ const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 const RETRY_DELAY_MS = 5000;
 
 /**
+
  * AWS
  * There are 2 cases of unprovisioned access in AWS
  * 1. SSM:StartSession action is missing either on the SSM document (AWS-StartSSHSession) or the EC2 instance
@@ -81,6 +85,11 @@ const RETRY_DELAY_MS = 5000;
  * 5a: results in UNAUTHORIZED_INSTANCES_GET_MESSAGE
  * 6: results in SUDO_MESSAGE
  * 7: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
+ * 
+ * Azure
+ * There is 1 message that is sent for unprovisioned access in Azure
+ * 1. The user does not have the authorization to perform an action results in UNAUTHORIZED_SCOPE_ACCESS_MESSAGE
+ * 2. The user is not logged in to Azure CLI results in AZURE_LOGIN_MESSAGE
  */
 const UNPROVISIONED_ACCESS_MESSAGES = [
   { pattern: UNAUTHORIZED_START_SESSION_MESSAGE },
@@ -90,6 +99,7 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
   { pattern: UNAUTHORIZED_TUNNEL_USER_MESSAGE },
   { pattern: UNAUTHORIZED_INSTANCES_GET_MESSAGE, validationWindowMs: 30e3 },
   { pattern: DESTINATION_READ_ERROR },
+  { pattern: UNAUTHORIZED_SCOPE_ACCESS_MESSAGE, validationWindowMs: 10e3 },
 ];
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -114,11 +124,11 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isGoogleLoginException = false;
+  let isAzureLoginException = false;
   const beforeStart = Date.now();
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-
     if (debug) print2(chunkString);
 
     const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
@@ -138,11 +148,20 @@ const accessPropagationGuard = (
     if (isGoogleLoginException) {
       isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
     }
+
+    const azureLoginMatch = chunkString.match(AZURE_LOGIN_MESSAGE);
+    console;
+    isAzureLoginException = isAzureLoginException || !!azureLoginMatch;
+    if (isAzureLoginException) {
+      isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
+    }
   });
 
   return {
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isGoogleLoginException: () => isGoogleLoginException,
+    // TODO: check for azure login before starting the ssh session
+    isAzureLoginException: () => isAzureLoginException,
   };
 };
 
@@ -199,12 +218,20 @@ async function spawnSshNode(
       options.credential,
       options.command,
       options.args,
-      options.stdio
+      ["inherit", "inherit", "pipe"]
     );
 
-    // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isGoogleLoginException } =
-      accessPropagationGuard(child, options.debug);
+    // TODO @ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
+    // TODO: Support login with Azure.
+    const {
+      isAccessPropagated,
+      isGoogleLoginException,
+      isAzureLoginException,
+    } = accessPropagationGuard(child, options.debug);
+
+    child.on("error", (err) => {
+      reject(err);
+    });
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
@@ -231,6 +258,9 @@ async function spawnSshNode(
         return;
       } else if (isGoogleLoginException()) {
         reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
+        return;
+      } else if (isAzureLoginException()) {
+        reject(`Please login to Azure CLI with 'az login'`);
         return;
       }
 
@@ -410,6 +440,7 @@ export const sshOrScp = async (args: {
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
 
+  // TODO: azure doesn't need the ssh wrapper.
   const proxyCommand = sshProvider.proxyCommand(request);
 
   const { command, args: commandArgs } = createCommand(
@@ -445,8 +476,8 @@ export const sshOrScp = async (args: {
   return spawnSshNode({
     credential,
     abortController: new AbortController(),
-    command,
-    args: commandArgs,
+    command: "az",
+    args: proxyCommand,
     stdio: ["inherit", "inherit", "pipe"],
     debug: cmdArgs.debug,
     provider: request.type,
