@@ -160,7 +160,7 @@ async function spawnSshNode(
         clearTimeout(timeout);
       }
       timeout = setTimeout(() => {
-        console.log("SSH connection established.");
+        print2("SSH connection established.");
       }, STDERR_TIMEOUT_PERIOD);
     };
 
