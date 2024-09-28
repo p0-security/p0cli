@@ -15,13 +15,7 @@ import { Authn } from "../../types/identity";
 import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
 import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
-import {
-  ChildProcessByStdio,
-  StdioNull,
-  StdioPipe,
-  spawn,
-} from "node:child_process";
-import { Readable } from "node:stream";
+import { StdioNull, StdioPipe, spawn } from "node:child_process";
 
 /** Matches the error message that AWS SSM print1 when access is not propagated */
 // Note that the resource will randomly be either the SSM document or the EC2 instance
@@ -51,7 +45,9 @@ const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `
  *  in the process's stderr
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
-
+/** How long we wait for output on stderr before we consider the channel to be successfully established */
+const STDERR_TIMEOUT_PERIOD = 10000;
+/** Retry delay between SSH command spawn attempts */
 const RETRY_DELAY_MS = 5000;
 
 /**
@@ -91,60 +87,6 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
   { pattern: UNAUTHORIZED_INSTANCES_GET_MESSAGE, validationWindowMs: 30e3 },
   { pattern: DESTINATION_READ_ERROR },
 ];
-
-/** Checks if access has propagated through AWS to the SSM agent
- *
- * AWS takes about 8 minutes, GCP takes under 1 minute
- * to fully resolve access after it is granted.
- * During this time, calls to `aws ssm start-session` / `gcloud compute start-iap-tunnel`
- * will fail randomly with an various error messages.
- *
- * This function checks the subprocess output to see if any of the error messages
- * are printed to the error output within the first 5 seconds of startup.
- * If they are, the returned `isAccessPropagated()` function will return false.
- * When this occurs, the consumer of this function should retry the `aws` / `gcloud` command.
- *
- * Note that this function requires interception of the subprocess stderr stream.
- * This works because AWS SSM wraps the session in a single-stream pty, so we
- * do not capture stderr emitted from the wrapped shell session.
- */
-const accessPropagationGuard = (
-  child: ChildProcessByStdio<null, null, Readable>,
-  debug?: boolean
-) => {
-  let isEphemeralAccessDeniedException = false;
-  let isGoogleLoginException = false;
-  const beforeStart = Date.now();
-
-  child.stderr.on("data", (chunk) => {
-    const chunkString: string = chunk.toString("utf-8");
-
-    if (debug) print2(chunkString);
-
-    const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
-      chunkString.match(message.pattern)
-    );
-
-    if (
-      match &&
-      Date.now() <=
-        beforeStart + (match.validationWindowMs || DEFAULT_VALIDATION_WINDOW_MS)
-    ) {
-      isEphemeralAccessDeniedException = true;
-    }
-
-    const googleLoginMatch = chunkString.match(GOOGLE_LOGIN_MESSAGE);
-    isGoogleLoginException = isGoogleLoginException || !!googleLoginMatch; // once true, always true
-    if (isGoogleLoginException) {
-      isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
-    }
-  });
-
-  return {
-    isAccessPropagated: () => !isEphemeralAccessDeniedException,
-    isGoogleLoginException: () => isGoogleLoginException,
-  };
-};
 
 const spawnChildProcess = (
   credential: AwsCredentials | undefined,
@@ -203,11 +145,60 @@ async function spawnSshNode(
     );
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isGoogleLoginException } =
-      accessPropagationGuard(child, options.debug);
+    let isEphemeralAccessDeniedException = false;
+    let isGoogleLoginException = false;
+
+    let timeout: NodeJS.Timeout;
+
+    const remoteCommandOption = hasRemoteCommandOption(options.args);
+
+    const resetTimeout = () => {
+      if (!remoteCommandOption) {
+        return;
+      }
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(() => {
+        console.log("SSH connection established.");
+      }, STDERR_TIMEOUT_PERIOD);
+    };
+
+    const beforeStart = Date.now();
+    child.stderr.on("data", (chunk) => {
+      resetTimeout();
+
+      const chunkString: string = chunk.toString("utf-8");
+
+      if (options.debug) print2(chunkString);
+
+      const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
+        chunkString.match(message.pattern)
+      );
+
+      if (
+        match &&
+        Date.now() <=
+          beforeStart +
+            (match.validationWindowMs || DEFAULT_VALIDATION_WINDOW_MS)
+      ) {
+        isEphemeralAccessDeniedException = true;
+      }
+
+      const googleLoginMatch = chunkString.match(GOOGLE_LOGIN_MESSAGE);
+      isGoogleLoginException = isGoogleLoginException || !!googleLoginMatch; // once true, always true
+      if (isGoogleLoginException) {
+        // always overwrite to false so we don't retry the access
+        isEphemeralAccessDeniedException = false;
+      }
+    });
+
+    const isAccessPropagated = () => !isEphemeralAccessDeniedException;
 
     const exitListener = child.on("exit", (code) => {
+      clearTimeout(timeout);
       exitListener.unref();
+
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
@@ -229,7 +220,7 @@ async function spawnSshNode(
           .catch(reject);
 
         return;
-      } else if (isGoogleLoginException()) {
+      } else if (isGoogleLoginException) {
         reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
         return;
       }
@@ -241,11 +232,16 @@ async function spawnSshNode(
   });
 }
 
+const hasRemoteCommandOption = (options: string[]): boolean => {
+  return options.some((opt) => opt.startsWith("-N"));
+};
+
 const createCommand = (
   data: SshRequest,
   args: CommandArgs,
   proxyCommand: string[]
 ) => {
+  // TODO: Unpack no-command options
   addCommonArgs(args, proxyCommand);
 
   if ("source" in args) {
