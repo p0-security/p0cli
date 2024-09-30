@@ -109,8 +109,7 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
-  child: ChildProcessByStdio<null, null, Readable>,
-  debug?: boolean
+  child: ChildProcessByStdio<null, null, Readable>
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isGoogleLoginException = false;
@@ -118,8 +117,7 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-
-    if (debug) print2(chunkString);
+    print2(chunkString);
 
     const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
       chunkString.match(message.pattern)
@@ -204,7 +202,7 @@ async function spawnSshNode(
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isGoogleLoginException } =
-      accessPropagationGuard(child, options.debug);
+      accessPropagationGuard(child);
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
