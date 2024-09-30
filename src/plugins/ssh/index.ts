@@ -118,8 +118,7 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-
-    if (debug) print2(chunkString);
+    parseAndPrintSshOutputToStderr(chunkString, debug);
 
     const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
       chunkString.match(message.pattern)
@@ -144,6 +143,36 @@ const accessPropagationGuard = (
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isGoogleLoginException: () => isGoogleLoginException,
   };
+};
+
+/**
+ * Parses and prints a chunk of SSH output to stderr.
+ *
+ * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
+ *
+ * @param chunkString the chunk to print
+ * @param debug true if debug output is enabled
+ */
+const parseAndPrintSshOutputToStderr = (
+  chunkString: string,
+  debug?: boolean
+) => {
+  const lines = chunkString.split("\n");
+
+  // SSH only prints the "Authenticated to" message if the verbose option (-v) is enabled
+  for (const line of lines) {
+    if (debug) {
+      print2(line);
+    } else {
+      if (line.includes("Authenticated to")) {
+        print2(line);
+      }
+
+      if (line.includes("port forwarding failed")) {
+        print2(line);
+      }
+    }
+  }
 };
 
 const spawnChildProcess = (
@@ -315,7 +344,7 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
   }
 
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
-  if (!verboseOptionExists && args.debug) {
+  if (!verboseOptionExists) {
     sshOptions.push("-v");
   }
 };
