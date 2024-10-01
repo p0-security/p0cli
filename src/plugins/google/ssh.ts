@@ -73,7 +73,7 @@ export const gcpSshProvider: SshProvider<
         // `sudo -v` prints `Sorry, user <user> may not run sudo on <hostname>.` to stderr when user is not a sudoer.
         // It prints nothing to stdout when user is a sudoer - which is important because we don't want any output from the pre-test.
         command: "sudo",
-        arguments: ["-v"],
+        arguments: ["--", "-v"],
       };
     }
     return undefined;
