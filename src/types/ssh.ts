@@ -42,20 +42,24 @@ export type SshProvider<
   SR extends SshRequest = SshRequest,
   C extends object | undefined = undefined, // credentials object
 > = {
-  requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;
-  /** Converts a backend request to a CLI request */
-  toCliRequest: (
-    request: Request<PR>,
-    options?: { debug?: boolean }
-  ) => Promise<Request<CliSshRequest>>;
-  ensureInstall: () => Promise<void>;
   /** Logs in the user to the cloud provider */
   cloudProviderLogin: (authn: Authn, request: SR) => Promise<C>;
-  /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
-  proxyCommand: (request: SR) => string[];
-  /** Each element in the returned array is a command that can be run to reproduce the
-   * steps of logging in the user to the ssh session. */
-  reproCommands: (request: SR) => string[] | undefined;
+
+  /** Callback to ensure that this provider's CLI utils are installed */
+  ensureInstall: () => Promise<void>;
+
+  /** A human-readable name for this CSP */
+  friendlyName: string;
+
+  /** Friendly message to ask the user to log in to the CSP */
+  loginRequiredMessage?: string;
+
+  /** Regex match for error string indicating that CSP login is required */
+  loginRequiredPattern?: RegExp;
+
+  /** Maximum number of times to call this provider's CLI SSH command */
+  maxRetries: number;
+
   /** Arguments for a pre-test command to verify access propagation prior
    * to actually logging in the user to the ssh session.
    * This must return arguments for a non-interactive command - meaning the `command`
@@ -66,8 +70,30 @@ export type SshProvider<
   preTestAccessPropagationArgs: (
     cmdArgs: CommandArgs
   ) => CommandArgs | undefined;
-  maxRetries: number;
-  friendlyName: string;
+
+  /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
+  proxyCommand: (request: SR) => string[];
+
+  /** Each element in the returned array is a command that can be run to reproduce the
+   * steps of logging in the user to the ssh session. */
+  reproCommands: (request: SR) => string[] | undefined;
+
+  /** Unwraps this provider's types */
+  requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;
+
+  /** Regex matches for error strings indicating that the provider has not yet fully provisioned node acces */
+  unprovisionedAccessPatterns: readonly {
+    /** If the error matches this string, indicates that access is not provisioned */
+    readonly pattern: RegExp;
+    /** Maximum amount of time to wait for provisioning after encountering this error */
+    readonly validationWindowMs?: number;
+  }[];
+
+  /** Converts a backend request to a CLI request */
+  toCliRequest: (
+    request: Request<PR>,
+    options?: { debug?: boolean }
+  ) => Promise<Request<CliSshRequest>>;
 };
 
 export type SshRequest = AwsSshRequest | GcpSshRequest;
