@@ -26,7 +26,7 @@ import {
  *
  * Each attempt consumes ~ 1 s.
  */
-const MAX_SSH_RETRIES = 30;
+const MAX_SSH_RETRIES = 6;
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";

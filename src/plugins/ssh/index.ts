@@ -164,10 +164,7 @@ const parseAndPrintSshOutputToStderr = (
     if (options.debug) {
       print2(line);
     } else {
-      if (isPreTest && line.match(SUDO_MESSAGE)) {
-        // On pre-test, print the sudo error message if present
-        print2(line);
-      } else if (!isPreTest && line.includes("Authenticated to")) {
+      if (!isPreTest && line.includes("Authenticated to")) {
         // We want to let the user know that they successfully authenticated
         print2(line);
       } else if (!isPreTest && line.includes("port forwarding failed")) {
