@@ -472,7 +472,9 @@ export const sshOrScp = async (args: {
     credential
   );
   if (exitCode && exitCode !== 0) {
-    print2(`SSH session terminated`);
+    print2(
+      `Failed to establish an SSH session.${!cmdArgs.debug ? " Use the --debug option to see additional details." : ""}`
+    );
     return exitCode; // Only exit if there was an error when pre-testing
   }
 
