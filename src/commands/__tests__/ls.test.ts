@@ -17,6 +17,7 @@ import yargs from "yargs";
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
+jest.spyOn(process, "exit");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
@@ -41,14 +42,14 @@ describe("ls", () => {
         { key: "instance-1", group: "Group", value: "Resource 1" },
         { key: "instance-2", value: "Resource 2" },
       ]);
-      await lsCommand(yargs()).parse(command);
+      await lsCommand(yargs()).exitProcess(false).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
     });
 
     it("should print friendly message if no items", async () => {
       mockItems([]);
-      await lsCommand(yargs()).parse(command);
+      await lsCommand(yargs()).exitProcess(false).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
     });
@@ -74,7 +75,10 @@ Unknown argument: foo`,
     });
 
     it("should print error message", async () => {
-      const error = await failure(lsCommand(yargs()), command);
+      const error = await failure(
+        lsCommand(yargs().exitProcess(false)),
+        command
+      );
       expect(error).toMatchSnapshot();
     });
   });

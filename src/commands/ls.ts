@@ -8,10 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { AnsiSgr } from "../drivers/ansi";
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { print2, print1, Ansi } from "../drivers/stdio";
+import { print2, print1, spinUntil } from "../drivers/stdio";
 import { max, orderBy } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
@@ -53,10 +54,10 @@ const ls = async (
   }>
 ) => {
   const authn = await authenticate();
-  const data = await fetchCommand<LsResponse>(authn, args, [
-    "ls",
-    ...args.arguments,
-  ]);
+  const data = await spinUntil(
+    "Listing accessible resources",
+    fetchCommand<LsResponse>(authn, args, ["ls", ...args.arguments])
+  );
   const allArguments = [...args._, ...args.arguments];
 
   if (data && "ok" in data && data.ok) {
@@ -89,8 +90,8 @@ const ls = async (
           isSameValue
             ? item.key
             : maxLength > 30
-              ? `${item.key}\n  ${Ansi.Dim}${tagPart}${Ansi.Reset}`
-              : `${item.key.padEnd(maxLength)}${Ansi.Dim} - ${tagPart}${Ansi.Reset}`
+              ? `${item.key}\n  ${AnsiSgr.Dim}${tagPart}${AnsiSgr.Reset}`
+              : `${item.key.padEnd(maxLength)}${AnsiSgr.Dim} - ${tagPart}${AnsiSgr.Reset}`
         }`
       );
     }

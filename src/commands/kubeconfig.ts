@@ -9,9 +9,10 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { retryWithSleep } from "../common/retry";
+import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { Ansi, print2 } from "../drivers/stdio";
+import { print2 } from "../drivers/stdio";
 import {
   awsCloudAuth,
   profileName,
@@ -153,8 +154,8 @@ const kubeconfigAction = async (
 
   if (process.env.AWS_ACCESS_KEY_ID) {
     print2(
-      `${Ansi.Yellow}Warning: AWS credentials were detected in your environment, which may cause kubectl errors. ` +
-        `To avoid issues, unset with \`unset AWS_ACCESS_KEY_ID\`.${Ansi.Reset}`
+      `${AnsiSgr.Yellow}Warning: AWS credentials were detected in your environment, which may cause kubectl errors. ` +
+        `To avoid issues, unset with \`unset AWS_ACCESS_KEY_ID\`.${AnsiSgr.Reset}`
     );
   }
 };
