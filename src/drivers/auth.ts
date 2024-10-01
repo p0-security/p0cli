@@ -108,6 +108,9 @@ export const authenticate = async (options?: {
   });
   auth.tenantId = identity.org.tenantId;
   const userCredential = await signInWithCredential(auth, firebaseCredential);
+  if (!userCredential?.user?.email) {
+    throw "Can not sign in: this user has previously signed in with a different identity provider.\nPlease contact support@p0.dev to enable this user.";
+  }
 
   return { userCredential, identity };
 };
