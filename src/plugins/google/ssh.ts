@@ -14,11 +14,10 @@ import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
 
-/** Maximum number of attempts to start an SSH session
- *
- * The length of each attempt varies based on the type of error from a few seconds to < 1s
+/**
+ * It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
  */
-const MAX_SSH_RETRIES = 120;
+const TIME_LIMIT_MS = 2 * 60 * 1000;
 
 export const gcpSshProvider: SshProvider<
   GcpSshPermissionSpec,
@@ -78,6 +77,6 @@ export const gcpSshProvider: SshProvider<
     }
     return undefined;
   },
-  maxRetries: MAX_SSH_RETRIES,
+  timeLimit: TIME_LIMIT_MS,
   friendlyName: "Google Cloud",
 };

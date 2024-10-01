@@ -165,7 +165,7 @@ type SpawnSshNodeOptions = {
   credential?: AwsCredentials;
   command: string;
   args: string[];
-  attemptsRemaining: number;
+  endTime: number;
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
@@ -185,14 +185,11 @@ async function spawnSshNode(
   return new Promise((resolve, reject) => {
     const provider = SSH_PROVIDERS[options.provider];
 
-    const attemptsRemaining = options.attemptsRemaining;
     if (options.debug) {
       const gerund = options.isAccessPropagationPreTest
         ? "Pre-testing"
         : "Trying";
-      print2(
-        `Waiting for access to propagate. ${gerund} SSH session... (remaining attempts: ${attemptsRemaining})`
-      );
+      print2(`Waiting for access to propagate. ${gerund} SSH session...)`);
     }
 
     const child = spawnChildProcess(
@@ -211,23 +208,17 @@ async function spawnSshNode(
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        if (attemptsRemaining <= 0) {
+        if (options.endTime < Date.now()) {
           reject(
-            `Access did not propagate through ${provider.friendlyName} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
+            `Access did not propagate through ${provider.friendlyName} in time. Please contact support@p0.dev for assistance.`
           );
           return;
         }
 
         delay(RETRY_DELAY_MS)
-          .then(() =>
-            spawnSshNode({
-              ...options,
-              attemptsRemaining: attemptsRemaining - 1,
-            })
-          )
+          .then(() => spawnSshNode(options))
           .then((code) => resolve(code))
           .catch(reject);
-
         return;
       } else if (isGoogleLoginException()) {
         reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
@@ -387,7 +378,7 @@ const preTestAccessPropagationIfNeeded = async <
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: request.type,
-      attemptsRemaining: sshProvider.maxRetries,
+      endTime: Date.now() + sshProvider.timeLimit,
       isAccessPropagationPreTest: true,
     });
   }
@@ -450,6 +441,6 @@ export const sshOrScp = async (args: {
     stdio: ["inherit", "inherit", "pipe"],
     debug: cmdArgs.debug,
     provider: request.type,
-    attemptsRemaining: sshProvider.maxRetries,
+    endTime: Date.now() + sshProvider.timeLimit,
   });
 };

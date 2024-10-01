@@ -12,6 +12,9 @@
                 "<node_internals>/**"
             ],
             "program": "${workspaceFolder}/src/index.ts",
+            // "args": [ "login", "698375260981"],
+            "args": [ "ssh", "dev-instance-fabian-joya", "--sudo"],
+            // "args": [ "scp", "test.txt", "dev-instance-fabian-joya:test.txt", "--", "-v" ],
             "preLaunchTask": "tsc: build - tsconfig.json",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"

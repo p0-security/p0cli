@@ -66,7 +66,7 @@ export type SshProvider<
   preTestAccessPropagationArgs: (
     cmdArgs: CommandArgs
   ) => CommandArgs | undefined;
-  maxRetries: number;
+  timeLimit: number;
   friendlyName: string;
 };
 
