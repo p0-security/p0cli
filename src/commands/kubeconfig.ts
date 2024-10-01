@@ -9,9 +9,10 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { retryWithSleep } from "../common/retry";
+import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { AnsiSgr, print2 } from "../drivers/stdio";
+import { print2 } from "../drivers/stdio";
 import {
   awsCloudAuth,
   profileName,

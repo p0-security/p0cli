@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License along with @p0
  * - Later redirection / duplication
  */
 import { sleep } from "../util";
-import { mapValues } from "lodash";
+import { Ansi, AnsiSgr } from "./ansi";
 
 /** Used to output machine-readable text to stdout
  *
@@ -36,18 +36,6 @@ export function print2(message: any) {
   // eslint-disable-next-line no-console
   console.error(message);
 }
-
-const AnsiCodes = {
-  Reset: "00",
-  Dim: "02",
-  Green: "32",
-  Yellow: "33",
-} as const;
-
-const Ansi = (value: string) => `\u001b[${value}`;
-
-/** Creates an ANSI Select Graphic Rendition code */
-export const AnsiSgr = mapValues(AnsiCodes, (v) => Ansi(v + "m"));
 
 /** Resets the terminal cursor to the beginning of the line */
 export function reset2() {
@@ -70,6 +58,8 @@ const Spin = {
 export const spinUntil = async <T>(message: string, promise: Promise<T>) => {
   let isDone = false;
   let ix = 0;
+  // 'catch' here just prevents UncaughtExceptionError; errors are sent to caller
+  // on function return
   void promise.finally(() => (isDone = true)).catch(() => {});
   while (!isDone) {
     await sleep(Spin.delayMs);
