@@ -15,7 +15,8 @@ You should have received a copy of the GNU General Public License along with @p0
  * - Better testing
  * - Later redirection / duplication
  */
-import { mapValues } from "lodash";
+import { sleep } from "../util";
+import { Ansi, AnsiSgr } from "./ansi";
 
 /** Used to output machine-readable text to stdout
  *
@@ -36,10 +37,43 @@ export function print2(message: any) {
   console.error(message);
 }
 
-const AnsiCodes = {
-  Reset: "00",
-  Dim: "02",
-  Yellow: "33",
-} as const;
+/** Resets the terminal cursor to the beginning of the line */
+export function reset2() {
+  process.stderr.write(Ansi("0G"));
+}
 
-export const Ansi = mapValues(AnsiCodes, (v) => `\u001b[${v}m`);
+/** Clears the current terminal line */
+export function clear2() {
+  // Replaces text with spaces
+  process.stderr.write(Ansi("2K"));
+  reset2();
+}
+
+const Spin = {
+  items: ["⠇", "⠋", "⠙", "⠸", "⠴", "⠦"],
+  delayMs: 200,
+};
+
+/** Prints a Unicode spinner until a promise resolves */
+export const spinUntil = async <T>(message: string, promise: Promise<T>) => {
+  let isDone = false;
+  let ix = 0;
+  // 'catch' here just prevents UncaughtExceptionError; errors are sent to caller
+  // on function return
+  void promise.finally(() => (isDone = true)).catch(() => {});
+  while (!isDone) {
+    await sleep(Spin.delayMs);
+    if (isDone) break;
+    clear2();
+    process.stderr.write(
+      AnsiSgr.Green +
+        Spin.items[ix % Spin.items.length] +
+        " " +
+        message +
+        AnsiSgr.Reset
+    );
+    ix++;
+  }
+  clear2();
+  return await promise;
+};

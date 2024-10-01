@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { doc } from "../../drivers/firestore";
-import { print2 } from "../../drivers/stdio";
+import { print2, spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PluginRequest, Request, RequestResponse } from "../../types/request";
 import { onSnapshot } from "firebase/firestore";
@@ -99,10 +99,13 @@ export const request =
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
     const { userCredential } = resolvedAuthn;
-    const data = await fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
-      command,
-      ...args.arguments,
-    ]);
+    const data = await spinUntil(
+      "Requesting access",
+      fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
+        command,
+        ...args.arguments,
+      ])
+    );
 
     if (data && "ok" in data && "message" in data && data.ok) {
       const logMessage =
