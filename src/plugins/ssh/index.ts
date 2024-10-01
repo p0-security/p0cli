@@ -110,7 +110,7 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
  */
 const accessPropagationGuard = (
   child: ChildProcessByStdio<null, null, Readable>,
-  debug?: boolean
+  options: SpawnSshNodeOptions
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isGoogleLoginException = false;
@@ -118,7 +118,7 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-    parseAndPrintSshOutputToStderr(chunkString, debug);
+    parseAndPrintSshOutputToStderr(chunkString, options);
 
     const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
       chunkString.match(message.pattern)
@@ -151,24 +151,27 @@ const accessPropagationGuard = (
  * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
  *
  * @param chunkString the chunk to print
- * @param debug true if debug output is enabled
+ * @param options SSH spawn options
  */
 const parseAndPrintSshOutputToStderr = (
   chunkString: string,
-  debug?: boolean
+  options: SpawnSshNodeOptions
 ) => {
   const lines = chunkString.split("\n");
+  const isPreTest = options.isAccessPropagationPreTest;
 
-  // SSH only prints the "Authenticated to" message if the verbose option (-v) is enabled
   for (const line of lines) {
-    if (debug) {
+    if (options.debug) {
       print2(line);
     } else {
-      if (line.includes("Authenticated to")) {
+      if (isPreTest && line.match(SUDO_MESSAGE)) {
+        // On pre-test, print the sudo error message if present
         print2(line);
-      }
-
-      if (line.includes("port forwarding failed")) {
+      } else if (!isPreTest && line.includes("Authenticated to")) {
+        // We want to let the user know that they successfully authenticated
+        print2(line);
+      } else if (!isPreTest && line.includes("port forwarding failed")) {
+        // We also want to let the user know if port forwarding failed
         print2(line);
       }
     }
@@ -233,7 +236,7 @@ async function spawnSshNode(
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isGoogleLoginException } =
-      accessPropagationGuard(child, options.debug);
+      accessPropagationGuard(child, options);
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
@@ -343,6 +346,7 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
     sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
   }
 
+  // Force verbose output from SSH so we can parse the output
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
   if (!verboseOptionExists) {
     sshOptions.push("-v");
@@ -468,6 +472,7 @@ export const sshOrScp = async (args: {
     credential
   );
   if (exitCode && exitCode !== 0) {
+    print2(`SSH session terminated`);
     return exitCode; // Only exit if there was an error when pre-testing
   }
 
