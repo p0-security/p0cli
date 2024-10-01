@@ -92,10 +92,6 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
   { pattern: DESTINATION_READ_ERROR },
 ];
 
-// Flags to ensure we only print each message once
-let authMessagePrinted = false;
-let portForwardingMessagePrinted = false;
-
 /** Checks if access has propagated through AWS to the SSM agent
  *
  * AWS takes about 8 minutes, GCP takes under 1 minute
@@ -118,28 +114,11 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isGoogleLoginException = false;
-
   const beforeStart = Date.now();
+
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-    const lines = chunkString.split("\n");
-
-    for (const line of lines) {
-      if (debug) {
-        print2(line);
-      } else if (line.includes("Authenticated to") && !authMessagePrinted) {
-        // We want to let the user know that they successfully authenticated
-        print2(line);
-        authMessagePrinted = true;
-      } else if (
-        // We also want to let the user know if port forwarding failed
-        line.includes("port forwarding failed") &&
-        !portForwardingMessagePrinted
-      ) {
-        print2(line);
-        portForwardingMessagePrinted = true;
-      }
-    }
+    parseAndPrintSshOutputToStderr(chunkString, debug);
 
     const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
       chunkString.match(message.pattern)
@@ -164,6 +143,36 @@ const accessPropagationGuard = (
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isGoogleLoginException: () => isGoogleLoginException,
   };
+};
+
+/**
+ * Parses and prints a chunk of SSH output to stderr.
+ *
+ * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
+ *
+ * @param chunkString the chunk to print
+ * @param debug true if debug output is enabled
+ */
+const parseAndPrintSshOutputToStderr = (
+  chunkString: string,
+  debug?: boolean
+) => {
+  const lines = chunkString.split("\n");
+
+  // SSH only prints the "Authenticated to" message if the verbose option (-v) is enabled
+  for (const line of lines) {
+    if (debug) {
+      print2(line);
+    } else {
+      if (line.includes("Authenticated to")) {
+        print2(line);
+      }
+
+      if (line.includes("port forwarding failed")) {
+        print2(line);
+      }
+    }
+  }
 };
 
 const spawnChildProcess = (
@@ -334,7 +343,6 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
     sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
   }
 
-  // Force verbose output from SSH so we can parse the output
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
   if (!verboseOptionExists) {
     sshOptions.push("-v");
