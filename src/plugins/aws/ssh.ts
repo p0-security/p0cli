@@ -88,6 +88,8 @@ export const awsSshProvider: SshProvider<
 
   preTestAccessPropagationArgs: () => undefined,
 
+  // Starts an SSM session in the terminal by spawning `aws ssm` as a subprocess
+  // Requires `aws ssm` to be installed on the client machine.
   proxyCommand: (request) => {
     return [
       "aws",
