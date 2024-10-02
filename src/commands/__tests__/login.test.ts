@@ -23,6 +23,7 @@ jest.mock("../../drivers/auth", () => ({
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
 
+const mockSignInWithCredential = signInWithCredential as jest.Mock;
 const mockReadFile = readFile as jest.Mock;
 const mockWriteFile = writeFile as jest.Mock;
 
@@ -51,6 +52,14 @@ describe("login", () => {
     mockWriteFile.mockImplementation(async (_path, data) => {
       credentialData = data;
     });
+    mockSignInWithCredential.mockImplementation(
+      async (_auth, _firebaseCredential) =>
+        Promise.resolve({
+          user: {
+            email: "user@p0.dev",
+          },
+        })
+    );
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
@@ -71,6 +80,15 @@ describe("login", () => {
     it("validates authentication", async () => {
       await login({ org: "test-org" });
       expect((signInWithCredential as jest.Mock).mock.calls).toMatchSnapshot();
+    });
+    it("returns an error message if firebase cannot determine the user's email", async () => {
+      mockSignInWithCredential.mockResolvedValueOnce({
+        user: {},
+      });
+      await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(`
+"Can not sign in: this user has previously signed in with a different identity provider.
+Please contact support@p0.dev to enable this user."
+`);
     });
   });
 });

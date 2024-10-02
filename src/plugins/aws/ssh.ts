@@ -31,12 +31,89 @@ const MAX_SSH_RETRIES = 6;
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
 
+/**There are 2 cases of unprovisioned access in AWS
+ * 1. SSM:StartSession action is missing either on the SSM document (AWS-StartSSHSession) or the EC2 instance
+ * 2. Temporary error when issuing an SCP command
+ *
+ * 1: results in UNAUTHORIZED_START_SESSION_MESSAGE
+ * 2: results in CONNECTION_CLOSED_MESSAGE
+ */
+const unprovisionedAccessPatterns = [
+  /** Matches the error message that AWS SSM prints when access is not propagated */
+  // Note that the resource will randomly be either the SSM document or the EC2 instance
+  {
+    pattern:
+      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
+  },
+  /**
+   * Matches the following error messages that AWS SSM pints when ssh authorized
+   * key access hasn't propagated to the instance yet.
+   * - Connection closed by UNKNOWN port 65535
+   * - scp: Connection closed
+   * - kex_exchange_identification: Connection closed by remote host
+   */
+  {
+    pattern: /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/,
+  },
+] as const;
+
 export const awsSshProvider: SshProvider<
   AwsSshPermissionSpec,
   undefined,
   AwsSshRequest,
   AwsCredentials
 > = {
+  cloudProviderLogin: async (authn, request) => {
+    const { config } = await getAwsConfig(authn, request.accountId);
+    if (!config.login?.type || config.login?.type === "iam") {
+      throw "This account is not configured for SSH access via the P0 CLI";
+    }
+
+    return config.login?.type === "idc"
+      ? await assumeRoleWithIdc(request as AwsSshIdcRequest)
+      : config.login?.type === "federated"
+        ? await assumeRoleWithOktaSaml(authn, request as AwsSshRoleRequest)
+        : throwAssertNever(config.login);
+  },
+
+  ensureInstall: async () => {
+    if (!(await ensureSsmInstall())) {
+      throw "Please try again after installing the required AWS utilities";
+    }
+  },
+
+  friendlyName: "AWS",
+
+  maxRetries: MAX_SSH_RETRIES,
+
+  preTestAccessPropagationArgs: () => undefined,
+
+  proxyCommand: (request) => {
+    return [
+      "aws",
+      "ssm",
+      "start-session",
+      "--region",
+      request.region,
+      "--target",
+      "%h",
+      "--document-name",
+      START_SSH_SESSION_DOCUMENT_NAME,
+      "--parameters",
+      '"portNumber=%p"',
+    ];
+  },
+
+  reproCommands: (request) => {
+    // TODO: Add manual commands for IDC login
+    if (request.access !== "idc") {
+      return [
+        `eval $(p0 aws role assume ${request.role} --account ${request.accountId})`,
+      ];
+    }
+    return undefined;
+  },
+
   requestToSsh: (request) => {
     const { permission, generated } = request;
     const { instanceId, accountId, region } = permission.spec;
@@ -53,49 +130,8 @@ export const awsSshProvider: SshProvider<
           access: "idc",
         };
   },
-  toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
-  ensureInstall: async () => {
-    if (!(await ensureSsmInstall())) {
-      throw "Please try again after installing the required AWS utilities";
-    }
-  },
-  cloudProviderLogin: async (authn, request) => {
-    const { config } = await getAwsConfig(authn, request.accountId);
-    if (!config.login?.type || config.login?.type === "iam") {
-      throw "This account is not configured for SSH access via the P0 CLI";
-    }
 
-    return config.login?.type === "idc"
-      ? await assumeRoleWithIdc(request as AwsSshIdcRequest)
-      : config.login?.type === "federated"
-        ? await assumeRoleWithOktaSaml(authn, request as AwsSshRoleRequest)
-        : throwAssertNever(config.login);
-  },
-  proxyCommand: (request) => {
-    return [
-      "aws",
-      "ssm",
-      "start-session",
-      "--region",
-      request.region,
-      "--target",
-      "%h",
-      "--document-name",
-      START_SSH_SESSION_DOCUMENT_NAME,
-      "--parameters",
-      '"portNumber=%p"',
-    ];
-  },
-  reproCommands: (request) => {
-    // TODO: Add manual commands for IDC login
-    if (request.access !== "idc") {
-      return [
-        `eval $(p0 aws role assume ${request.role} --account ${request.accountId})`,
-      ];
-    }
-    return undefined;
-  },
-  preTestAccessPropagationArgs: () => undefined,
-  maxRetries: MAX_SSH_RETRIES,
-  friendlyName: "AWS",
+  toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
+
+  unprovisionedAccessPatterns,
 };

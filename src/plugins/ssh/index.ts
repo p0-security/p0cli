@@ -23,74 +23,12 @@ import {
 } from "node:child_process";
 import { Readable } from "node:stream";
 
-/** Matches the error message that AWS SSM print1 when access is not propagated */
-// Note that the resource will randomly be either the SSM document or the EC2 instance
-const UNAUTHORIZED_START_SESSION_MESSAGE =
-  /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/;
-/**
- * Matches the following error messages that AWS SSM print1 when ssh authorized
- * key access hasn't propagated to the instance yet.
- * - Connection closed by UNKNOWN port 65535
- * - scp: Connection closed
- * - kex_exchange_identification: Connection closed by remote host
- */
-const CONNECTION_CLOSED_MESSAGE =
-  /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/;
-const PUBLIC_KEY_DENIED_MESSAGE = /Permission denied \(publickey\)/;
-const UNAUTHORIZED_TUNNEL_USER_MESSAGE =
-  /Error while connecting \[4033: 'not authorized'\]/;
-const UNAUTHORIZED_INSTANCES_GET_MESSAGE =
-  /Required 'compute\.instances\.get' permission/;
-const DESTINATION_READ_ERROR =
-  /Error while connecting \[4010: 'destination read failed'\]/;
-const GOOGLE_LOGIN_MESSAGE =
-  /You do not currently have an active account selected/;
-const SUDO_MESSAGE = /Sorry, user .+ may not run sudo on .+/; // The output of `sudo -v` when the user is not allowed to run sudo
-
 /** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
  *  in the process's stderr
  */
 const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
 
 const RETRY_DELAY_MS = 5000;
-
-/**
- * AWS
- * There are 2 cases of unprovisioned access in AWS
- * 1. SSM:StartSession action is missing either on the SSM document (AWS-StartSSHSession) or the EC2 instance
- * 2. Temporary error when issuing an SCP command
- *
- * 1: results in UNAUTHORIZED_START_SESSION_MESSAGE
- * 2: results in CONNECTION_CLOSED_MESSAGE
- *
- * Google Cloud
- * There are 7 cases of unprovisioned access in Google Cloud.
- * These are all potentially subject to propagation delays.
- * 1. The linux user name is not present in the user's Google Workspace profile `posixAccounts` attribute
- * 2. The public key is not present in the user's Google Workspace profile `sshPublicKeys` attribute
- * 3. The user cannot act as the service account of the compute instance
- * 4. The user cannot tunnel through the IAP tunnel to the instance
- * 5. The user doesn't have osLogin or osAdminLogin role to the instance
- * 5.a. compute.instances.get permission is missing
- * 5.b. compute.instances.osLogin permission is missing
- * 6. compute.instances.osAdminLogin is not provisioned but compute.instances.osLogin is - happens when a user upgrades existing access to sudo
- * 7: Rare occurrence, the exact conditions so far undetermined (together with CONNECTION_CLOSED_MESSAGE)
- *
- * 1, 2, 3 (yes!), 5b: result in PUBLIC_KEY_DENIED_MESSAGE
- * 4: results in UNAUTHORIZED_TUNNEL_USER_MESSAGE and also CONNECTION_CLOSED_MESSAGE
- * 5a: results in UNAUTHORIZED_INSTANCES_GET_MESSAGE
- * 6: results in SUDO_MESSAGE
- * 7: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
- */
-const UNPROVISIONED_ACCESS_MESSAGES = [
-  { pattern: UNAUTHORIZED_START_SESSION_MESSAGE },
-  { pattern: CONNECTION_CLOSED_MESSAGE },
-  { pattern: PUBLIC_KEY_DENIED_MESSAGE },
-  { pattern: SUDO_MESSAGE },
-  { pattern: UNAUTHORIZED_TUNNEL_USER_MESSAGE },
-  { pattern: UNAUTHORIZED_INSTANCES_GET_MESSAGE, validationWindowMs: 30e3 },
-  { pattern: DESTINATION_READ_ERROR },
-];
 
 /** Checks if access has propagated through AWS to the SSM agent
  *
@@ -109,18 +47,21 @@ const UNPROVISIONED_ACCESS_MESSAGES = [
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
+  provider: SshProvider,
   child: ChildProcessByStdio<null, null, Readable>,
   options: SpawnSshNodeOptions
 ) => {
   let isEphemeralAccessDeniedException = false;
-  let isGoogleLoginException = false;
+  let isLoginException = false;
   const beforeStart = Date.now();
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
-    const match = UNPROVISIONED_ACCESS_MESSAGES.find((message) =>
+    if (debug) print2(chunkString);
+
+    const match = provider.unprovisionedAccessPatterns.find((message) =>
       chunkString.match(message.pattern)
     );
 
@@ -132,17 +73,50 @@ const accessPropagationGuard = (
       isEphemeralAccessDeniedException = true;
     }
 
-    const googleLoginMatch = chunkString.match(GOOGLE_LOGIN_MESSAGE);
-    isGoogleLoginException = isGoogleLoginException || !!googleLoginMatch; // once true, always true
-    if (isGoogleLoginException) {
+    if (provider.loginRequiredPattern) {
+      const loginMatch = chunkString.match(provider.loginRequiredPattern);
+      isLoginException = isLoginException || !!loginMatch; // once true, always true
+    }
+
+    if (isLoginException) {
       isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
     }
   });
 
   return {
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
-    isGoogleLoginException: () => isGoogleLoginException,
+    isLoginException: () => isLoginException,
   };
+};
+
+/**
+ * Parses and prints a chunk of SSH output to stderr.
+ *
+ * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
+ *
+ * @param chunkString the chunk to print
+ * @param options SSH spawn options
+ */
+const parseAndPrintSshOutputToStderr = (
+  chunkString: string,
+  options: SpawnSshNodeOptions
+) => {
+  const lines = chunkString.split("\n");
+  const isPreTest = options.isAccessPropagationPreTest;
+
+  for (const line of lines) {
+    if (options.debug) {
+      print2(line);
+    } else {
+      if (!isPreTest && line.includes("Authenticated to")) {
+        // We want to let the user know that they successfully authenticated
+        print2(line);
+      } else if (!isPreTest && line.includes("port forwarding failed")) {
+        // We also want to let the user know if port forwarding failed
+        print2(line);
+      }
+    }
+  }
 };
 
 /**
@@ -232,8 +206,11 @@ async function spawnSshNode(
     );
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isGoogleLoginException } =
-      accessPropagationGuard(child, options);
+    const { isAccessPropagated, isLoginException } = accessPropagationGuard(
+      provider,
+      child,
+      options
+    );
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
@@ -258,8 +235,11 @@ async function spawnSshNode(
           .catch(reject);
 
         return;
-      } else if (isGoogleLoginException()) {
-        reject(`Please login to Google Cloud CLI with 'gcloud auth login'`);
+      } else if (isLoginException()) {
+        reject(
+          provider.loginRequiredMessage ??
+            `Please log in to the ${provider.friendlyName} CLI to SSH`
+        );
         return;
       }
 

@@ -20,35 +20,75 @@ import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
  */
 const MAX_SSH_RETRIES = 24;
 
+/**
+ * There are 7 cases of unprovisioned access in Google Cloud.
+ * These are all potentially subject to propagation delays.
+ * 1. The linux user name is not present in the user's Google Workspace profile `posixAccounts` attribute
+ * 2. The public key is not present in the user's Google Workspace profile `sshPublicKeys` attribute
+ * 3. The user cannot act as the service account of the compute instance
+ * 4. The user cannot tunnel through the IAP tunnel to the instance
+ * 5. The user doesn't have osLogin or osAdminLogin role to the instance
+ * 5.a. compute.instances.get permission is missing
+ * 5.b. compute.instances.osLogin permission is missing
+ * 6. compute.instances.osAdminLogin is not provisioned but compute.instances.osLogin is - happens when a user upgrades existing access to sudo
+ * 7: Rare occurrence, the exact conditions so far undetermined (together with CONNECTION_CLOSED_MESSAGE)
+ *
+ * 1, 2, 3 (yes!), 5b: result in PUBLIC_KEY_DENIED_MESSAGE
+ * 4: results in UNAUTHORIZED_TUNNEL_USER_MESSAGE and also CONNECTION_CLOSED_MESSAGE
+ * 5a: results in UNAUTHORIZED_INSTANCES_GET_MESSAGE
+ * 6: results in SUDO_MESSAGE
+ * 7: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
+ */
+const unprovisionedAccessPatterns = [
+  { pattern: /Permission denied \(publickey\)/ },
+  {
+    // The output of `sudo -v` when the user is not allowed to run sudo
+    pattern: /Sorry, user .+ may not run sudo on .+/,
+  },
+  { pattern: /Error while connecting \[4033: 'not authorized'\]/ },
+  {
+    pattern: /Required 'compute\.instances\.get' permission/,
+    validationWindowMs: 30e3,
+  },
+  { pattern: /Error while connecting \[4010: 'destination read failed'\]/ },
+] as const;
+
 export const gcpSshProvider: SshProvider<
   GcpSshPermissionSpec,
   { linuxUserName: string },
   GcpSshRequest
 > = {
-  requestToSsh: (request) => {
-    return {
-      id: request.permission.spec.instanceName,
-      projectId: request.permission.spec.projectId,
-      zone: request.permission.spec.zone,
-      linuxUserName: request.cliLocalData.linuxUserName,
-      type: "gcloud",
-    };
-  },
-  toCliRequest: async (request, options) => ({
-    ...request,
-    cliLocalData: {
-      linuxUserName: await importSshKey(
-        request.permission.spec.publicKey,
-        options
-      ),
-    },
-  }),
+  // TODO support login with Google Cloud
+  cloudProviderLogin: async () => undefined,
+
   ensureInstall: async () => {
     if (!(await ensureGcpSshInstall())) {
       throw "Please try again after installing the required GCP utilities";
     }
   },
-  cloudProviderLogin: async () => undefined, // TODO @ENG-2284 support login with Google Cloud
+
+  friendlyName: "Google Cloud",
+
+  loginRequiredMessage:
+    "Please login to Google Cloud CLI with 'gcloud auth login'",
+
+  loginRequiredPattern: /You do not currently have an active account selected/,
+
+  maxRetries: MAX_SSH_RETRIES,
+
+  preTestAccessPropagationArgs: (cmdArgs) => {
+    if (isSudoCommand(cmdArgs)) {
+      return {
+        ...cmdArgs,
+        // `sudo -v` prints `Sorry, user <user> may not run sudo on <hostname>.` to stderr when user is not a sudoer.
+        // It prints nothing to stdout when user is a sudoer - which is important because we don't want any output from the pre-test.
+        command: "sudo",
+        arguments: ["-v"],
+      };
+    }
+    return undefined;
+  },
+
   proxyCommand: (request) => {
     return [
       "gcloud",
@@ -65,19 +105,28 @@ export const gcpSshProvider: SshProvider<
       `--project=${request.projectId}`,
     ];
   },
-  reproCommands: () => undefined, // TODO @ENG-2284 support login with Google Cloud
-  preTestAccessPropagationArgs: (cmdArgs) => {
-    if (isSudoCommand(cmdArgs)) {
-      return {
-        ...cmdArgs,
-        // `sudo -v` prints `Sorry, user <user> may not run sudo on <hostname>.` to stderr when user is not a sudoer.
-        // It prints nothing to stdout when user is a sudoer - which is important because we don't want any output from the pre-test.
-        command: "sudo",
-        arguments: ["-v"],
-      };
-    }
-    return undefined;
+
+  reproCommands: () => undefined,
+
+  requestToSsh: (request) => {
+    return {
+      id: request.permission.spec.instanceName,
+      projectId: request.permission.spec.projectId,
+      zone: request.permission.spec.zone,
+      linuxUserName: request.cliLocalData.linuxUserName,
+      type: "gcloud",
+    };
   },
-  maxRetries: MAX_SSH_RETRIES,
-  friendlyName: "Google Cloud",
+
+  unprovisionedAccessPatterns,
+
+  toCliRequest: async (request, options) => ({
+    ...request,
+    cliLocalData: {
+      linuxUserName: await importSshKey(
+        request.permission.spec.publicKey,
+        options
+      ),
+    },
+  }),
 };
