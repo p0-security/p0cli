@@ -57,8 +57,8 @@ export type SshProvider<
   /** Regex match for error string indicating that CSP login is required */
   loginRequiredPattern?: RegExp;
 
-  /** The timeout limit for this provider's CLI SSH command */
-  timeoutLimit: number;
+  /** Amount of time, in ms, to wait between granting access and giving up on attempting an SSH connection */
+  propagationTimeoutMs: number;
 
   /** Arguments for a pre-test command to verify access propagation prior
    * to actually logging in the user to the ssh session.

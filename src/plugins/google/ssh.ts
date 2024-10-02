@@ -14,10 +14,8 @@ import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
 
-/**
- * It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
- */
-const TIME_LIMIT_MS = 2 * 60 * 1000;
+// It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
+const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
 /**
  * There are 7 cases of unprovisioned access in Google Cloud.
@@ -73,7 +71,7 @@ export const gcpSshProvider: SshProvider<
 
   loginRequiredPattern: /You do not currently have an active account selected/,
 
-  timeoutLimit: TIME_LIMIT_MS,
+  propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
   preTestAccessPropagationArgs: (cmdArgs) => {
     if (isSudoCommand(cmdArgs)) {

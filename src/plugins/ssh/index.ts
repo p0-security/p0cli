@@ -131,7 +131,12 @@ async function spawnSshNode(
       const gerund = options.isAccessPropagationPreTest
         ? "Pre-testing"
         : "Trying";
-      print2(`Waiting for access to propagate. ${gerund} SSH session...)`);
+      const remainingSeconds = ((options.endTime - Date.now()) / 1e3).toFixed(
+        1
+      );
+      print2(
+        `Waiting for access to propagate. ${gerund} SSH session... (will wait up to ${remainingSeconds} seconds)`
+      );
     }
 
     const child = spawnChildProcess(
@@ -326,7 +331,7 @@ const preTestAccessPropagationIfNeeded = async <
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: request.type,
-      endTime: Date.now() + sshProvider.timeoutLimit,
+      endTime: Date.now() + sshProvider.propagationTimeoutMs,
       isAccessPropagationPreTest: true,
     });
   }
@@ -389,6 +394,6 @@ export const sshOrScp = async (args: {
     stdio: ["inherit", "inherit", "pipe"],
     debug: cmdArgs.debug,
     provider: request.type,
-    endTime: Date.now() + sshProvider.timeoutLimit,
+    endTime: Date.now() + sshProvider.propagationTimeoutMs,
   });
 };
