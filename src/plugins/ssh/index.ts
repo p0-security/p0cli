@@ -59,8 +59,6 @@ const accessPropagationGuard = (
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
-    if (debug) print2(chunkString);
-
     const match = provider.unprovisionedAccessPatterns.find((message) =>
       chunkString.match(message.pattern)
     );
@@ -87,36 +85,6 @@ const accessPropagationGuard = (
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isLoginException: () => isLoginException,
   };
-};
-
-/**
- * Parses and prints a chunk of SSH output to stderr.
- *
- * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
- *
- * @param chunkString the chunk to print
- * @param options SSH spawn options
- */
-const parseAndPrintSshOutputToStderr = (
-  chunkString: string,
-  options: SpawnSshNodeOptions
-) => {
-  const lines = chunkString.split("\n");
-  const isPreTest = options.isAccessPropagationPreTest;
-
-  for (const line of lines) {
-    if (options.debug) {
-      print2(line);
-    } else {
-      if (!isPreTest && line.includes("Authenticated to")) {
-        // We want to let the user know that they successfully authenticated
-        print2(line);
-      } else if (!isPreTest && line.includes("port forwarding failed")) {
-        // We also want to let the user know if port forwarding failed
-        print2(line);
-      }
-    }
-  }
 };
 
 /**
