@@ -8,7 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { IDENTITY_FILE_PATH, authenticate } from "../drivers/auth";
+import {
+  IDENTITY_CACHE_PATH,
+  IDENTITY_FILE_PATH,
+  authenticate,
+  loadCredentials,
+} from "../drivers/auth";
 import { doc, guard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
@@ -40,6 +45,12 @@ export const login = async (
   if (!loginFn) throw "Unsupported login for your organization";
 
   const tokenResponse = await loginFn(orgWithSlug);
+  // if the user changed their org, clear any cached identities this prevents
+  // commands like `aws assume role` from using the old identities
+  const currentIdentity = await loadCredentials().catch(() => undefined);
+  if (currentIdentity?.org.slug !== args.org) {
+    await clearIdentityCache();
+  }
   await writeIdentity(orgWithSlug, tokenResponse);
 
   // validate auth
@@ -67,6 +78,16 @@ const writeIdentity = async (org: OrgData, credential: TokenResponse) => {
       mode: "600",
     }
   );
+};
+
+const clearIdentityCache = async () => {
+  try {
+    // check to see if the directory exists before trying to remove it
+    await fs.access(IDENTITY_CACHE_PATH);
+    await fs.rm(IDENTITY_CACHE_PATH, { recursive: true });
+  } catch {
+    return;
+  }
 };
 
 export const loginCommand = (yargs: yargs.Argv) =>
