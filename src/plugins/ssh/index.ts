@@ -54,8 +54,6 @@ const accessPropagationGuard = (
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
 
-  const beforeStart = Date.now();
-
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
 
@@ -65,11 +63,7 @@ const accessPropagationGuard = (
       chunkString.match(message.pattern)
     );
 
-    if (
-      match &&
-      Date.now() <=
-        beforeStart + (match.validationWindowMs || DEFAULT_VALIDATION_WINDOW_MS)
-    ) {
+    if (match) {
       isEphemeralAccessDeniedException = true;
     }
 
