@@ -18,7 +18,7 @@ import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
  *
  * The length of each attempt varies based on the type of error from a few seconds to < 1s
  */
-const MAX_SSH_RETRIES = 120;
+const MAX_SSH_RETRIES = 24;
 
 /**
  * There are 7 cases of unprovisioned access in Google Cloud.

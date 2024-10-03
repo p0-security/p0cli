@@ -49,7 +49,7 @@ const RETRY_DELAY_MS = 5000;
 const accessPropagationGuard = (
   provider: SshProvider,
   child: ChildProcessByStdio<null, null, Readable>,
-  debug?: boolean
+  options: SpawnSshNodeOptions
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
@@ -57,8 +57,7 @@ const accessPropagationGuard = (
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
-
-    if (debug) print2(chunkString);
+    parseAndPrintSshOutputToStderr(chunkString, options);
 
     const match = provider.unprovisionedAccessPatterns.find((message) =>
       chunkString.match(message.pattern)
@@ -86,6 +85,36 @@ const accessPropagationGuard = (
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isLoginException: () => isLoginException,
   };
+};
+
+/**
+ * Parses and prints a chunk of SSH output to stderr.
+ *
+ * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
+ *
+ * @param chunkString the chunk to print
+ * @param options SSH spawn options
+ */
+const parseAndPrintSshOutputToStderr = (
+  chunkString: string,
+  options: SpawnSshNodeOptions
+) => {
+  const lines = chunkString.split("\n");
+  const isPreTest = options.isAccessPropagationPreTest;
+
+  for (const line of lines) {
+    if (options.debug) {
+      print2(line);
+    } else {
+      if (!isPreTest && line.includes("Authenticated to")) {
+        // We want to let the user know that they successfully authenticated
+        print2(line);
+      } else if (!isPreTest && line.includes("port forwarding failed")) {
+        // We also want to let the user know if port forwarding failed
+        print2(line);
+      }
+    }
+  }
 };
 
 const spawnChildProcess = (
@@ -143,7 +172,7 @@ async function spawnSshNode(
     const { isAccessPropagated, isLoginException } = accessPropagationGuard(
       provider,
       child,
-      options.debug
+      options
     );
 
     const exitListener = child.on("exit", (code) => {
@@ -265,8 +294,9 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
     sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
   }
 
+  // Force verbose output from SSH so we can parse the output
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
-  if (!verboseOptionExists && args.debug) {
+  if (!verboseOptionExists) {
     sshOptions.push("-v");
   }
 };
@@ -325,6 +355,7 @@ const preTestAccessPropagationIfNeeded = async <
     : undefined
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
+
   // Pre-testing comes at a performance cost because we have to execute another ssh subprocess after
   // a successful test. Only do when absolutely necessary.
   if (testCmdArgs) {
