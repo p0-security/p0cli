@@ -22,8 +22,7 @@ import {
   AwsSshRoleRequest,
 } from "./types";
 
-// It can take up to 8 minutes for access to propagate on AWS, so set the time limit to 10 minutes.
-const PROPAGATION_TIMEOUT_LIMIT_MS = 10 * 60 * 1000;
+const PROPAGATION_TIMEOUT_LIMIT_MS = 30 * 1000;
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
