@@ -22,6 +22,10 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 export const IDENTITY_FILE_PATH = path.join(P0_PATH, "identity.json");
+export const IDENTITY_CACHE_PATH = path.join(
+  path.dirname(IDENTITY_FILE_PATH),
+  "cache"
+);
 
 export const cached = async <T>(
   name: string,
@@ -29,11 +33,10 @@ export const cached = async <T>(
   options: { duration: number },
   hasExpired?: (data: T) => boolean
 ): Promise<T> => {
-  const cachePath = path.join(path.dirname(IDENTITY_FILE_PATH), "cache");
   // Following lines sanitize input
   // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  const loc = path.resolve(path.join(cachePath, `${name}.json`));
-  if (!loc.startsWith(cachePath)) {
+  const loc = path.resolve(path.join(IDENTITY_CACHE_PATH, `${name}.json`));
+  if (!loc.startsWith(IDENTITY_CACHE_PATH)) {
     throw new Error("Illegal path traversal");
   }
 
