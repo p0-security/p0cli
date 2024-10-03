@@ -53,6 +53,7 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
+
   const beforeStart = Date.now();
 
   child.stderr.on("data", (chunk) => {
@@ -315,7 +316,8 @@ const preTestAccessPropagationIfNeeded = async <
   proxyCommand: string[],
   credential: P extends SshProvider<infer _PR, infer _O, infer _SR, infer C>
     ? C
-    : undefined
+    : undefined,
+  endTime: number
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
   // Pre-testing comes at a performance cost because we have to execute another ssh subprocess after
@@ -331,7 +333,7 @@ const preTestAccessPropagationIfNeeded = async <
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: request.type,
-      endTime: Date.now() + sshProvider.propagationTimeoutMs,
+      endTime: endTime,
       isAccessPropagationPreTest: true,
     });
   }
@@ -375,12 +377,15 @@ export const sshOrScp = async (args: {
     }
   }
 
+  const endTime = Date.now() + sshProvider.propagationTimeoutMs;
+
   const exitCode = await preTestAccessPropagationIfNeeded(
     sshProvider,
     request,
     cmdArgs,
     proxyCommand,
-    credential
+    credential,
+    endTime
   );
   if (exitCode && exitCode !== 0) {
     return exitCode; // Only exit if there was an error when pre-testing
@@ -394,6 +399,6 @@ export const sshOrScp = async (args: {
     stdio: ["inherit", "inherit", "pipe"],
     debug: cmdArgs.debug,
     provider: request.type,
-    endTime: Date.now() + sshProvider.propagationTimeoutMs,
+    endTime: endTime,
   });
 };
