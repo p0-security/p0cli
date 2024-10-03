@@ -113,15 +113,17 @@ export const awsSshProvider: SshProvider<
 
   requestToSsh: (request) => {
     const { permission, generated } = request;
-    const { instanceId, accountId, region } = permission.spec;
-    const { idc, ssh, name } = generated;
+    const { awsResourcePermission, instanceId, accountId, region } =
+      permission.spec;
+    const { idcId, idcRegion } = awsResourcePermission.permission;
+    const { ssh, name } = generated;
     const { linuxUserName } = ssh;
     const common = { linuxUserName, accountId, region, id: instanceId };
-    return !idc
+    return !idcId || !idcRegion
       ? { ...common, role: name, type: "aws", access: "role" }
       : {
           ...common,
-          idc,
+          idc: { id: idcId, region: idcRegion },
           permissionSet: name,
           type: "aws",
           access: "idc",

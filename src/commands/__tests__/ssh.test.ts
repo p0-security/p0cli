@@ -16,7 +16,7 @@ import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
 import { onSnapshot } from "firebase/firestore";
-import { omit } from "lodash";
+import { noop, omit } from "lodash";
 import yargs from "yargs";
 
 jest.mock("../../drivers/api");
@@ -40,6 +40,7 @@ const MOCK_REQUEST = {
   },
   permission: {
     spec: {
+      awsResourcePermission: { permission: {} },
       instanceId: "instanceId",
       accountId: "accountId",
       region: "region",
@@ -84,9 +85,9 @@ describe("ssh", () => {
     });
 
     it("should call p0 request with reason arg", async () => {
-      void sshCommand(yargs()).parse(
-        `ssh some-instance --reason reason --provider aws`
-      );
+      void sshCommand(yargs())
+        .fail(noop)
+        .parse(`ssh some-instance --reason reason --provider aws`);
       await sleep(100);
       const hiddenFilenameRequestArgs = omit(
         mockFetchCommand.mock.calls[0][1],
@@ -96,14 +97,14 @@ describe("ssh", () => {
     });
 
     it("should wait for access grant", async () => {
-      const promise = sshCommand(yargs()).parse(`ssh some-instance`);
+      const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       const wait = sleep(100);
       await Promise.race([wait, promise]);
       await expect(wait).resolves.toBeUndefined();
     });
 
     it("should wait for provisioning", async () => {
-      const promise = sshCommand(yargs()).parse(`ssh some-instance`);
+      const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       await sleep(100); // Need to wait for listen before trigger in tests
       (onSnapshot as any).trigger({
         status: "APPROVED",
@@ -114,9 +115,9 @@ describe("ssh", () => {
     });
 
     it("should call sshOrScp with non-interactive command", async () => {
-      const promise = sshCommand(yargs()).parse(
-        `ssh some-instance do something`
-      );
+      const promise = sshCommand(yargs())
+        .fail(noop)
+        .parse(`ssh some-instance do something`);
       await sleep(100); // Need to wait for listen before trigger in tests
       (onSnapshot as any).trigger({
         status: "APPROVED",
@@ -130,7 +131,7 @@ describe("ssh", () => {
     });
 
     it("should call sshOrScp with interactive session", async () => {
-      const promise = sshCommand(yargs()).parse(`ssh some-instance`);
+      const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       await sleep(100); // Need to wait for listen before trigger in tests
       (onSnapshot as any).trigger({
         status: "APPROVED",

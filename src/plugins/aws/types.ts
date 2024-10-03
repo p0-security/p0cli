@@ -68,6 +68,12 @@ export type AwsSshPermission = {
     accountId: string;
     region: string;
     type: "aws";
+    awsResourcePermission: {
+      permission: {
+        idcId?: string;
+        idcRegion?: string;
+      };
+    };
   };
   type: "session";
 };
@@ -76,10 +82,6 @@ export type AwsSshGenerated = {
   name: string;
   ssh: {
     linuxUserName: string;
-  };
-  idc?: {
-    region: string;
-    id: string;
   };
 };
 
