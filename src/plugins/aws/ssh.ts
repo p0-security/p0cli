@@ -22,11 +22,7 @@ import {
   AwsSshRoleRequest,
 } from "./types";
 
-/** Maximum number of attempts to start an SSH session
- *
- * Each attempt consumes ~ 1 s.
- */
-const MAX_SSH_RETRIES = 6;
+const PROPAGATION_TIMEOUT_LIMIT_MS = 30 * 1000;
 
 /** The name of the SessionManager port forwarding document. This document is managed by AWS.  */
 const START_SSH_SESSION_DOCUMENT_NAME = "AWS-StartSSHSession";
@@ -84,7 +80,7 @@ export const awsSshProvider: SshProvider<
 
   friendlyName: "AWS",
 
-  maxRetries: MAX_SSH_RETRIES,
+  propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
   preTestAccessPropagationArgs: () => undefined,
 

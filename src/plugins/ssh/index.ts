@@ -53,7 +53,6 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
-  const beforeStart = Date.now();
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
@@ -63,11 +62,7 @@ const accessPropagationGuard = (
       chunkString.match(message.pattern)
     );
 
-    if (
-      match &&
-      Date.now() <=
-        beforeStart + (match.validationWindowMs || DEFAULT_VALIDATION_WINDOW_MS)
-    ) {
+    if (match) {
       isEphemeralAccessDeniedException = true;
     }
 
@@ -136,7 +131,7 @@ type SpawnSshNodeOptions = {
   credential?: AwsCredentials;
   command: string;
   args: string[];
-  attemptsRemaining: number;
+  endTime: number;
   abortController?: AbortController;
   detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
@@ -151,13 +146,15 @@ async function spawnSshNode(
   return new Promise((resolve, reject) => {
     const provider = SSH_PROVIDERS[options.provider];
 
-    const attemptsRemaining = options.attemptsRemaining;
     if (options.debug) {
       const gerund = options.isAccessPropagationPreTest
         ? "Pre-testing"
         : "Trying";
+      const remainingSeconds = ((options.endTime - Date.now()) / 1e3).toFixed(
+        1
+      );
       print2(
-        `Waiting for access to propagate. ${gerund} SSH session... (remaining attempts: ${attemptsRemaining})`
+        `Waiting for access to propagate. ${gerund} SSH session... (will wait up to ${remainingSeconds} seconds)`
       );
     }
 
@@ -180,23 +177,17 @@ async function spawnSshNode(
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
-        if (attemptsRemaining <= 0) {
+        if (options.endTime < Date.now()) {
           reject(
-            `Access did not propagate through ${provider.friendlyName} before max retry attempts were exceeded. Please contact support@p0.dev for assistance.`
+            `Access did not propagate through ${provider.friendlyName} in time. Please contact support@p0.dev for assistance.`
           );
           return;
         }
 
         delay(RETRY_DELAY_MS)
-          .then(() =>
-            spawnSshNode({
-              ...options,
-              attemptsRemaining: attemptsRemaining - 1,
-            })
-          )
+          .then(() => spawnSshNode(options))
           .then((code) => resolve(code))
           .catch(reject);
-
         return;
       } else if (isLoginException()) {
         reject(
@@ -352,7 +343,8 @@ const preTestAccessPropagationIfNeeded = async <
   proxyCommand: string[],
   credential: P extends SshProvider<infer _PR, infer _O, infer _SR, infer C>
     ? C
-    : undefined
+    : undefined,
+  endTime: number
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
 
@@ -369,7 +361,7 @@ const preTestAccessPropagationIfNeeded = async <
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: request.type,
-      attemptsRemaining: sshProvider.maxRetries,
+      endTime: endTime,
       isAccessPropagationPreTest: true,
     });
   }
@@ -413,12 +405,15 @@ export const sshOrScp = async (args: {
     }
   }
 
+  const endTime = Date.now() + sshProvider.propagationTimeoutMs;
+
   const exitCode = await preTestAccessPropagationIfNeeded(
     sshProvider,
     request,
     cmdArgs,
     proxyCommand,
-    credential
+    credential,
+    endTime
   );
 
   // Only exit if there was an error when pre-testing
@@ -434,6 +429,6 @@ export const sshOrScp = async (args: {
     stdio: ["inherit", "inherit", "pipe"],
     debug: cmdArgs.debug,
     provider: request.type,
-    attemptsRemaining: sshProvider.maxRetries,
+    endTime: endTime,
   });
 };

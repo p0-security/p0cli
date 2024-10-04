@@ -14,11 +14,8 @@ import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
 
-/** Maximum number of attempts to start an SSH session
- *
- * The length of each attempt varies based on the type of error from a few seconds to < 1s
- */
-const MAX_SSH_RETRIES = 24;
+// It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
+const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
 /**
  * There are 7 cases of unprovisioned access in Google Cloud.
@@ -74,7 +71,7 @@ export const gcpSshProvider: SshProvider<
 
   loginRequiredPattern: /You do not currently have an active account selected/,
 
-  maxRetries: MAX_SSH_RETRIES,
+  propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
   preTestAccessPropagationArgs: (cmdArgs) => {
     if (isSudoCommand(cmdArgs)) {
