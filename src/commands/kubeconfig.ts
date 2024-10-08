@@ -240,15 +240,9 @@ const extractClusterNameAndRegion = (clusterArn: string) => {
   // Example EKS cluster ARN: arn:aws:eks:us-west-2:123456789012:cluster/my-testing-cluster
   const arn = parseArn(clusterArn);
   const { region: clusterRegion, resource: resourceStr } = arn;
-  const resource = resourceStr.split("/");
+  const [resourceType, clusterName] = resourceStr.split("/");
 
-  if (resource[0] !== "cluster") {
-    throw INVALID_ARN_MSG;
-  }
-
-  const clusterName = resource[1];
-
-  if (!clusterName || !clusterRegion) {
+  if (resourceType !== "cluster" || !clusterName || !clusterRegion) {
     throw INVALID_ARN_MSG;
   }
 

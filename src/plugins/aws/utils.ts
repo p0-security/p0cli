@@ -8,6 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+const ARN_PATTERN =
+  /^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):([^:]*):([^:]*):([^:]*):(.*)$/;
 
 /**
  * Parses out Amazon Resource Names (ARNs) from AWS into their components. Note
@@ -32,31 +34,25 @@ export const parseArn = (
   resource: string;
 } => {
   // Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html
-  const INVALID_ARN_MSG = `Invalid AWS ARN: ${arn}`;
+  const invalidArnMsg = `Invalid AWS ARN: ${arn}`;
+  const match = arn.match(ARN_PATTERN);
 
-  const parts = arn.split(":");
-
-  if (parts.length < 6) {
-    throw INVALID_ARN_MSG;
+  if (!match) {
+    throw invalidArnMsg;
   }
 
-  const [arnPrefix, partition, service, region, accountId, ...remainder] =
-    parts;
-  const resource = remainder.join(":");
+  const [_, partition, service, region, accountId, resource] = match;
 
-  if (arnPrefix !== "arn") {
-    throw `Invalid AWS ARN prefix "${arnPrefix}" in ARN: ${arn}`;
-  }
-
-  // We know these are all defined thanks to the parts.length check above, but
-  // TypeScript doesn't, so....
+  // We know these are all defined based on the regex, but TypeScript doesn't.
+  // Empty string is okay, so explicitly check for undefined.
   if (
     partition === undefined ||
     service === undefined ||
     accountId === undefined ||
-    region === undefined
+    region === undefined ||
+    resource === undefined
   ) {
-    throw INVALID_ARN_MSG;
+    throw invalidArnMsg;
   }
 
   return {
