@@ -198,15 +198,7 @@ async function spawnSshNode(
       }
 
       options.abortController?.abort(code);
-
-      if (code && code !== 0) {
-        print2(
-          `Failed to establish an SSH session.${!options.debug ? " Use the --debug option to see additional details." : ""}`
-        );
-      } else if (!options.isAccessPropagationPreTest) {
-        print2(`SSH session terminated`);
-      }
-
+      if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
       resolve(code);
     });
   });
@@ -415,10 +407,8 @@ export const sshOrScp = async (args: {
     credential,
     endTime
   );
-
-  // Only exit if there was an error when pre-testing
   if (exitCode && exitCode !== 0) {
-    return exitCode;
+    return exitCode; // Only exit if there was an error when pre-testing
   }
 
   return spawnSshNode({
