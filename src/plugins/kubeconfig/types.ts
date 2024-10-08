@@ -17,9 +17,7 @@ export type K8sClusterConfig = {
   isProxy: boolean;
   token: string;
   publicJwk?: string; // only present for proxy installs
-  provider:
-    | { type: "aws"; clusterArn: string; accountId: string }
-    | { type: "email" };
+  hosting: { type: "aws"; arn: string } | { type: "azure" } | { type: "gcp" };
   state: string;
 };
 
@@ -42,15 +40,16 @@ export type K8sResourcePermission = {
   role: string;
   clusterId: string;
   type: "resource";
+  awsResourcePermission?: {
+    idcRegion?: string;
+    idcId?: string;
+  };
 };
 
 export type K8sGenerated = {
   eksGenerated: {
     // For IDC, the name of the permission set. For Federated, the name of the assumed role
     name: string;
-
-    // Only present for IDC; the ID and region of the IDC installation
-    idc?: { id: string; region: string };
   };
   role: string; // The name of the generated role in k8s itself
 };
