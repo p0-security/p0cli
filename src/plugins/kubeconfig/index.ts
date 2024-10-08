@@ -12,15 +12,16 @@ import { KubeconfigCommandArgs } from "../../commands/kubeconfig";
 import { waitForProvisioning } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
 import { doc } from "../../drivers/firestore";
-import { print2 } from "../../drivers/stdio";
+import { spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { Request } from "../../types/request";
 import { assertNever } from "../../util";
 import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
 import { AwsCredentials } from "../aws/types";
+import { parseArn } from "../aws/utils";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
-import { K8sConfig, K8sGenerated, K8sPermissionSpec } from "./types";
+import { K8sConfig, K8sPermissionSpec } from "./types";
 import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
@@ -46,20 +47,21 @@ export const getAndValidateK8sIntegration = async (
     throw `Cluster with ID ${clusterId} not found`;
   }
 
-  if (config.state !== "installed" || config.provider.type !== "aws") {
+  if (config.state !== "installed") {
     throw `Cluster with ID ${clusterId} is not installed`;
   }
 
-  const { provider } = config;
-  const { accountId: awsAccountId, clusterArn: awsClusterArn } = provider;
+  const { hosting } = config;
 
-  if (!awsAccountId || !awsClusterArn) {
+  if (hosting.type !== "aws") {
     throw (
       `This command currently only supports AWS EKS clusters, and ${clusterId} is not configured as one.\n` +
       "You can request access to the cluster using the `p0 request k8s` command."
     );
   }
 
+  const { arn: awsClusterArn } = hosting;
+  const { accountId: awsAccountId } = parseArn(awsClusterArn);
   const { config: awsConfig } = await getAwsConfig(authn, awsAccountId);
   const { login: awsLogin } = awsConfig;
 
@@ -109,14 +111,12 @@ export const requestAccessToCluster = async (
   if (!response) {
     throw "Did not receive access ID from server";
   }
-  const { id, isPreexisting } = response;
-  if (!isPreexisting) {
-    print2(
-      "Waiting for access to be provisioned. This may take up to a minute."
-    );
-  }
+  const { id } = response;
 
-  return await waitForProvisioning<K8sPermissionSpec>(authn, id);
+  return await spinUntil(
+    "Waiting for access to be provisioned. This may take up to a minute.",
+    waitForProvisioning<K8sPermissionSpec>(authn, id)
+  );
 };
 
 export const profileName = (eksCluterName: string): string =>
@@ -125,23 +125,27 @@ export const profileName = (eksCluterName: string): string =>
 export const awsCloudAuth = async (
   authn: Authn,
   awsAccountId: string,
-  generated: K8sGenerated,
+  request: Request<K8sPermissionSpec>,
   loginType: "federated" | "idc"
 ): Promise<AwsCredentials> => {
+  const { permission, generated } = request;
   const { eksGenerated } = generated;
-  const { name, idc } = eksGenerated;
+  const { name } = eksGenerated;
 
   switch (loginType) {
-    case "idc":
-      if (!idc) {
+    case "idc": {
+      const { idcId, idcRegion } = permission.awsResourcePermission ?? {};
+
+      if (!idcId || !idcRegion) {
         throw "AWS is configured to use Identity Center, but IDC information wasn't received in the request.";
       }
 
       return await assumeRoleWithIdc({
         accountId: awsAccountId,
         permissionSet: name,
-        idc,
+        idc: { id: idcId, region: idcRegion },
       });
+    }
     case "federated":
       return await assumeRoleWithOktaSaml(authn, {
         accountId: awsAccountId,

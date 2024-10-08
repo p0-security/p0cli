@@ -12,7 +12,8 @@ import { retryWithSleep } from "../common/retry";
 import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
 import { guard } from "../drivers/firestore";
-import { print2 } from "../drivers/stdio";
+import { print2, spinUntil } from "../drivers/stdio";
+import { parseArn } from "../plugins/aws/utils";
 import {
   awsCloudAuth,
   profileName,
@@ -88,12 +89,13 @@ const kubeconfigAction = async (
     throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
   }
 
+  // No spinUntil(); there is one inside requestAccessToCluster() if needed
   const request = await requestAccessToCluster(authn, args, clusterId, role);
 
   const awsAuth = await awsCloudAuth(
     authn,
     awsAccountId,
-    request.generated,
+    request,
     awsLoginType
   );
 
@@ -121,11 +123,14 @@ const kubeconfigAction = async (
   try {
     // Federated access especially sometimes takes some time to propagate, so
     // retry for up to 20 seconds just in case it takes a while.
-    const awsResult = await retryWithSleep(
-      async () => await exec("aws", updateKubeconfigArgs, { check: true }),
-      () => true,
-      8,
-      2500
+    const awsResult = await spinUntil(
+      "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
+      retryWithSleep(
+        async () => await exec("aws", updateKubeconfigArgs, { check: true }),
+        () => true,
+        8,
+        2500
+      )
     );
     print2(awsResult.stdout);
   } catch (error: any) {
@@ -233,14 +238,9 @@ const validateResourceArg = (resource: string): void => {
 const extractClusterNameAndRegion = (clusterArn: string) => {
   const INVALID_ARN_MSG = `Invalid EKS cluster ARN: ${clusterArn}`;
   // Example EKS cluster ARN: arn:aws:eks:us-west-2:123456789012:cluster/my-testing-cluster
-  const parts = clusterArn.split(":");
-
-  if (parts.length < 6 || !parts[3] || !parts[5]) {
-    throw INVALID_ARN_MSG;
-  }
-
-  const clusterRegion = parts[3];
-  const resource = parts[5].split("/");
+  const arn = parseArn(clusterArn);
+  const { region: clusterRegion, resource: resourceStr } = arn;
+  const resource = resourceStr.split("/");
 
   if (resource[0] !== "cluster") {
     throw INVALID_ARN_MSG;
@@ -248,7 +248,7 @@ const extractClusterNameAndRegion = (clusterArn: string) => {
 
   const clusterName = resource[1];
 
-  if (!clusterName) {
+  if (!clusterName || !clusterRegion) {
     throw INVALID_ARN_MSG;
   }
 
