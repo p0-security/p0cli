@@ -8,9 +8,17 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { config } from "./env";
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { Identity } from "../types/identity";
+import { tenantConfig } from "./config";
+import { bootstrapConfig } from "./env";
+import { FirebaseOptions, initializeApp } from "firebase/app";
+import {
+  Auth,
+  getAuth,
+  OAuthProvider,
+  SignInMethod,
+  signInWithCredential,
+} from "firebase/auth";
 import {
   collection as fsCollection,
   CollectionReference,
@@ -18,25 +26,59 @@ import {
   DocumentReference,
   getFirestore,
   terminate,
+  Firestore,
 } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-const firebaseConfig = config.fs;
+let firestore: Firestore;
+let auth: Auth;
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const FIRESTORE = getFirestore(app);
-export const auth = getAuth();
+export function initializeFirebase(options?: { useBootstrapConfig: boolean }) {
+  const config: FirebaseOptions = options?.useBootstrapConfig
+    ? bootstrapConfig.fs
+    : tenantConfig.fs;
+  const app = initializeApp(config);
+
+  firestore = getFirestore(app);
+  auth = getAuth();
+}
+
+export async function authenticateToFirebase(identity: Identity) {
+  const { credential } = identity;
+  const tenantId = identity.org.tenantId;
+
+  // TODO: Move to map lookup
+  const provider = new OAuthProvider(
+    identity.org.ssoProvider === "google"
+      ? SignInMethod.GOOGLE
+      : identity.org.providerId
+  );
+
+  const firebaseCredential = provider.credential({
+    accessToken: credential.access_token,
+    idToken: credential.id_token,
+  });
+
+  auth.tenantId = tenantId;
+
+  const userCredential = await signInWithCredential(auth, firebaseCredential);
+
+  if (!userCredential?.user?.email) {
+    throw "Can not sign in: this user has previously signed in with a different identity provider.\nPlease contact support@p0.dev to enable this user.";
+  }
+
+  return userCredential;
+}
 
 export const collection = <T>(path: string, ...pathSegments: string[]) => {
   return fsCollection(
-    FIRESTORE,
+    firestore,
     path,
     ...pathSegments
   ) as CollectionReference<T>;
 };
+
 export const doc = <T>(path: string) => {
-  return fsDoc(FIRESTORE, path) as DocumentReference<T>;
+  return fsDoc(firestore, path) as DocumentReference<T>;
 };
 
 /** Ensures that Firestore is shutdown at command termination
@@ -49,6 +91,6 @@ export const guard =
     try {
       await cb(args);
     } finally {
-      void terminate(FIRESTORE);
+      void terminate(firestore);
     }
   };

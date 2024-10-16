@@ -11,9 +11,15 @@ You should have received a copy of the GNU General Public License along with @p0
 import {
   IDENTITY_CACHE_PATH,
   IDENTITY_FILE_PATH,
-  authenticate,
+  loadCredentials,
 } from "../drivers/auth";
-import { doc, guard } from "../drivers/firestore";
+import { saveTenantConfig } from "../drivers/config";
+import {
+  authenticateToFirebase,
+  doc,
+  guard,
+  initializeFirebase,
+} from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";
@@ -32,6 +38,8 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
+  initializeFirebase({ useBootstrapConfig: true });
+
   const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
   const orgData = orgDoc.data();
   if (!orgData) throw "Could not find organization";
@@ -48,8 +56,15 @@ export const login = async (
   await clearIdentityCache();
   await writeIdentity(orgWithSlug, tokenResponse);
 
+  if (orgData.config) {
+    await saveTenantConfig(orgData.config);
+  }
+
   // validate auth
-  if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
+  if (!options?.skipAuthenticate) {
+    const identity = await loadCredentials({ noRefresh: true });
+    await authenticateToFirebase(identity);
+  }
 
   print2(`You are now logged in, and can use the p0 CLI.`);
 };

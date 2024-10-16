@@ -8,13 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { config } from "../drivers/env";
 import { Authn } from "../types/identity";
+import { tenantConfig } from "./config";
 import * as path from "node:path";
 import yargs from "yargs";
 
-const tenantUrl = (tenant: string) => `${config.appUrl}/o/${tenant}`;
-
+const tenantUrl = (tenant: string) => `${tenantConfig.appUrl}/o/${tenant}`;
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 
 export const fetchCommand = async <T>(

@@ -70,6 +70,7 @@
   },
   "scripts": {
     "build": "tsc && cp -r public dist/",
+    "test:unit": "NODE_ENV=unit jest --color",
     "clean": "rm -f tsconfig.tsbuildinfo && rm -rf dist/",
     "lint": "yarn prettier --check . &&  yarn run eslint --max-warnings 0 .",
     "p0": "node --no-deprecation ./p0",

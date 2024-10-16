@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { config } from "../../drivers/env";
+import { tenantConfig } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
@@ -31,7 +31,7 @@ const requestAuth = async () => {
   const pkceChallenge = (await import("pkce-challenge")).default as any;
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const authBody: AuthorizeRequest = {
-    client_id: config.google.clientId,
+    client_id: tenantConfig.google.clientId,
     code_challenge: pkce.code_challenge,
     code_challenge_method: "S256",
     redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
@@ -52,8 +52,8 @@ const requestToken = async (
   pkce: { code_challenge: string; code_verifier: string }
 ) => {
   const body = {
-    client_id: config.google.clientId,
-    client_secret: config.google.clientSecret,
+    client_id: tenantConfig.google.clientId,
+    client_secret: tenantConfig.google.clientSecret,
     code,
     code_verifier: pkce.code_verifier,
     grant_type: "authorization_code",
