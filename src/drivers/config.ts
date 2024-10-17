@@ -16,7 +16,11 @@ import path from "path";
 
 export const CONFIG_FILE_PATH = path.join(P0_PATH, "config.json");
 
-export let tenantConfig: Config;
+let tenantConfig: Config;
+
+export function getTenantConfig(): Config {
+  return tenantConfig;
+}
 
 export async function saveConfig(config: Config) {
   print2(`Saving config to ${CONFIG_FILE_PATH}.`);

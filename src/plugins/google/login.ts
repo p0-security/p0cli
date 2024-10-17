@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { tenantConfig } from "../../drivers/config";
+import { getTenantConfig } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
@@ -28,6 +28,7 @@ const GOOGLE_OIDC_REDIRECT_URL = `http://127.0.0.1:${GOOGLE_OIDC_REDIRECT_PORT}`
 const PKCE_LENGTH = 128;
 
 const requestAuth = async () => {
+  const tenantConfig = getTenantConfig();
   const pkceChallenge = (await import("pkce-challenge")).default as any;
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const authBody: AuthorizeRequest = {
@@ -51,6 +52,7 @@ const requestToken = async (
   code: string,
   pkce: { code_challenge: string; code_verifier: string }
 ) => {
+  const tenantConfig = getTenantConfig();
   const body = {
     client_id: tenantConfig.google.clientId,
     client_secret: tenantConfig.google.clientSecret,

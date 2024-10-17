@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Identity } from "../types/identity";
-import { tenantConfig } from "./config";
+import { getTenantConfig } from "./config";
 import { bootstrapConfig } from "./env";
 import { FirebaseApp, initializeApp } from "firebase/app";
 import {
@@ -35,6 +35,7 @@ let app: FirebaseApp;
 let firestore: Firestore;
 
 export function initializeFirebase() {
+  const tenantConfig = getTenantConfig();
   app = initializeApp(tenantConfig.fs, "authFirebase");
   firestore = getFirestore(app);
 }
