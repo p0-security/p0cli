@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { parseXml } from "../../common/xml";
 import { authenticate } from "../../drivers/auth";
-import { guard } from "../../drivers/firestore";
+import { fsShutdownGuard } from "../../drivers/firestore";
 import { print1, print2 } from "../../drivers/stdio";
 import { getAwsConfig } from "../../plugins/aws/config";
 import { AwsFederatedLogin, AwsItem } from "../../plugins/aws/types";
@@ -29,7 +29,7 @@ export const role = (yargs: yargs.Argv<{ account: string | undefined }>) =>
         "List available AWS roles",
         identity,
         // TODO: select based on uidLocation
-        guard(oktaAwsListRoles)
+        fsShutdownGuard(oktaAwsListRoles)
       )
       .command(
         "assume <role>",
@@ -41,7 +41,7 @@ export const role = (yargs: yargs.Argv<{ account: string | undefined }>) =>
             describe: "An AWS role name",
           }),
         // TODO: select based on uidLocation
-        guard(oktaAwsAssumeRole)
+        fsShutdownGuard(oktaAwsAssumeRole)
       )
       .demandCommand(1)
   );

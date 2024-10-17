@@ -13,12 +13,12 @@ import {
   IDENTITY_FILE_PATH,
   loadCredentials,
 } from "../drivers/auth";
-import { saveTenantConfig } from "../drivers/config";
+import { saveConfig } from "../drivers/config";
+import { bootstrapConfig } from "../drivers/env";
 import {
   authenticateToFirebase,
-  doc,
-  guard,
-  initializeFirebase,
+  fsShutdownGuard,
+  publicDoc,
 } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
@@ -38,11 +38,13 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  initializeFirebase({ useBootstrapConfig: true });
-
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
+  const orgDoc = await getDoc<RawOrgData, object>(
+    publicDoc(`orgs/${args.org}`)
+  );
   const orgData = orgDoc.data();
   if (!orgData) throw "Could not find organization";
+
+  await saveConfig(orgData.config ?? bootstrapConfig);
 
   const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
@@ -55,10 +57,6 @@ export const login = async (
 
   await clearIdentityCache();
   await writeIdentity(orgWithSlug, tokenResponse);
-
-  if (orgData.config) {
-    await saveTenantConfig(orgData.config);
-  }
 
   // validate auth
   if (!options?.skipAuthenticate) {
@@ -110,5 +108,5 @@ export const loginCommand = (yargs: yargs.Argv) =>
         type: "string",
         describe: "Your P0 organization ID",
       }),
-    guard(login)
+    fsShutdownGuard(login)
   );

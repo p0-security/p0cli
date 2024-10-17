@@ -11,9 +11,8 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Identity } from "../types/identity";
 import { tenantConfig } from "./config";
 import { bootstrapConfig } from "./env";
-import { FirebaseOptions, initializeApp } from "firebase/app";
+import { FirebaseApp, initializeApp } from "firebase/app";
 import {
-  Auth,
   getAuth,
   OAuthProvider,
   SignInMethod,
@@ -29,17 +28,15 @@ import {
   Firestore,
 } from "firebase/firestore";
 
+const bootstrapApp = initializeApp(bootstrapConfig.fs, "bootstrapApp");
+const bootstrapFirestore = getFirestore(bootstrapApp);
+
+let app: FirebaseApp;
 let firestore: Firestore;
-let auth: Auth;
 
-export function initializeFirebase(options?: { useBootstrapConfig: boolean }) {
-  const config: FirebaseOptions = options?.useBootstrapConfig
-    ? bootstrapConfig.fs
-    : tenantConfig.fs;
-  const app = initializeApp(config);
-
+export function initializeFirebase() {
+  app = initializeApp(tenantConfig.fs, "authFirebase");
   firestore = getFirestore(app);
-  auth = getAuth();
 }
 
 export async function authenticateToFirebase(identity: Identity) {
@@ -58,6 +55,7 @@ export async function authenticateToFirebase(identity: Identity) {
     idToken: credential.id_token,
   });
 
+  const auth = getAuth(app);
   auth.tenantId = tenantId;
 
   const userCredential = await signInWithCredential(auth, firebaseCredential);
@@ -81,16 +79,21 @@ export const doc = <T>(path: string) => {
   return fsDoc(firestore, path) as DocumentReference<T>;
 };
 
+export const publicDoc = <T>(path: string) => {
+  return fsDoc(bootstrapFirestore, path) as DocumentReference<T>;
+};
+
 /** Ensures that Firestore is shutdown at command termination
  *
  * This prevents Firestore from holding the command on execution completion or failure.
  */
-export const guard =
+export const fsShutdownGuard =
   <P, T>(cb: (args: P) => Promise<T>) =>
   async (args: P) => {
     try {
       await cb(args);
     } finally {
+      void terminate(bootstrapFirestore);
       void terminate(firestore);
     }
   };

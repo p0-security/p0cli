@@ -1,7 +1,14 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`login organization exists should write the user's identity to the file system 1`] = `
+exports[`login organization exists should write the user's identity & config to the file system 1`] = `
 [
+  [
+    "/Users/fabianjoya/.p0/config.json",
+    "{"fs":{"apiKey":"AIzaSyC9A5VXSwDDS-Vp4WH_UIanEqJvv_7XdlQ","authDomain":"p0-gcp-project.firebaseapp.com","projectId":"p0-gcp-project","storageBucket":"p0-gcp-project.appspot.com","messagingSenderId":"398809717501","appId":"1:398809717501:web:6dd1cab893b2faeb06fc94"},"google":{"clientId":"398809717501-j4j8ldjicsspidl4ecj6nj1oomo9eda1.apps.googleusercontent.com","clientSecret":"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"},"appUrl":"http://localhost:8088","environment":"production"}",
+    {
+      "mode": "600",
+    },
+  ],
   [
     "/path/to/home/.p0",
     "{

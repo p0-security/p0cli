@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
 import { P0_PATH } from "../util";
-import { loadTenantConfig } from "./config";
+import { loadConfig } from "./config";
 import { authenticateToFirebase, initializeFirebase } from "./firestore";
 import { print2 } from "./stdio";
 import * as fs from "fs/promises";
@@ -92,13 +92,10 @@ export const loadCredentials = async (options?: {
 export const authenticate = async (options?: {
   noRefresh?: boolean;
 }): Promise<Authn> => {
-  const identity = await loadCredentials(options);
-
-  await loadTenantConfig();
-
-  // Re-initialize Firebase with the loaded config
+  await loadConfig();
   initializeFirebase();
 
+  const identity = await loadCredentials(options);
   const userCredential = await authenticateToFirebase(identity);
 
   return { userCredential, identity };

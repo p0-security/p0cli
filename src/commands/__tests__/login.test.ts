@@ -73,7 +73,7 @@ describe("login", () => {
       await login({ org: "test-org" });
       expect(pluginLoginMap.google).toHaveBeenCalled();
     });
-    it("should write the user's identity to the file system", async () => {
+    it("should write the user's identity & config to the file system", async () => {
       await login({ org: "test-org" });
       expect(mockWriteFile.mock.calls).toMatchSnapshot();
     });
