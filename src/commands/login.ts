@@ -12,15 +12,10 @@ import {
   authenticate,
   IDENTITY_CACHE_PATH,
   IDENTITY_FILE_PATH,
-  loadCredentials,
 } from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
 import { bootstrapConfig } from "../drivers/env";
-import {
-  authenticateToFirebase,
-  fsShutdownGuard,
-  publicDoc,
-} from "../drivers/firestore";
+import { fsShutdownGuard, publicDoc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";

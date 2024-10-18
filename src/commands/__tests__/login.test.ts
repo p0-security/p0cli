@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { bootstrapConfig } from "../../drivers/env";
 import { pluginLoginMap } from "../../plugins/login";
 import { mockGetDoc } from "../../testing/firestore";
 import { login } from "../login";
@@ -23,6 +24,7 @@ jest.mock("../../drivers/auth", () => ({
 jest.mock("../../drivers/config", () => ({
   ...jest.requireActual("../../drivers/config"),
   saveConfig: jest.fn(),
+  getTenantConfig: jest.fn(() => bootstrapConfig),
 }));
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
