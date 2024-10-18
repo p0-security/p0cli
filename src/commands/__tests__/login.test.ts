@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { bootstrapConfig } from "../../drivers/env";
 import { pluginLoginMap } from "../../plugins/login";
 import { mockGetDoc } from "../../testing/firestore";
 import { login } from "../login";
@@ -18,7 +19,12 @@ jest.spyOn(Date, "now").mockReturnValue(1.6e12);
 jest.mock("fs/promises");
 jest.mock("../../drivers/auth", () => ({
   ...jest.requireActual("../../drivers/auth"),
-  IDENTITY_FILE_PATH: "/path/to/home/.p0",
+  IDENTITY_FILE_PATH: "/dummy/identity/file/path",
+}));
+jest.mock("../../drivers/config", () => ({
+  ...jest.requireActual("../../drivers/config"),
+  saveConfig: jest.fn(),
+  getTenantConfig: jest.fn(() => bootstrapConfig),
 }));
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
@@ -34,6 +40,7 @@ describe("login", () => {
       `"Could not find organization"`
     );
   });
+
   it("should print a friendly error if unsupported login", async () => {
     mockGetDoc({
       slug: "test-org",
@@ -44,6 +51,7 @@ describe("login", () => {
       `"Unsupported login for your organization"`
     );
   });
+
   describe("organization exists", () => {
     let credentialData: string = "";
     mockReadFile.mockImplementation(async () =>
@@ -60,27 +68,33 @@ describe("login", () => {
           },
         })
     );
+
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
+
       mockGetDoc({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
       });
     });
+
     it("should call the provider's login function", async () => {
       await login({ org: "test-org" });
       expect(pluginLoginMap.google).toHaveBeenCalled();
     });
-    it("should write the user's identity to the file system", async () => {
+
+    it("should write the user's identity & config to the file system", async () => {
       await login({ org: "test-org" });
       expect(mockWriteFile.mock.calls).toMatchSnapshot();
     });
+
     it("validates authentication", async () => {
       await login({ org: "test-org" });
       expect((signInWithCredential as jest.Mock).mock.calls).toMatchSnapshot();
     });
+
     it("returns an error message if firebase cannot determine the user's email", async () => {
       mockSignInWithCredential.mockResolvedValueOnce({
         user: {},

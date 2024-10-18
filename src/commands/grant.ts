@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { guard } from "../drivers/firestore";
+import { fsShutdownGuard } from "../drivers/firestore";
 import { request, requestArgs } from "./shared/request";
 import yargs from "yargs";
 
@@ -17,5 +17,5 @@ export const grantCommand = (yargs: yargs.Argv) =>
     "grant [arguments..]",
     "Grant access to another identity",
     requestArgs,
-    guard(request("grant"))
+    fsShutdownGuard(request("grant"))
   );

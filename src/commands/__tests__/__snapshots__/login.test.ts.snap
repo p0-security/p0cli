@@ -1,9 +1,9 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`login organization exists should write the user's identity to the file system 1`] = `
+exports[`login organization exists should write the user's identity & config to the file system 1`] = `
 [
   [
-    "/path/to/home/.p0",
+    "/dummy/identity/file/path",
     "{
   "credential": {
     "access_token": "test-access-token",

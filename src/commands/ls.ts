@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { AnsiSgr } from "../drivers/ansi";
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
-import { guard } from "../drivers/firestore";
+import { fsShutdownGuard } from "../drivers/firestore";
 import { print2, print1, spinUntil } from "../drivers/stdio";
 import { max, orderBy } from "lodash";
 import pluralize from "pluralize";
@@ -45,7 +45,7 @@ export const lsCommand = (yargs: yargs.Argv) =>
     "ls [arguments..]",
     "List request-command arguments",
     lsArgs,
-    guard(ls)
+    fsShutdownGuard(ls)
   );
 
 const ls = async (

@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { guard } from "../drivers/firestore";
+import { fsShutdownGuard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
 import { SshRequest, SupportedSshProviders } from "../types/ssh";
 import { prepareRequest, ScpCommandArgs } from "./shared/ssh";
@@ -69,7 +69,7 @@ export const scpCommand = (yargs: yargs.Argv) =>
   The '--' argument must be specified between P0-specific args on the left and SCP_ARGS on the right.`
         ),
 
-    guard(scpAction)
+    fsShutdownGuard(scpAction)
   );
 
 /** Transfers files between a local and remote hosts using SSH.

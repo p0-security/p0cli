@@ -11,13 +11,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
 import { P0_PATH } from "../util";
-import { auth } from "./firestore";
+import { loadConfig } from "./config";
+import { authenticateToFirebase, initializeFirebase } from "./firestore";
 import { print2 } from "./stdio";
-import {
-  OAuthProvider,
-  SignInMethod,
-  signInWithCredential,
-} from "firebase/auth";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -96,24 +92,11 @@ export const loadCredentials = async (options?: {
 export const authenticate = async (options?: {
   noRefresh?: boolean;
 }): Promise<Authn> => {
-  const identity = await loadCredentials(options);
-  const { credential } = identity;
+  await loadConfig();
+  initializeFirebase();
 
-  // TODO: Move to map lookup
-  const provider = new OAuthProvider(
-    identity.org.ssoProvider === "google"
-      ? SignInMethod.GOOGLE
-      : identity.org.providerId
-  );
-  const firebaseCredential = provider.credential({
-    accessToken: credential.access_token,
-    idToken: credential.id_token,
-  });
-  auth.tenantId = identity.org.tenantId;
-  const userCredential = await signInWithCredential(auth, firebaseCredential);
-  if (!userCredential?.user?.email) {
-    throw "Can not sign in: this user has previously signed in with a different identity provider.\nPlease contact support@p0.dev to enable this user.";
-  }
+  const identity = await loadCredentials(options);
+  const userCredential = await authenticateToFirebase(identity);
 
   return { userCredential, identity };
 };

@@ -9,11 +9,13 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
+  authenticate,
   IDENTITY_CACHE_PATH,
   IDENTITY_FILE_PATH,
-  authenticate,
 } from "../drivers/auth";
-import { doc, guard } from "../drivers/firestore";
+import { saveConfig } from "../drivers/config";
+import { bootstrapConfig } from "../drivers/env";
+import { fsShutdownGuard, publicDoc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";
@@ -32,9 +34,13 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
+  const orgDoc = await getDoc<RawOrgData, object>(
+    publicDoc(`orgs/${args.org}`)
+  );
   const orgData = orgDoc.data();
   if (!orgData) throw "Could not find organization";
+
+  await saveConfig(orgData.config ?? bootstrapConfig);
 
   const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
@@ -49,7 +55,9 @@ export const login = async (
   await writeIdentity(orgWithSlug, tokenResponse);
 
   // validate auth
-  if (!options?.skipAuthenticate) await authenticate({ noRefresh: true });
+  if (!options?.skipAuthenticate) {
+    await authenticate();
+  }
 
   print2(`You are now logged in, and can use the p0 CLI.`);
 };
@@ -95,5 +103,5 @@ export const loginCommand = (yargs: yargs.Argv) =>
         type: "string",
         describe: "Your P0 organization ID",
       }),
-    guard(login)
+    fsShutdownGuard(login)
   );
