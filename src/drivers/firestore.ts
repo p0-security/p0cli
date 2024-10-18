@@ -94,7 +94,7 @@ export const fsShutdownGuard =
     try {
       await cb(args);
     } finally {
-      void terminate(bootstrapFirestore);
-      void terminate(firestore);
+      if (bootstrapFirestore) void terminate(bootstrapFirestore);
+      if (firestore) void terminate(firestore);
     }
   };

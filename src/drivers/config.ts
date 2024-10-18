@@ -27,6 +27,7 @@ export async function saveConfig(config: Config) {
   const dir = path.dirname(CONFIG_FILE_PATH);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(CONFIG_FILE_PATH, JSON.stringify(config), { mode: "600" });
+  tenantConfig = config;
 }
 
 export async function loadConfig() {

@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
+  authenticate,
   IDENTITY_CACHE_PATH,
   IDENTITY_FILE_PATH,
   loadCredentials,
@@ -60,8 +61,7 @@ export const login = async (
 
   // validate auth
   if (!options?.skipAuthenticate) {
-    const identity = await loadCredentials({ noRefresh: true });
-    await authenticateToFirebase(identity);
+    await authenticate();
   }
 
   print2(`You are now logged in, and can use the p0 CLI.`);
