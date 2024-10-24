@@ -13,8 +13,9 @@ import * as fs from "fs/promises";
 import forge from "node-forge";
 import * as path from "path";
 
-export const PUBLIC_KEY_PATH = path.join(P0_PATH, "ssh", "id_rsa.pub");
-export const PRIVATE_KEY_PATH = path.join(P0_PATH, "ssh", "id_rsa");
+export const P0_KEY_FOLDER = path.join(P0_PATH, "ssh");
+export const PUBLIC_KEY_PATH = path.join(P0_KEY_FOLDER, "id_rsa.pub");
+export const PRIVATE_KEY_PATH = path.join(P0_KEY_FOLDER, "id_rsa");
 
 /**
  * Search for a cached key pair, or create a new one if not found

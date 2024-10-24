@@ -19,6 +19,7 @@ import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
+import { sshKeyGenCommand } from "./ssh-keygen";
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -32,6 +33,7 @@ const commands = [
   allowCommand,
   sshCommand,
   scpCommand,
+  sshKeyGenCommand,
   kubeconfigCommand,
 ];
 
