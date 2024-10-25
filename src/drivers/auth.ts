@@ -11,8 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
 import { P0_PATH } from "../util";
-import { loadConfig } from "./config";
-import { authenticateToFirebase, initializeFirebase } from "./firestore";
+import { authenticateToFirebase } from "./firestore";
 import { print2 } from "./stdio";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -66,7 +65,7 @@ export const cached = async <T>(
   }
 };
 
-export const loadCredentials = async (options?: {
+const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
 }): Promise<Identity> => {
   try {
@@ -78,7 +77,7 @@ export const loadCredentials = async (options?: {
     ) {
       await login({ org: identity.org.slug }, { skipAuthenticate: true });
       print2("\u200B"); // Force a new line
-      return loadCredentials({ noRefresh: true });
+      return loadCredentialsWithAutoLogin({ noRefresh: true });
     }
     return identity;
   } catch (error: any) {
@@ -92,10 +91,7 @@ export const loadCredentials = async (options?: {
 export const authenticate = async (options?: {
   noRefresh?: boolean;
 }): Promise<Authn> => {
-  await loadConfig();
-  initializeFirebase();
-
-  const identity = await loadCredentials(options);
+  const identity = await loadCredentialsWithAutoLogin(options);
   const userCredential = await authenticateToFirebase(identity);
 
   return { userCredential, identity };

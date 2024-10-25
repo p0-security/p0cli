@@ -24,7 +24,7 @@ jest.mock("../../drivers/auth", () => ({
 jest.mock("../../drivers/config", () => ({
   ...jest.requireActual("../../drivers/config"),
   saveConfig: jest.fn(),
-  getTenantConfig: jest.fn(() => bootstrapConfig),
+  loadConfig: jest.fn(() => bootstrapConfig),
 }));
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
@@ -54,24 +54,25 @@ describe("login", () => {
 
   describe("organization exists", () => {
     let credentialData: string = "";
-    mockReadFile.mockImplementation(async () =>
-      Buffer.from(credentialData, "utf-8")
-    );
-    mockWriteFile.mockImplementation(async (_path, data) => {
-      credentialData = data;
-    });
-    mockSignInWithCredential.mockImplementation(
-      async (_auth, _firebaseCredential) =>
-        Promise.resolve({
-          user: {
-            email: "user@p0.dev",
-          },
-        })
-    );
 
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
+
+      mockReadFile.mockImplementation(async () =>
+        Buffer.from(credentialData, "utf-8")
+      );
+      mockWriteFile.mockImplementation(async (_path, data) => {
+        credentialData = data;
+      });
+      mockSignInWithCredential.mockImplementation(
+        async (_auth, _firebaseCredential) =>
+          Promise.resolve({
+            user: {
+              email: "user@p0.dev",
+            },
+          })
+      );
 
       mockGetDoc({
         slug: "test-org",
@@ -103,6 +104,31 @@ describe("login", () => {
 "Can not sign in: this user has previously signed in with a different identity provider.
 Please contact support@p0.dev to enable this user."
 `);
+    });
+  });
+
+  describe("identity file does not exist", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      // Mock `readFile` to throw an "ENOENT" error
+      mockReadFile.mockImplementation(() => {
+        const error = new Error("File not found");
+        (error as any).code = "ENOENT";
+        return Promise.reject(error);
+      });
+
+      mockGetDoc({
+        slug: "test-org",
+        tenantId: "test-tenant",
+        ssoProvider: "google",
+      });
+    });
+
+    it("it should ask user to log in", async () => {
+      await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
+        `"Please run \`p0 login <organization>\` to use the P0 CLI."`
+      );
     });
   });
 });
