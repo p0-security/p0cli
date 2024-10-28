@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Identity } from "../types/identity";
-import { getTenantConfig } from "./config";
+import { loadConfig } from "./config";
 import { bootstrapConfig } from "./env";
 import { FirebaseApp, initializeApp } from "firebase/app";
 import {
@@ -17,6 +17,7 @@ import {
   OAuthProvider,
   SignInMethod,
   signInWithCredential,
+  UserCredential,
 } from "firebase/auth";
 import {
   collection as fsCollection,
@@ -34,15 +35,19 @@ const bootstrapFirestore = getFirestore(bootstrapApp);
 let app: FirebaseApp;
 let firestore: Firestore;
 
-export function initializeFirebase() {
-  const tenantConfig = getTenantConfig();
+async function initializeFirebase() {
+  const tenantConfig = await loadConfig();
   app = initializeApp(tenantConfig.fs, "authFirebase");
   firestore = getFirestore(app);
 }
 
-export async function authenticateToFirebase(identity: Identity) {
+export async function authenticateToFirebase(
+  identity: Identity
+): Promise<UserCredential> {
   const { credential } = identity;
   const tenantId = identity.org.tenantId;
+
+  await initializeFirebase();
 
   // TODO: Move to map lookup
   const provider = new OAuthProvider(

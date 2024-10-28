@@ -30,7 +30,8 @@ export async function saveConfig(config: Config) {
   tenantConfig = config;
 }
 
-export async function loadConfig() {
+export async function loadConfig(): Promise<Config> {
   const buffer = await fs.readFile(CONFIG_FILE_PATH);
   tenantConfig = JSON.parse(buffer.toString());
+  return tenantConfig;
 }
