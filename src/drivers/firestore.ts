@@ -35,10 +35,12 @@ const bootstrapFirestore = getFirestore(bootstrapApp);
 let app: FirebaseApp;
 let firestore: Firestore;
 
-async function initializeFirebase() {
-  const tenantConfig = await loadConfig();
-  app = initializeApp(tenantConfig.fs, "authFirebase");
-  firestore = getFirestore(app);
+export async function initializeFirebase() {
+  if (!firestore) {
+    const tenantConfig = await loadConfig();
+    app = initializeApp(tenantConfig.fs, "authFirebase");
+    firestore = getFirestore(app);
+  }
 }
 
 export async function authenticateToFirebase(
@@ -85,7 +87,7 @@ export const doc = <T>(path: string) => {
   return fsDoc(firestore, path) as DocumentReference<T>;
 };
 
-export const publicDoc = <T>(path: string) => {
+export const bootstrapDoc = <T>(path: string) => {
   return fsDoc(bootstrapFirestore, path) as DocumentReference<T>;
 };
 

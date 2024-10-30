@@ -8,9 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { Config } from "../types/org";
+import { Config, RawOrgData } from "../types/org";
 import { P0_PATH } from "../util";
+import { bootstrapConfig } from "./env";
+import { bootstrapDoc } from "./firestore";
 import { print2 } from "./stdio";
+import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
 import path from "path";
 
@@ -22,11 +25,19 @@ export function getTenantConfig(): Config {
   return tenantConfig;
 }
 
-export async function saveConfig(config: Config) {
+export async function saveConfig(orgId: string) {
+  const orgDoc = await getDoc<RawOrgData, object>(
+    bootstrapDoc(`orgs/${orgId}`)
+  );
+  const orgData = orgDoc.data();
+  const config = orgData?.config ?? bootstrapConfig;
+
   print2(`Saving config to ${CONFIG_FILE_PATH}.`);
+
   const dir = path.dirname(CONFIG_FILE_PATH);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(CONFIG_FILE_PATH, JSON.stringify(config), { mode: "600" });
+
   tenantConfig = config;
 }
 
