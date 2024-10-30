@@ -14,8 +14,8 @@ import {
   IDENTITY_FILE_PATH,
 } from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
-import { bootstrapConfig } from "../drivers/env";
-import { fsShutdownGuard, publicDoc } from "../drivers/firestore";
+import { fsShutdownGuard, initializeFirebase } from "../drivers/firestore";
+import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { TokenResponse } from "../types/oidc";
@@ -34,13 +34,13 @@ export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  const orgDoc = await getDoc<RawOrgData, object>(
-    publicDoc(`orgs/${args.org}`)
-  );
-  const orgData = orgDoc.data();
-  if (!orgData) throw "Could not find organization";
+  await saveConfig(args.org);
+  await initializeFirebase();
 
-  await saveConfig(orgData.config ?? bootstrapConfig);
+  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
+  const orgData = orgDoc.data();
+
+  if (!orgData) throw "Could not find organization";
 
   const orgWithSlug: OrgData = { ...orgData, slug: args.org };
 
