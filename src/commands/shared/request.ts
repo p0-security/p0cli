@@ -100,8 +100,16 @@ export const request =
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
     const { userCredential } = resolvedAuthn;
+    const accessMessage = (message?: string) => {
+      switch (message) {
+        case "approval-required":
+          return "Checking for access in P0";
+        default:
+          return "Requesting access";
+      }
+    };
     const data = await spinUntil(
-      options?.accessMessage ? options.accessMessage : "Requesting access",
+      accessMessage(options?.message),
       fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
         command,
         ...args.arguments,

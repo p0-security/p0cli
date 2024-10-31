@@ -122,7 +122,7 @@ export const provisionRequest = async (
       wait: true,
     },
     authn,
-    { accessMessage: "Checking for access in P0", message: "approval-required" }
+    { message: "approval-required" }
   );
 
   if (!response) {
@@ -131,7 +131,7 @@ export const provisionRequest = async (
   }
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
-  else print2("Existing access found.  Connecting to node.");
+  else print2("Existing access found.  Connecting to instance.");
 
   const provisionedRequest = await waitForProvisioning<PluginSshRequest>(
     authn,
