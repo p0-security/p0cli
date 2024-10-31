@@ -29,7 +29,8 @@ exports[`ls when valid ls command should print friendly message if no items: std
 exports[`ls when valid ls command should print list response: stderr 1`] = `
 [
   [
-    "Showing destinations. Resources labeled with * are already accessible to you:",
+    "Showing destinations.
+Resources labeled with * are already accessible to you:",
   ],
 ]
 `;

@@ -72,12 +72,11 @@ const ls = async (
     const postfixPart = data.term
       ? ` matching '${data.term}'`
       : data.isTruncated
-        ? ` (use \`p0
-         ${allArguments.join(" ")} <like>\` to narrow results)`
+        ? ` (use \`p0 ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
     print2(
-      `Showing${truncationPart} ${label}${postfixPart}. Resources labeled with * are already accessible to you:`
+      `Showing${truncationPart} ${label}${postfixPart}.\nResources labeled with * are already accessible to you:`
     );
     const sortedItems = orderBy(data.items, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
