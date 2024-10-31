@@ -107,9 +107,9 @@ export const gcpSshProvider: SshProvider<
 
   requestToSsh: (request) => {
     return {
-      id: request.permission.spec.instanceName,
-      projectId: request.permission.spec.projectId,
-      zone: request.permission.spec.zone,
+      id: request.permission.instanceName,
+      projectId: request.permission.projectId,
+      zone: request.permission.zone,
       linuxUserName: request.cliLocalData.linuxUserName,
       type: "gcloud",
     };
@@ -120,10 +120,7 @@ export const gcpSshProvider: SshProvider<
   toCliRequest: async (request, options) => ({
     ...request,
     cliLocalData: {
-      linuxUserName: await importSshKey(
-        request.permission.spec.publicKey,
-        options
-      ),
+      linuxUserName: await importSshKey(request.permission.publicKey, options),
     },
   }),
 };
