@@ -12,14 +12,11 @@ import { PermissionSpec } from "../../types/request";
 import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
-export type GcpSshPermission = {
-  spec: CommonSshPermissionSpec & {
-    instanceName: string;
-    projectId: string;
-    zone: string;
-    type: "gcloud";
-  };
-  type: "session";
+export type GcpSshPermission = CommonSshPermissionSpec & {
+  instanceName: string;
+  projectId: string;
+  zone: string;
+  provider: "gcloud";
 };
 
 export type GcpSshPermissionSpec = PermissionSpec<"ssh", GcpSshPermission>;

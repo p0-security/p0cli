@@ -62,27 +62,25 @@ export type AwsConfig = {
 
 // -- Specific AWS permission types
 
-export type AwsSshPermission = {
-  spec: CommonSshPermissionSpec & {
+export type AwsSshPermission = CommonSshPermissionSpec & {
+  provider: "aws";
+  region: string;
+  alias: string;
+  resource: {
+    idcRegion: string;
+    idcId: string;
+    account: string;
     instanceId: string;
+    name: string;
+    userName: string;
+    arn: string;
     accountId: string;
-    region: string;
-    type: "aws";
-    awsResourcePermission: {
-      permission: {
-        idcId?: string;
-        idcRegion?: string;
-      };
-    };
   };
-  type: "session";
 };
 
 export type AwsSshGenerated = {
-  name: string;
-  ssh: {
-    linuxUserName: string;
-  };
+  resource: { name: string };
+  linuxUserName: string;
 };
 
 export type AwsSshPermissionSpec = PermissionSpec<

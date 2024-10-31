@@ -21,7 +21,7 @@ export const ERROR_STATUSES = [
 
 export type PermissionSpec<
   K extends string,
-  P extends { type: string },
+  P extends { provider: string } | { type: string },
   G extends object | undefined = undefined,
 > = {
   type: K;
