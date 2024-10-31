@@ -94,13 +94,14 @@ export const request =
     }>,
     authn?: Authn,
     options?: {
+      accessMessage?: string;
       message?: "all" | "approval-required" | "none";
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
     const { userCredential } = resolvedAuthn;
     const data = await spinUntil(
-      "Requesting access",
+      options?.accessMessage ? options.accessMessage : "Requesting access",
       fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
         command,
         ...args.arguments,
