@@ -30,7 +30,10 @@ export async function saveConfig(orgId: string) {
     bootstrapDoc(`orgs/${orgId}`)
   );
   const orgData = orgDoc.data();
-  const config = orgData?.config ?? bootstrapConfig;
+
+  if (!orgData) throw "Could not find organization";
+
+  const config = orgData.config ?? bootstrapConfig;
 
   print2(`Saving config to ${CONFIG_FILE_PATH}.`);
 
