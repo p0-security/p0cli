@@ -81,6 +81,7 @@ const validateSshInstall = async (
       value.state == "installed" &&
       providersToCheck.some((prefix) => key.startsWith(prefix))
   );
+
   if (items.length === 0) {
     throw "This organization is not configured for SSH access via the P0 CLI";
   }

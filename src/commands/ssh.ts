@@ -51,7 +51,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("provider", {
           type: "string",
           describe: "The cloud provider where the instance is hosted",
-          choices: ["aws", "gcloud"],
+          choices: ["aws", "azure", "gcloud"],
         })
         .option("debug", {
           type: "boolean",
