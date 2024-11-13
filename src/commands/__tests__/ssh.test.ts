@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
+import { AwsSshGenerated, AwsSshPermission } from "../../plugins/aws/types";
 import { sshOrScp } from "../../plugins/ssh";
 import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
@@ -30,24 +31,34 @@ const mockSshOrScp = sshOrScp as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
+const MOCK_PERMISSION: AwsSshPermission = {
+  provider: "aws",
+  publicKey: TEST_PUBLIC_KEY,
+  region: "region",
+  alias: "alias",
+  resource: {
+    account: "accountId",
+    accountId: "accountId",
+    arn: "arn",
+    idcRegion: "idcRegion",
+    idcId: "idcId",
+    name: "name",
+    userName: "userName",
+    instanceId: "instanceId",
+  },
+};
+
+const MOCK_GENERATED: AwsSshGenerated = {
+  resource: {
+    name: "name",
+  },
+  linuxUserName: "linuxUserName",
+};
+
 const MOCK_REQUEST = {
   status: "DONE",
-  generated: {
-    name: "name",
-    ssh: {
-      linuxUserName: "linuxUserName",
-    },
-  },
-  permission: {
-    spec: {
-      awsResourcePermission: { permission: {} },
-      instanceId: "instanceId",
-      accountId: "accountId",
-      region: "region",
-      publicKey: TEST_PUBLIC_KEY,
-      type: "aws",
-    },
-  },
+  generated: MOCK_GENERATED,
+  permission: MOCK_PERMISSION,
 };
 
 mockGetDoc({
