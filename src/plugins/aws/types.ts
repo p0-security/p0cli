@@ -67,14 +67,14 @@ export type AwsSshPermission = CommonSshPermissionSpec & {
   region: string;
   alias: string;
   resource: {
-    idcRegion: string;
-    idcId: string;
     account: string;
+    accountId: string;
+    arn: string;
+    idcId: string;
+    idcRegion: string;
     instanceId: string;
     name: string;
     userName: string;
-    arn: string;
-    accountId: string;
   };
 };
 
