@@ -57,8 +57,8 @@ export const azureSshProvider: SshProvider<
   // TODO: Placeholder
   requestToSsh: (request) => ({
     type: "azure",
-    id: request.permission.spec.instanceId,
-    instanceId: request.permission.spec.instanceId,
+    id: request.permission.resource.instanceId,
+    instanceId: request.permission.resource.instanceId,
     linuxUserName: request.cliLocalData.linuxUserName,
   }),
 
@@ -69,10 +69,7 @@ export const azureSshProvider: SshProvider<
   toCliRequest: async (request, options) => ({
     ...request,
     cliLocalData: {
-      linuxUserName: await importSshKey(
-        request.permission.spec.publicKey,
-        options
-      ),
+      linuxUserName: await importSshKey(request.permission.publicKey, options),
     },
   }),
 };

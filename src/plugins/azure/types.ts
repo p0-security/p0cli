@@ -20,9 +20,20 @@ export type AzureSsh = CliPermissionSpec<
   { linuxUserName: string }
 >;
 
-export type AzureSshPermission = {
-  type: "session";
-  spec: CommonSshPermissionSpec & AzureNodeSpec;
+export type AzureSshPermission = CommonSshPermissionSpec & {
+  provider: "azure";
+  destination: string;
+  parent: string | undefined;
+  group: string | undefined;
+  resource: {
+    instanceName: string;
+    instanceId: string;
+    subscriptionId: string;
+    subscriptionName: string;
+    resourceGroupId: string;
+    region: string;
+    networkInterfaceIds: string[];
+  };
 };
 
 // TODO: Placeholder; probably wrong

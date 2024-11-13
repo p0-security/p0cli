@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { K8sPermissionSpec } from "../plugins/kubeconfig/types";
-import { PluginSshRequest } from "./ssh";
+import { PluginSshRequest, SupportedSshProvider } from "./ssh";
 
 export const DONE_STATUSES = ["DONE", "DONE_NOTIFIED"] as const;
 export const DENIED_STATUSES = ["DENIED", "DENIED_NOTIFIED"] as const;
@@ -21,7 +21,7 @@ export const ERROR_STATUSES = [
 
 export type PermissionSpec<
   K extends string,
-  P extends { provider: string } | { type: string },
+  P extends { provider: SupportedSshProvider } | { type: string },
   G extends object | undefined = undefined,
 > = {
   type: K;
