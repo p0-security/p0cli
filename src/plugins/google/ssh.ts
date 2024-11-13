@@ -107,8 +107,8 @@ export const gcpSshProvider: SshProvider<
 
   requestToSsh: (request) => {
     return {
-      id: request.permission.instanceName,
-      projectId: request.permission.projectId,
+      id: request.permission.resource.instanceName,
+      projectId: request.permission.resource.projectId,
       zone: request.permission.zone,
       linuxUserName: request.cliLocalData.linuxUserName,
       type: "gcloud",
