@@ -22,6 +22,9 @@ export type SupportedPlatform = (typeof SupportedPlatforms)[number];
 export const AwsItems = ["aws"] as const;
 export type AwsItem = (typeof AwsItems)[number];
 
+export const HomebrewItems = ["brew"] as const;
+export type HomebrewItem = (typeof HomebrewItems)[number];
+
 export type InstallMetadata = {
   label: string;
   commands: Record<SupportedPlatform, Readonly<string[]>>;
@@ -39,6 +42,18 @@ export const AwsInstall: Readonly<Record<AwsItem, InstallMetadata>> = {
     },
   },
 };
+
+export const HomebrewInstall: Readonly<Record<HomebrewItem, InstallMetadata>> =
+  {
+    brew: {
+      label: "Homebrew",
+      commands: {
+        darwin: [
+          '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+        ],
+      },
+    },
+  };
 
 const printToInstall = <
   T extends string,
