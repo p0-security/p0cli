@@ -13,8 +13,8 @@ import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
 export type GcpSshPermission = CommonSshPermissionSpec & {
-  zone: string;
   provider: "gcloud";
+  zone: string;
   resource: {
     instanceName: string;
     projectId: string;
@@ -29,11 +29,11 @@ export type GcpSsh = CliPermissionSpec<
 >;
 
 export type GcpSshRequest = {
+  type: "gcloud";
   linuxUserName: string;
   projectId: string;
   zone: string;
   id: string;
-  type: "gcloud";
 };
 
 type PosixAccount = {
