@@ -33,7 +33,7 @@ import yargs from "yargs";
 export type BaseSshCommandArgs = {
   sudo?: boolean;
   reason?: string;
-  account?: string;
+  parent?: string;
   provider?: SupportedSshProvider;
   debug?: boolean;
   sshOptions?: string[];
@@ -119,7 +119,7 @@ export const provisionRequest = async (
         ...(args.provider ? ["--provider", args.provider] : []),
         ...(isSudoCommand(args) ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
-        ...(args.account ? ["--account", args.account] : []),
+        ...(args.parent ? ["--parent", args.parent] : []),
       ],
       wait: true,
     },
