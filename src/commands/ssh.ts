@@ -45,7 +45,8 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .option("parent", {
           type: "string",
-          describe: "The parent resource on which the instance is located",
+          describe:
+            "The containing parent resource which the instance belongs to (account, project, subscription, etc.)",
         })
         .option("provider", {
           type: "string",
