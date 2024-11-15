@@ -43,9 +43,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "Reason access is needed",
           type: "string",
         })
-        .option("account", {
+        .option("parent", {
           type: "string",
-          describe: "The account on which the instance is located",
+          describe:
+            "The containing parent resource which the instance belongs to (account, project, subscription, etc.)",
         })
         .option("provider", {
           type: "string",
