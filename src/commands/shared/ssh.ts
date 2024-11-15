@@ -90,7 +90,7 @@ const pluginToCliRequest = async (
   request: Request<PluginSshRequest>,
   options?: { debug?: boolean }
 ): Promise<Request<CliSshRequest>> =>
-  await SSH_PROVIDERS[request.permission.spec.type].toCliRequest(
+  await SSH_PROVIDERS[request.permission.provider].toCliRequest(
     request as any,
     options
   );
@@ -139,7 +139,7 @@ export const provisionRequest = async (
     authn,
     id
   );
-  if (provisionedRequest.permission.spec.publicKey !== publicKey) {
+  if (provisionedRequest.permission.publicKey !== publicKey) {
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 
@@ -158,7 +158,7 @@ export const prepareRequest = async (
 
   const { provisionedRequest } = result;
 
-  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.spec.type];
+  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
   await sshProvider.ensureInstall();
 
   const cliRequest = await pluginToCliRequest(provisionedRequest, {
