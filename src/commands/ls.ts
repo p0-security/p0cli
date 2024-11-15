@@ -13,9 +13,11 @@ import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { fsShutdownGuard } from "../drivers/firestore";
 import { print2, print1, spinUntil } from "../drivers/stdio";
-import { max, orderBy } from "lodash";
+import { max, orderBy, pullAt, slice } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
+
+const DEFAULT_RESPONSE_SIZE = 15;
 
 type LsResponse = {
   ok: true;
@@ -48,15 +50,36 @@ export const lsCommand = (yargs: yargs.Argv) =>
     fsShutdownGuard(ls)
   );
 
+/**
+ * If the user has requested a size, replace it with double the requested size,
+ * otherwise request double the default.
+ *
+ * This is done so that we can give the user a sense of the number of results
+ * that are not displayed.
+ */
+const convertLsSizeArg = (args: string[]) => {
+  const convertedArgs = [...args];
+  const sizeIndex = convertedArgs.findIndex((a) => a === "--size");
+  const requestedSize = +(
+    (sizeIndex >= 0
+      ? pullAt(convertedArgs, sizeIndex, sizeIndex + 1)[1]
+      : undefined) ?? DEFAULT_RESPONSE_SIZE
+  );
+  convertedArgs.push("--size", String(requestedSize * 2));
+  return { convertedArgs, requestedSize };
+};
+
 const ls = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
   }>
 ) => {
   const authn = await authenticate();
+  const { convertedArgs, requestedSize } = convertLsSizeArg(args.arguments);
+
   const data = await spinUntil(
     "Listing accessible resources",
-    fetchCommand<LsResponse>(authn, args, ["ls", ...args.arguments])
+    fetchCommand<LsResponse>(authn, args, ["ls", ...convertedArgs])
   );
   const allArguments = [...args._, ...args.arguments];
 
@@ -66,9 +89,10 @@ const ls = async (
       print2(`No ${label}`);
       return;
     }
-    const truncationPart = data.isTruncated
-      ? ` the first ${data.items.length}`
-      : "";
+    const truncationPart =
+      data.items.length > requestedSize
+        ? ` the first ${requestedSize} (of ${data.isTruncated ? "many" : data.items.length})`
+        : "";
     const postfixPart = data.term
       ? ` matching '${data.term}'`
       : data.isTruncated
@@ -78,7 +102,11 @@ const ls = async (
     print2(
       `Showing${truncationPart} ${label}${postfixPart}.\nResources labeled with * are already accessible to you:`
     );
-    const sortedItems = orderBy(data.items, "isPreexisting", "desc");
+    const sortedItems = orderBy(
+      slice(data.items, 0, requestedSize),
+      "isPreexisting",
+      "desc"
+    );
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
     for (const item of sortedItems) {
