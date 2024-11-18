@@ -102,11 +102,8 @@ const ls = async (
     print2(
       `Showing${truncationPart} ${label}${postfixPart}.\nResources labeled with * are already accessible to you:`
     );
-    const sortedItems = orderBy(
-      slice(data.items, 0, requestedSize),
-      "isPreexisting",
-      "desc"
-    );
+    const truncated = slice(data.items, 0, requestedSize);
+    const sortedItems = orderBy(truncated, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
     for (const item of sortedItems) {
