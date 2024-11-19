@@ -54,6 +54,14 @@ export type SshCommandArgs = BaseSshCommandArgs & {
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
 
+export type SshAdditionalSetupData = {
+  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
+  sshOptions: string[];
+
+  /** The port to connect to, overriding the default */
+  port?: string;
+};
+
 export const SSH_PROVIDERS: Record<
   SupportedSshProvider,
   SshProvider<any, any, any, any>

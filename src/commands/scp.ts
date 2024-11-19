@@ -139,12 +139,25 @@ const replaceHostWithInstance = (result: SshRequest, args: ScpCommandArgs) => {
   let source = args.source;
   let destination = args.destination;
 
+  const { linuxUserName } = result;
+
   if (isExplicitlyRemote(source)) {
-    source = `${result.linuxUserName}@${result.id}:${source.split(":")[1]}`;
+    if (linuxUserName.includes("@")) {
+      // If the username contains an '@' character, it can't be included here as `scp` won't be able to parse it.
+      // Instead, the username will need to be set elsewhere, like in the SSH config file, or via the '-o User'
+      // argument (`scp` doesn't have a `-l` option for setting the username like `ssh` does).
+      source = `${result.id}:${source.split(":")[1]}`;
+    } else {
+      source = `${linuxUserName}@${result.id}:${source.split(":")[1]}`;
+    }
   }
 
   if (isExplicitlyRemote(destination)) {
-    destination = `${result.linuxUserName}@${result.id}:${destination.split(":")[1]}`;
+    if (linuxUserName.includes("@")) {
+      destination = `${result.id}:${destination.split(":")[1]}`;
+    } else {
+      destination = `${linuxUserName}@${result.id}:${destination.split(":")[1]}`;
+    }
   }
 
   return { source, destination };

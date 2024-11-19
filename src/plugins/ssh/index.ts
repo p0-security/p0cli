@@ -8,7 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs, SSH_PROVIDERS } from "../../commands/shared/ssh";
+import {
+  CommandArgs,
+  SSH_PROVIDERS,
+  SshAdditionalSetupData,
+} from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
@@ -207,9 +211,15 @@ async function spawnSshNode(
 const createCommand = (
   data: SshRequest,
   args: CommandArgs,
+  setupData: SshAdditionalSetupData | undefined,
   proxyCommand: string[]
 ) => {
   addCommonArgs(args, proxyCommand);
+
+  const sshOptions = setupData?.sshOptions ?? [];
+  const port = setupData?.port;
+
+  const argsOverride = sshOptions.flatMap((opt) => ["-o", opt]);
 
   if ("source" in args) {
     addScpArgs(args);
@@ -218,6 +228,8 @@ const createCommand = (
       command: "scp",
       args: [
         ...(args.sshOptions ? args.sshOptions : []),
+        ...(argsOverride ? argsOverride : []),
+        ...(port ? ["-P", port] : []),
         args.source,
         args.destination,
       ],
@@ -228,7 +240,11 @@ const createCommand = (
     command: "ssh",
     args: [
       ...(args.sshOptions ? args.sshOptions : []),
-      `${data.linuxUserName}@${data.id}`,
+      ...(argsOverride ? argsOverride : []),
+      ...(port ? ["-p", port] : []),
+      "-l",
+      data.linuxUserName, // Pass the username in as an argument to avoid issues caused by usernames containing '@'
+      `${data.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
@@ -343,7 +359,12 @@ const preTestAccessPropagationIfNeeded = async <
   // Pre-testing comes at a performance cost because we have to execute another ssh subprocess after
   // a successful test. Only do when absolutely necessary.
   if (testCmdArgs) {
-    const { command, args } = createCommand(request, testCmdArgs, proxyCommand);
+    const { command, args } = createCommand(
+      request,
+      testCmdArgs,
+      undefined, // No need to re-apply SSH options from setupData
+      proxyCommand
+    );
     // Assumes that this is a non-interactive ssh command that exits automatically
     return spawnSshNode({
       credential,
@@ -378,9 +399,14 @@ export const sshOrScp = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(request);
 
+  const setupData = sshProvider.setup
+    ? await sshProvider.setup(request)
+    : undefined;
+
   const { command, args: commandArgs } = createCommand(
     request,
     cmdArgs,
+    setupData,
     proxyCommand
   );
 
@@ -411,7 +437,7 @@ export const sshOrScp = async (args: {
     return exitCode; // Only exit if there was an error when pre-testing
   }
 
-  return spawnSshNode({
+  const sshNodeExit = await spawnSshNode({
     credential,
     abortController: new AbortController(),
     command,
@@ -421,4 +447,10 @@ export const sshOrScp = async (args: {
     provider: request.type,
     endTime: endTime,
   });
+
+  if (sshProvider.teardown) {
+    await sshProvider.teardown(request);
+  }
+
+  return sshNodeExit;
 };

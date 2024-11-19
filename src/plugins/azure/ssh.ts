@@ -9,24 +9,33 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { SshProvider } from "../../types/ssh";
-import { exec } from "../../util";
-import { importSshKey } from "../google/ssh-key";
+import { getAzPrincipal } from "./auth";
 import { ensureAzInstall } from "./install";
-import { AzureSshPermissionSpec, AzureSshRequest } from "./types";
+import {
+  AD_CERT_FILENAME,
+  AD_SSH_KEY_PRIVATE,
+  createTempDirectoryForKeys,
+  generateSshKeyAndAzureAdCert,
+} from "./keygen";
+import { trySpawnBastionTunnel } from "./tunnel";
+import {
+  AzureLocalData,
+  AzureSshPermissionSpec,
+  AzureSshRequest,
+} from "./types";
+import path from "node:path";
 
 // TODO: Determine what this value should be for Azure
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
 export const azureSshProvider: SshProvider<
   AzureSshPermissionSpec,
-  { linuxUserName: string },
+  AzureLocalData,
   AzureSshRequest
 > = {
   // TODO: Natively support Azure login in P0 CLI
   cloudProviderLogin: async () => {
-    // Always invoke `az login` before each SSH access. This is needed because
-    // Azure permissions are only updated upon login.
-    await exec("az", ["login"]);
+    // Login is handled as part of setup() below
     return undefined;
   },
 
@@ -45,31 +54,78 @@ export const azureSshProvider: SshProvider<
 
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
-  // TODO: Implement
+  // TODO: Determine if necessary
   preTestAccessPropagationArgs: () => undefined,
 
-  // TODO: Determine if necessary
+  // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
   proxyCommand: () => [],
 
   // TODO: Determine if necessary
   reproCommands: () => undefined,
 
-  // TODO: Placeholder
+  setup: async (request) => {
+    await generateSshKeyAndAzureAdCert(request.sshKeyPath);
+
+    const { killTunnel, tunnelLocalPort } =
+      await trySpawnBastionTunnel(request);
+
+    // Ensure the tunnel is killed when the CLI exits
+    process.on("exit", () => killTunnel());
+
+    request.killTunnel = killTunnel;
+
+    const sshPrivateKeyPath = path.join(request.sshKeyPath, AD_SSH_KEY_PRIVATE);
+    const sshCertificateKeyPath = path.join(
+      request.sshKeyPath,
+      AD_CERT_FILENAME
+    );
+
+    return {
+      sshOptions: [
+        "UserKnownHostsFile /dev/null",
+        `IdentityFile ${sshPrivateKeyPath}`,
+        `CertificateFile ${sshCertificateKeyPath}`,
+        "IdentitiesOnly yes",
+        // Entra ID usernames are email addresses, so to not break scp we need to pass in the username as an option
+        // like so
+        `User ${request.linuxUserName}`,
+      ],
+      tunnelLocalPort,
+    };
+  },
+
+  teardown: async (request) => {
+    if (request.killTunnel) {
+      request.killTunnel();
+    }
+
+    await request.sshKeyPathCleanup();
+  },
+
   requestToSsh: (request) => ({
     type: "azure",
-    id: request.permission.resource.instanceId,
+    id: "localhost",
+    ...request.cliLocalData,
     instanceId: request.permission.resource.instanceId,
-    linuxUserName: request.cliLocalData.linuxUserName,
+    subscriptionId: request.permission.resource.subscriptionId,
+    instanceResourceGroup: request.permission.resource.resourceGroupId,
+    bastionName: request.permission.resource.bastionName,
+    bastionResourceGroup: request.permission.resource.bastionResourceGroup,
   }),
 
   // TODO: Implement
   unprovisionedAccessPatterns: [],
 
-  // TODO: Placeholder
-  toCliRequest: async (request, options) => ({
-    ...request,
-    cliLocalData: {
-      linuxUserName: await importSshKey(request.permission.publicKey, options),
-    },
-  }),
+  toCliRequest: async (request) => {
+    const { path, cleanup } = await createTempDirectoryForKeys();
+
+    return {
+      ...request,
+      cliLocalData: {
+        linuxUserName: await getAzPrincipal(),
+        sshKeyPath: path,
+        sshKeyPathCleanup: cleanup,
+      },
+    };
+  },
 };

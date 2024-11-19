@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs } from "../commands/shared/ssh";
+import { CommandArgs, SshAdditionalSetupData } from "../commands/shared/ssh";
 import {
   AwsSsh,
   AwsSshPermissionSpec,
@@ -79,8 +79,15 @@ export type SshProvider<
     cmdArgs: CommandArgs
   ) => CommandArgs | undefined;
 
+  /** Perform any setup required before running the SSH command. Returns a list of additional arguments to pass to the
+   * SSH command. */
+  setup?: (request: SR) => Promise<SshAdditionalSetupData | undefined>;
+
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
   proxyCommand: (request: SR) => string[];
+
+  /** Perform any teardown required after the SSH command exits but before terminating the P0 CLI */
+  teardown?: (request: SR) => Promise<void>;
 
   /** Each element in the returned array is a command that can be run to reproduce the
    * steps of logging in the user to the ssh session. */
