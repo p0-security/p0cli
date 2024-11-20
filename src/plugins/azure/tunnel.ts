@@ -11,7 +11,6 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
 import { AzureSshRequest } from "./types";
-import { azureRequestToResourceId } from "./util";
 import { spawn } from "node:child_process";
 
 const TUNNEL_READY_STRING = "Tunnel is ready";
@@ -35,33 +34,56 @@ const spawnBastionTunnelInBackground = (
   port: string
 ): Promise<BastionTunnelMeta> => {
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
-    const child = spawn("az", [
-      "network",
-      "bastion",
-      "tunnel",
-      "--name",
-      request.bastionName,
-      "--resource-group",
-      request.bastionResourceGroup,
-      "--target-resource-id",
-      azureRequestToResourceId(request),
-      "--resource-port",
-      "22",
-      "--port",
-      port,
-    ]);
+    let processTerminated = false;
+    let stdout = "";
+    let stderr = "";
+
+    const child = spawn(
+      "az",
+      [
+        "network",
+        "bastion",
+        "tunnel",
+        "--ids",
+        request.bastionId,
+        "--target-resource-id",
+        request.instanceId,
+        "--resource-port",
+        "22",
+        "--port",
+        port,
+      ],
+      // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
+      // descendent processes together.
+      { detached: true }
+    );
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
       // We don't expect the process to terminate on its own, so this almost always is an error
-      reject(`Bastion tunnel process exited with code ${code}`);
+      print2(stdout);
+      print2(stderr);
+      reject(
+        `Unable to start Azure Network Bastion tunnel; tunnel process ended with status ${code}`
+      );
     });
 
     child.stdout.on("data", (data) => {
       const str = data.toString("utf-8");
+      stdout += str;
+    });
+
+    child.stderr.on("data", (data) => {
+      const str = data.toString("utf-8");
+      stderr += str;
 
       if (str.includes(TUNNEL_READY_STRING)) {
+        print2("Azure Bastion tunnel is ready.");
+
+        // At this point, if the tunnel dies for some reason, the SSH session will die too so it's no longer necessary
+        // to explicitly listen for the tunnel process terminating.
         exitListener.unref();
+
         resolve({
           killTunnel: () => {
             if (processTerminated) return;
@@ -83,13 +105,6 @@ const spawnBastionTunnelInBackground = (
           tunnelLocalPort: port,
         });
       }
-
-      print2(str);
-    });
-
-    child.stderr.on("data", (data) => {
-      const str = data.toString("utf-8");
-      print2(str);
     });
   });
 };

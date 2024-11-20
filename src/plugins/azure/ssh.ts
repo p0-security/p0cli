@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { SshProvider } from "../../types/ssh";
-import { getAzPrincipal } from "./auth";
+import { azLogin } from "./auth";
 import { ensureAzInstall } from "./install";
 import {
   AD_CERT_FILENAME,
@@ -64,13 +64,11 @@ export const azureSshProvider: SshProvider<
   reproCommands: () => undefined,
 
   setup: async (request) => {
+    await azLogin(); // Always re-login to Azure CLI
     await generateSshKeyAndAzureAdCert(request.sshKeyPath);
 
     const { killTunnel, tunnelLocalPort } =
       await trySpawnBastionTunnel(request);
-
-    // Ensure the tunnel is killed when the CLI exits
-    process.on("exit", () => killTunnel());
 
     request.killTunnel = killTunnel;
 
@@ -82,15 +80,24 @@ export const azureSshProvider: SshProvider<
 
     return {
       sshOptions: [
-        "UserKnownHostsFile /dev/null",
         `IdentityFile ${sshPrivateKeyPath}`,
         `CertificateFile ${sshCertificateKeyPath}`,
         "IdentitiesOnly yes",
-        // Entra ID usernames are email addresses, so to not break scp we need to pass in the username as an option
-        // like so
+
+        // Because we connect to the Azure Network Bastion tunnel via a local port instead of a ProxyCommand, every
+        // instance connected to will appear to `ssh` to be the same host but presenting a different host key (i.e.,
+        // `ssh` always connects to localhost but each VM will present its own host key), which will trigger MITM attack
+        // warnings. We disable host key checking to avoid this. This is ordinarily very dangerous, but in this case,
+        // security of the connection is ensured by the Azure Bastion Network tunnel, which utilizes HTTPS and thus has
+        // its own MITM protection.
+        "StrictHostKeyChecking no",
+        "UserKnownHostsFile /dev/null",
+
+        // Entra ID usernames are email addresses, so to not break scp with an extra '@' character we need to pass in
+        // the username as an option like so
         `User ${request.linuxUserName}`,
       ],
-      tunnelLocalPort,
+      port: tunnelLocalPort,
     };
   },
 
@@ -109,8 +116,7 @@ export const azureSshProvider: SshProvider<
     instanceId: request.permission.resource.instanceId,
     subscriptionId: request.permission.resource.subscriptionId,
     instanceResourceGroup: request.permission.resource.resourceGroupId,
-    bastionName: request.permission.resource.bastionName,
-    bastionResourceGroup: request.permission.resource.bastionResourceGroup,
+    bastionId: request.permission.bastionHostId,
   }),
 
   // TODO: Implement
@@ -122,7 +128,7 @@ export const azureSshProvider: SshProvider<
     return {
       ...request,
       cliLocalData: {
-        linuxUserName: await getAzPrincipal(),
+        linuxUserName: request.principal,
         sshKeyPath: path,
         sshKeyPathCleanup: cleanup,
       },

@@ -24,14 +24,14 @@ export type AzureSshPermission = CommonSshPermissionSpec & {
   destination: string;
   parent: string | undefined;
   group: string | undefined;
+  bastionHostId: string;
+  principal: string;
   resource: {
-    instanceName: string;
     instanceId: string;
-    subscriptionId: string;
+    instanceName: string;
     subscriptionName: string;
     resourceGroupId: string;
-    bastionName: string;
-    bastionResourceGroup: string;
+    subscriptionId: string;
     region: string;
     networkInterfaceIds: string[];
   };
@@ -39,13 +39,11 @@ export type AzureSshPermission = CommonSshPermissionSpec & {
 
 export type AzureNodeSpec = {
   instanceId: string;
-  instanceResourceGroup: string;
   sudo?: boolean;
 };
 
 export type AzureBastionSpec = {
-  bastionName: string;
-  bastionResourceGroup: string;
+  bastionId: string;
 };
 
 export type AzureSshRequest = AzureNodeSpec &

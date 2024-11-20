@@ -148,7 +148,10 @@ export const provisionRequest = async (
     authn,
     id
   );
-  if (provisionedRequest.permission.publicKey !== publicKey) {
+  if (
+    args.provider !== "azure" && // For Azure, we generate a unique public key for each request using `az ssh cert`
+    provisionedRequest.permission.publicKey !== publicKey
+  ) {
     throw "Public key mismatch. Please revoke the request and try again.";
   }
 

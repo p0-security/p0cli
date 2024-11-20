@@ -8,37 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { print2 } from "../../drivers/stdio";
 import { exec } from "../../util";
 
-const azLogin = async () => {
+export const azLogin = async () => {
   await exec("az", ["login"]);
-};
-
-export const getAzPrincipal = async (): Promise<string> => {
-  // Log in every time we retrieve the principal. Azure role assignments seem to only apply after logging in, so
-  // we require a new login each time. We don't strictly need to do it here per se, but it's a good place to do it
-  // since we need the principal name to go forward, and this ensures we can get it.
-  await azLogin();
-
-  const { code, stdout, stderr } = await exec("az", [
-    "ad",
-    "signed-in-user",
-    "show",
-  ]);
-
-  if (code !== 0) {
-    print2(stdout);
-    print2(stderr);
-    throw `Failed to get Azure principal information`;
-  }
-
-  const userInfo = JSON.parse(stdout);
-
-  if (!("userPrincipalName" in userInfo) || !userInfo.userPrincipalName) {
-    print2(stdout);
-    throw `Failed to get Azure principal information: userPrincipalName not found`;
-  }
-
-  return userInfo.userPrincipalName;
 };

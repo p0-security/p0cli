@@ -289,7 +289,7 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
       opt === "-o" && sshOptions[idx + 1]?.startsWith("ProxyCommand")
   );
 
-  if (!proxyCommandExists) {
+  if (!proxyCommandExists && proxyCommand.length > 0) {
     sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
   }
 

@@ -23,7 +23,13 @@ export const createTempDirectoryForKeys = async (): Promise<{
   path: string;
   cleanup: () => Promise<void>;
 }> => {
-  const { path, cleanup } = await tmp.dir({ mode: 0o700, prefix: "p0cli-" });
+  // unsafeCleanup lets us delete the directory even if there are still files in it, which is fine since the
+  // files are no longer needed once we've authenticated to the remote system.
+  const { path, cleanup } = await tmp.dir({
+    mode: 0o700,
+    prefix: "p0cli-",
+    unsafeCleanup: true,
+  });
 
   return { path, cleanup };
 };
