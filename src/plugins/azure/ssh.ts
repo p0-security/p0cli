@@ -64,7 +64,8 @@ export const azureSshProvider: SshProvider<
   reproCommands: () => undefined,
 
   setup: async (request) => {
-    await azLogin(); // Always re-login to Azure CLI
+    // TODO: Does this specifically need to be the subscription ID for the Bastion?
+    await azLogin(request.subscriptionId); // Always re-login to Azure CLI
     await generateSshKeyAndAzureAdCert(request.sshKeyPath);
 
     const { killTunnel, tunnelLocalPort } =

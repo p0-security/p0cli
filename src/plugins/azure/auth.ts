@@ -10,6 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { exec } from "../../util";
 
-export const azLogin = async () => {
-  await exec("az", ["login"]);
+export const azLogin = async (subscriptionId: string) => {
+  await exec("az", ["login"], { check: true });
+  await exec("az", ["account", "set", "--subscription", subscriptionId], {
+    check: true,
+  });
 };
