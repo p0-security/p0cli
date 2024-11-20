@@ -35,6 +35,7 @@ const spawnBastionTunnelInBackground = (
 ): Promise<BastionTunnelMeta> => {
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
     let processTerminated = false;
+    let tunnelReady = false;
     let stdout = "";
     let stderr = "";
 
@@ -58,9 +59,10 @@ const spawnBastionTunnelInBackground = (
       { detached: true }
     );
 
-    const exitListener = child.on("exit", (code) => {
-      exitListener.unref();
-      // We don't expect the process to terminate on its own, so this almost always is an error
+    child.on("exit", (code) => {
+      if (tunnelReady) return;
+
+      // We don't expect the process to terminate on its own before the tunnel is ready
       print2(stdout);
       print2(stderr);
       reject(
@@ -79,10 +81,7 @@ const spawnBastionTunnelInBackground = (
 
       if (str.includes(TUNNEL_READY_STRING)) {
         print2("Azure Bastion tunnel is ready.");
-
-        // At this point, if the tunnel dies for some reason, the SSH session will die too so it's no longer necessary
-        // to explicitly listen for the tunnel process terminating.
-        exitListener.unref();
+        tunnelReady = true;
 
         resolve({
           killTunnel: () => {
