@@ -242,9 +242,7 @@ const createCommand = (
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
       ...(port ? ["-p", port] : []),
-      "-l",
-      data.linuxUserName, // Pass the username in as an argument to avoid issues caused by usernames containing '@'
-      data.id,
+      `${data.linuxUserName}@${data.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>

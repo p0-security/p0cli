@@ -96,10 +96,6 @@ export const azureSshProvider: SshProvider<
         // its own MITM protection.
         "StrictHostKeyChecking no",
         "UserKnownHostsFile /dev/null",
-
-        // Entra ID usernames are email addresses, so to not break scp with an extra '@' character we need to pass in
-        // the username as an option like so
-        `User ${request.linuxUserName}`,
       ],
       port: tunnelLocalPort,
       teardown,
