@@ -54,7 +54,7 @@ export const azureSshProvider: SshProvider<
 
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
-  // TODO: Determine if necessary
+  // TODO(ENG-3149): Implement sudo access checks here
   preTestAccessPropagationArgs: () => undefined,
 
   // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
@@ -69,17 +69,24 @@ export const azureSshProvider: SshProvider<
 
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
-    await generateSshKeyAndAzureAdCert(keyPath);
 
-    const { killTunnel, tunnelLocalPort } =
-      await trySpawnBastionTunnel(request);
+    const wrappedCreateCertAndTunnel = async () => {
+      try {
+        await generateSshKeyAndAzureAdCert(keyPath);
+        return await trySpawnBastionTunnel(request);
+      } catch (error: any) {
+        await sshKeyPathCleanup();
+        throw error;
+      }
+    };
+
+    const { killTunnel, tunnelLocalPort } = await wrappedCreateCertAndTunnel();
 
     const sshPrivateKeyPath = path.join(keyPath, AD_SSH_KEY_PRIVATE);
     const sshCertificateKeyPath = path.join(keyPath, AD_CERT_FILENAME);
 
     const teardown = async () => {
-      killTunnel();
-
+      await killTunnel();
       await sshKeyPathCleanup();
     };
 

@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
+import { sleep } from "../../util";
 import { AzureSshRequest } from "./types";
 import { spawn } from "node:child_process";
 
@@ -17,7 +18,7 @@ const TUNNEL_READY_STRING = "Tunnel is ready";
 const SPAWN_TUNNEL_TRIES = 3;
 
 export type BastionTunnelMeta = {
-  killTunnel: () => void;
+  killTunnel: () => Promise<void>;
   tunnelLocalPort: string;
 };
 
@@ -34,8 +35,8 @@ const spawnBastionTunnelInBackground = (
   port: string
 ): Promise<BastionTunnelMeta> => {
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
-    let processTerminated = false;
-    let tunnelReady = false;
+    let processSignalledToExit = false;
+    let processExited = false;
     let stdout = "";
     let stderr = "";
 
@@ -60,13 +61,13 @@ const spawnBastionTunnelInBackground = (
     );
 
     child.on("exit", (code) => {
-      if (tunnelReady) return;
+      processExited = true;
+      if (code === 0) return;
 
-      // We don't expect the process to terminate on its own before the tunnel is ready
       print2(stdout);
       print2(stderr);
       reject(
-        `Unable to start Azure Network Bastion tunnel; tunnel process ended with status ${code}`
+        `Error running Azure Network Bastion tunnel; tunnel process ended with status ${code}`
       );
     });
 
@@ -81,13 +82,12 @@ const spawnBastionTunnelInBackground = (
 
       if (str.includes(TUNNEL_READY_STRING)) {
         print2("Azure Bastion tunnel is ready.");
-        tunnelReady = true;
 
         resolve({
-          killTunnel: () => {
-            if (processTerminated) return;
+          killTunnel: async () => {
+            if (processSignalledToExit || processExited) return;
 
-            processTerminated = true;
+            processSignalledToExit = true;
 
             if (child.pid) {
               // Kill the process and all its descendents via killing the process group; this is only possible
@@ -96,10 +96,28 @@ const spawnBastionTunnelInBackground = (
               // SIGINT is equivalent to pressing Ctrl-C in the terminal; allows for the tunnel process to perform any
               // necessary cleanup of its own before exiting. The negative PID is what indicates that we want to kill
               // the whole process group.
-              process.kill(-child.pid, "SIGINT");
-            }
+              try {
+                process.kill(-child.pid, "SIGINT");
 
-            child.unref();
+                // Give the tunnel a chance to quit gracefully after the SIGINT by waiting at least 250 ms and up to
+                // 5 seconds. If the process is still running after that, it's probably hung; SIGKILL it to force it to
+                // end immediately.
+                for (let spins = 0; spins < 20; spins++) {
+                  await sleep(250);
+
+                  if (processExited) {
+                    return;
+                  }
+                }
+
+                process.kill(-child.pid, "SIGKILL");
+              } catch (error: any) {
+                // Ignore the error and move on; we might as well just exit without waiting since we can't control
+                // the child process, for whatever reason
+                print2(`Failed to kill Azure Bastion tunnel process: ${error}`);
+                child.unref();
+              }
+            }
           },
           tunnelLocalPort: port,
         });

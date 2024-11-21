@@ -258,7 +258,10 @@ const createCommand = (
  *
  * These common args are only added if they have not been explicitly specified by the end user.
  */
-const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
+const addCommonArgs = (
+  args: CommandArgs,
+  sshProviderProxyCommand: string[]
+) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
   const identityFileOptionExists = sshOptions.some(
@@ -282,13 +285,13 @@ const addCommonArgs = (args: CommandArgs, proxyCommand: string[]) => {
     }
   }
 
-  const proxyCommandExists = sshOptions.some(
+  const userSpecifiedProxyCommand = sshOptions.some(
     (opt, idx) =>
       opt === "-o" && sshOptions[idx + 1]?.startsWith("ProxyCommand")
   );
 
-  if (!proxyCommandExists && proxyCommand.length > 0) {
-    sshOptions.push("-o", `ProxyCommand=${proxyCommand.join(" ")}`);
+  if (!userSpecifiedProxyCommand && sshProviderProxyCommand.length > 0) {
+    sshOptions.push("-o", `ProxyCommand=${sshProviderProxyCommand.join(" ")}`);
   }
 
   // Force verbose output from SSH so we can parse the output
@@ -421,30 +424,34 @@ export const sshOrScp = async (args: {
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
-  const exitCode = await preTestAccessPropagationIfNeeded(
-    sshProvider,
-    request,
-    cmdArgs,
-    proxyCommand,
-    credential,
-    endTime
-  );
-  if (exitCode && exitCode !== 0) {
-    return exitCode; // Only exit if there was an error when pre-testing
+  let sshNodeExit;
+
+  try {
+    const exitCode = await preTestAccessPropagationIfNeeded(
+      sshProvider,
+      request,
+      cmdArgs,
+      proxyCommand,
+      credential,
+      endTime
+    );
+    if (exitCode && exitCode !== 0) {
+      return exitCode; // Only exit if there was an error when pre-testing
+    }
+
+    sshNodeExit = await spawnSshNode({
+      credential,
+      abortController: new AbortController(),
+      command,
+      args: commandArgs,
+      stdio: ["inherit", "inherit", "pipe"],
+      debug: cmdArgs.debug,
+      provider: request.type,
+      endTime: endTime,
+    });
+  } finally {
+    await setupData?.teardown();
   }
-
-  const sshNodeExit = await spawnSshNode({
-    credential,
-    abortController: new AbortController(),
-    command,
-    args: commandArgs,
-    stdio: ["inherit", "inherit", "pipe"],
-    debug: cmdArgs.debug,
-    provider: request.type,
-    endTime: endTime,
-  });
-
-  await setupData?.teardown();
 
   return sshNodeExit;
 };
