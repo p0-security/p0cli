@@ -54,12 +54,15 @@ export type SshCommandArgs = BaseSshCommandArgs & {
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
 
-export type SshAdditionalSetupData = {
+export type SshAdditionalSetup = {
   /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
   sshOptions: string[];
 
   /** The port to connect to, overriding the default */
-  port?: string;
+  port: string;
+
+  /** Perform any teardown required after the SSH command exits but before terminating the P0 CLI */
+  teardown: () => Promise<void>;
 };
 
 export const SSH_PROVIDERS: Record<
@@ -148,12 +151,6 @@ export const provisionRequest = async (
     authn,
     id
   );
-  if (
-    args.provider !== "azure" && // For Azure, we generate a unique public key for each request using `az ssh cert`
-    provisionedRequest.permission.publicKey !== publicKey
-  ) {
-    throw "Public key mismatch. Please revoke the request and try again.";
-  }
 
   return { provisionedRequest, publicKey, privateKey };
 };
@@ -168,9 +165,17 @@ export const prepareRequest = async (
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { provisionedRequest } = result;
+  const { provisionedRequest, publicKey } = result;
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+
+  if (
+    sshProvider.validateSshKey &&
+    !sshProvider.validateSshKey(provisionedRequest, publicKey)
+  ) {
+    throw "Public key mismatch. Please revoke the request and try again.";
+  }
+
   await sshProvider.ensureInstall();
 
   const cliRequest = await pluginToCliRequest(provisionedRequest, {

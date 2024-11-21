@@ -66,18 +66,21 @@ export const azureSshProvider: SshProvider<
   setup: async (request) => {
     // TODO: Does this specifically need to be the subscription ID for the Bastion?
     await azLogin(request.subscriptionId); // Always re-login to Azure CLI
-    await generateSshKeyAndAzureAdCert(request.sshKeyPath);
+    const { path: keyPath, cleanup: sshKeyPathCleanup } =
+      await createTempDirectoryForKeys();
+    await generateSshKeyAndAzureAdCert(keyPath);
 
     const { killTunnel, tunnelLocalPort } =
       await trySpawnBastionTunnel(request);
 
-    request.killTunnel = killTunnel;
+    const sshPrivateKeyPath = path.join(keyPath, AD_SSH_KEY_PRIVATE);
+    const sshCertificateKeyPath = path.join(keyPath, AD_CERT_FILENAME);
 
-    const sshPrivateKeyPath = path.join(request.sshKeyPath, AD_SSH_KEY_PRIVATE);
-    const sshCertificateKeyPath = path.join(
-      request.sshKeyPath,
-      AD_CERT_FILENAME
-    );
+    const teardown = async () => {
+      killTunnel();
+
+      await sshKeyPathCleanup();
+    };
 
     return {
       sshOptions: [
@@ -99,15 +102,8 @@ export const azureSshProvider: SshProvider<
         `User ${request.linuxUserName}`,
       ],
       port: tunnelLocalPort,
+      teardown,
     };
-  },
-
-  teardown: async (request) => {
-    if (request.killTunnel) {
-      request.killTunnel();
-    }
-
-    await request.sshKeyPathCleanup();
   },
 
   requestToSsh: (request) => ({
@@ -124,14 +120,10 @@ export const azureSshProvider: SshProvider<
   unprovisionedAccessPatterns: [],
 
   toCliRequest: async (request) => {
-    const { path, cleanup } = await createTempDirectoryForKeys();
-
     return {
       ...request,
       cliLocalData: {
         linuxUserName: request.principal,
-        sshKeyPath: path,
-        sshKeyPathCleanup: cleanup,
       },
     };
   },

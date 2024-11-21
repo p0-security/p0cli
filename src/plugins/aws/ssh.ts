@@ -72,6 +72,9 @@ export const awsSshProvider: SshProvider<
         : throwAssertNever(config.login);
   },
 
+  validateSshKey: (request, publicKey) =>
+    request.permission.publicKey === publicKey,
+
   ensureInstall: async () => {
     if (!(await ensureSsmInstall())) {
       throw "Please try again after installing the required AWS utilities";

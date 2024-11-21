@@ -56,7 +56,4 @@ export type AzureSshRequest = AzureNodeSpec &
 
 export type AzureLocalData = {
   linuxUserName: string;
-  sshKeyPath: string;
-  sshKeyPathCleanup: () => Promise<void>;
-  killTunnel?: () => void;
 };

@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import {
   CommandArgs,
   SSH_PROVIDERS,
-  SshAdditionalSetupData,
+  SshAdditionalSetup,
 } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
@@ -211,7 +211,7 @@ async function spawnSshNode(
 const createCommand = (
   data: SshRequest,
   args: CommandArgs,
-  setupData: SshAdditionalSetupData | undefined,
+  setupData: SshAdditionalSetup | undefined,
   proxyCommand: string[]
 ) => {
   addCommonArgs(args, proxyCommand);
@@ -228,7 +228,7 @@ const createCommand = (
       command: "scp",
       args: [
         ...(args.sshOptions ? args.sshOptions : []),
-        ...(argsOverride ? argsOverride : []),
+        ...argsOverride,
         ...(port ? ["-P", port] : []),
         args.source,
         args.destination,
@@ -240,11 +240,11 @@ const createCommand = (
     command: "ssh",
     args: [
       ...(args.sshOptions ? args.sshOptions : []),
-      ...(argsOverride ? argsOverride : []),
+      ...argsOverride,
       ...(port ? ["-p", port] : []),
       "-l",
       data.linuxUserName, // Pass the username in as an argument to avoid issues caused by usernames containing '@'
-      `${data.id}`,
+      data.id,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
@@ -399,9 +399,7 @@ export const sshOrScp = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(request);
 
-  const setupData = sshProvider.setup
-    ? await sshProvider.setup(request)
-    : undefined;
+  const setupData = await sshProvider.setup?.(request);
 
   const { command, args: commandArgs } = createCommand(
     request,
@@ -448,9 +446,7 @@ export const sshOrScp = async (args: {
     endTime: endTime,
   });
 
-  if (sshProvider.teardown) {
-    await sshProvider.teardown(request);
-  }
+  await setupData?.teardown();
 
   return sshNodeExit;
 };

@@ -64,6 +64,9 @@ export const gcpSshProvider: SshProvider<
     }
   },
 
+  validateSshKey: (request, publicKey) =>
+    request.permission.publicKey === publicKey,
+
   friendlyName: "Google Cloud",
 
   loginRequiredMessage:
