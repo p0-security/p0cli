@@ -64,8 +64,9 @@ export const azureSshProvider: SshProvider<
   reproCommands: () => undefined,
 
   setup: async (request) => {
-    // TODO: Does this specifically need to be the subscription ID for the Bastion?
+    // TODO(ENG-3129): Does this specifically need to be the subscription ID for the Bastion?
     await azLogin(request.subscriptionId); // Always re-login to Azure CLI
+
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
     await generateSshKeyAndAzureAdCert(keyPath);

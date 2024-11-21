@@ -84,8 +84,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     : [];
   args.sshOptions = sshOptions;
 
-  // Azure SSH currently doesn't support specifying a port; throw an error if one is set. Azure Bastion only supports
-  // port 22 for SSH connections.
+  // TODO(ENG-3142): Azure SSH currently doesn't support specifying a port; throw an error if one is set.
   if (
     args.provider === "azure" &&
     sshOptions.some((opt) => opt.startsWith("-P"))
