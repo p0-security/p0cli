@@ -214,12 +214,12 @@ const createCommand = (
   setupData: SshAdditionalSetup | undefined,
   proxyCommand: string[]
 ) => {
-  addCommonArgs(args, proxyCommand);
+  addCommonArgs(args, proxyCommand, setupData);
 
-  const sshOptions = setupData?.sshOptions ?? [];
+  const sshOptionsOverrides = setupData?.sshOptions ?? [];
   const port = setupData?.port;
 
-  const argsOverride = sshOptions.flatMap((opt) => ["-o", opt]);
+  const argsOverride = sshOptionsOverrides.flatMap((opt) => ["-o", opt]);
 
   if ("source" in args) {
     addScpArgs(args);
@@ -260,7 +260,8 @@ const createCommand = (
  */
 const addCommonArgs = (
   args: CommandArgs,
-  sshProviderProxyCommand: string[]
+  sshProviderProxyCommand: string[],
+  setupData: SshAdditionalSetup | undefined
 ) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
@@ -278,7 +279,12 @@ const addCommonArgs = (
   // Explicitly specify which private key to use to avoid "Too many authentication failures"
   // error caused by SSH trying every available key
   if (!identityFileOptionExists) {
-    sshOptions.push("-i", PRIVATE_KEY_PATH);
+    if (setupData?.identityFile) {
+      sshOptions.push("-i", setupData.identityFile);
+    } else {
+      sshOptions.push("-i", PRIVATE_KEY_PATH);
+    }
+
     // Only use the authentication identity specified by -i above
     if (!identitiesOnlyOptionExists) {
       sshOptions.push("-o", "IdentitiesOnly=yes");
@@ -410,7 +416,7 @@ export const sshOrScp = async (args: {
   );
 
   if (cmdArgs.debug) {
-    const reproCommands = sshProvider.reproCommands(request);
+    const reproCommands = sshProvider.reproCommands(request, setupData);
     if (reproCommands) {
       const repro = [
         ...reproCommands,

@@ -22,6 +22,26 @@ export type BastionTunnelMeta = {
   tunnelLocalPort: string;
 };
 
+export const azBastionTunnelCommand = (
+  request: AzureSshRequest,
+  port: string
+) => ({
+  command: "az",
+  args: [
+    "network",
+    "bastion",
+    "tunnel",
+    "--ids",
+    request.bastionId,
+    "--target-resource-id",
+    request.instanceId,
+    "--resource-port",
+    "22",
+    "--port",
+    port,
+  ],
+});
+
 const selectRandomPort = (): string => {
   // The IANA ephemeral port range is 49152 to 65535, inclusive. Pick a random value in that range.
   // If the port is in use (unlikely but possible), we can just generate a new value and try again.
@@ -40,25 +60,11 @@ const spawnBastionTunnelInBackground = (
     let stdout = "";
     let stderr = "";
 
-    const child = spawn(
-      "az",
-      [
-        "network",
-        "bastion",
-        "tunnel",
-        "--ids",
-        request.bastionId,
-        "--target-resource-id",
-        request.instanceId,
-        "--resource-port",
-        "22",
-        "--port",
-        port,
-      ],
-      // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
-      // descendent processes together.
-      { detached: true }
-    );
+    const { command, args } = azBastionTunnelCommand(request, port);
+
+    // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
+    // descendent processes together.
+    const child = spawn(command, args, { detached: true });
 
     child.on("exit", (code) => {
       processExited = true;

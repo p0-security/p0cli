@@ -58,6 +58,9 @@ export type SshAdditionalSetup = {
   /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
   sshOptions: string[];
 
+  /** The path to the private key file to use for the SSH connection, instead of the default P0 CLI managed key */
+  identityFile: string;
+
   /** The port to connect to, overriding the default */
   port: string;
 

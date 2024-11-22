@@ -9,15 +9,16 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { SshProvider } from "../../types/ssh";
-import { azLogin } from "./auth";
+import { azAccountSetCommand, azLogin, azLoginCommand } from "./auth";
 import { ensureAzInstall } from "./install";
 import {
   AD_CERT_FILENAME,
   AD_SSH_KEY_PRIVATE,
+  azSshCertCommand,
   createTempDirectoryForKeys,
   generateSshKeyAndAzureAdCert,
 } from "./keygen";
-import { trySpawnBastionTunnel } from "./tunnel";
+import { azBastionTunnelCommand, trySpawnBastionTunnel } from "./tunnel";
 import {
   AzureLocalData,
   AzureSshPermissionSpec,
@@ -60,11 +61,49 @@ export const azureSshProvider: SshProvider<
   // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
   proxyCommand: () => [],
 
-  // TODO: Determine if necessary
-  reproCommands: () => undefined,
+  reproCommands: (request, additionalData) => {
+    const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
+    const { command: azAccountSetExe, args: azAccountSetArgs } =
+      azAccountSetCommand(request.subscriptionId);
+
+    const getKeyPath = () => {
+      // Use the same key path as the one generated in setup() so it matches the ssh command that is generated
+      // elsewhere. It'll be an annoying long temporary directory name, but it strictly will work for reproduction. If
+      // additionalData isn't present (which it always should be for the azureSshProvider), we'll use the user's home
+      // directory.
+      if (additionalData) {
+        return path.dirname(additionalData.identityFile);
+      } else {
+        const basePath = process.env.HOME || process.env.USERPROFILE || "";
+        return path.join(basePath, "p0cli-azure-ssh-keys");
+      }
+    };
+
+    const keyPath = getKeyPath();
+
+    const { command: azCertGenExe, args: azCertGenArgs } =
+      azSshCertCommand(keyPath);
+
+    // If additionalData is undefined (which, again, should be never), use the default port for Azure Network Bastion
+    // tunnels instead of generating a random one
+    const { command: azTunnelExe, args: azTunnelArgs } = azBastionTunnelCommand(
+      request,
+      additionalData?.port ?? "50022"
+    );
+
+    return [
+      `${azLoginExe} ${azLoginArgs.join(" ")}`,
+      `${azAccountSetExe} ${azAccountSetArgs.join(" ")}`,
+      `mkdir ${keyPath}`,
+      `${azCertGenExe} ${azCertGenArgs.join(" ")}`,
+      `${azTunnelExe} ${azTunnelArgs.join(" ")}`,
+    ];
+  },
 
   setup: async (request) => {
-    // TODO(ENG-3129): Does this specifically need to be the subscription ID for the Bastion?
+    // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
+    // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
+    // subscription as which contains the Bastion host or the target VM.
     await azLogin(request.subscriptionId); // Always re-login to Azure CLI
 
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
@@ -92,9 +131,7 @@ export const azureSshProvider: SshProvider<
 
     return {
       sshOptions: [
-        `IdentityFile ${sshPrivateKeyPath}`,
-        `CertificateFile ${sshCertificateKeyPath}`,
-        "IdentitiesOnly yes",
+        `CertificateFile=${sshCertificateKeyPath}`,
 
         // Because we connect to the Azure Network Bastion tunnel via a local port instead of a ProxyCommand, every
         // instance connected to will appear to `ssh` to be the same host but presenting a different host key (i.e.,
@@ -102,9 +139,10 @@ export const azureSshProvider: SshProvider<
         // warnings. We disable host key checking to avoid this. This is ordinarily very dangerous, but in this case,
         // security of the connection is ensured by the Azure Bastion Network tunnel, which utilizes HTTPS and thus has
         // its own MITM protection.
-        "StrictHostKeyChecking no",
-        "UserKnownHostsFile /dev/null",
+        "StrictHostKeyChecking=no",
+        "UserKnownHostsFile=/dev/null",
       ],
+      identityFile: sshPrivateKeyPath,
       port: tunnelLocalPort,
       teardown,
     };

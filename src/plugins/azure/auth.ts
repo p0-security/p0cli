@@ -10,9 +10,21 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { exec } from "../../util";
 
+export const azLoginCommand = () => ({
+  command: "az",
+  args: ["login"],
+});
+
+export const azAccountSetCommand = (subscriptionId: string) => ({
+  command: "az",
+  args: ["account", "set", "--subscription", subscriptionId],
+});
+
 export const azLogin = async (subscriptionId: string) => {
-  await exec("az", ["login"], { check: true });
-  await exec("az", ["account", "set", "--subscription", subscriptionId], {
-    check: true,
-  });
+  const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
+  await exec(azLoginExe, azLoginArgs, { check: true });
+
+  const { command: azAccountSetExe, args: azAccountSetArgs } =
+    azAccountSetCommand(subscriptionId);
+  await exec(azAccountSetExe, azAccountSetArgs, { check: true });
 };
