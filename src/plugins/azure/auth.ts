@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../../drivers/stdio";
 import { exec } from "../../util";
 
 export const azLoginCommand = () => ({
@@ -20,11 +21,31 @@ export const azAccountSetCommand = (subscriptionId: string) => ({
   args: ["account", "set", "--subscription", subscriptionId],
 });
 
-export const azLogin = async (subscriptionId: string) => {
+export const azLogin = async (
+  subscriptionId: string,
+  options: { debug?: boolean } = {}
+) => {
+  const { debug } = options;
+
+  if (debug) print2("Logging in to Azure...");
+
   const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
-  await exec(azLoginExe, azLoginArgs, { check: true });
+  const loginResult = await exec(azLoginExe, azLoginArgs, { check: true });
+
+  if (debug) {
+    print2(loginResult.stdout);
+    print2(loginResult.stderr);
+    print2(`Setting active Azure subscription to ${subscriptionId}...`);
+  }
 
   const { command: azAccountSetExe, args: azAccountSetArgs } =
     azAccountSetCommand(subscriptionId);
-  await exec(azAccountSetExe, azAccountSetArgs, { check: true });
+  const accountSetResult = await exec(azAccountSetExe, azAccountSetArgs, {
+    check: true,
+  });
+
+  if (debug) {
+    print2(accountSetResult.stdout);
+    print2(accountSetResult.stderr);
+  }
 };

@@ -84,7 +84,10 @@ export type SshProvider<
 
   /** Perform any setup required before running the SSH command. Returns a list of additional arguments to pass to the
    * SSH command. */
-  setup?: (request: SR) => Promise<SshAdditionalSetup>;
+  setup?: (
+    request: SR,
+    options?: { debug?: boolean }
+  ) => Promise<SshAdditionalSetup>;
 
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
   proxyCommand: (request: SR) => string[];
