@@ -392,6 +392,7 @@ export const sshOrScp = async (args: {
   sshProvider: SshProvider<any, any, any, any>;
 }) => {
   const { authn, request, cmdArgs, privateKey, sshProvider } = args;
+  const { debug } = cmdArgs;
 
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
@@ -402,7 +403,7 @@ export const sshOrScp = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(request);
 
-  const setupData = await sshProvider.setup?.(request);
+  const setupData = await sshProvider.setup?.(request, { debug });
 
   const { command, args: commandArgs } = createCommand(
     request,
@@ -411,7 +412,7 @@ export const sshOrScp = async (args: {
     proxyCommand
   );
 
-  if (cmdArgs.debug) {
+  if (debug) {
     const reproCommands = sshProvider.reproCommands(request, setupData);
     if (reproCommands) {
       const repro = [
@@ -447,7 +448,7 @@ export const sshOrScp = async (args: {
       command,
       args: commandArgs,
       stdio: ["inherit", "inherit", "pipe"],
-      debug: cmdArgs.debug,
+      debug,
       provider: request.type,
       endTime: endTime,
     });

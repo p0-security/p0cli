@@ -88,7 +88,8 @@ export const azureSshProvider: SshProvider<
     // tunnels instead of generating a random one
     const { command: azTunnelExe, args: azTunnelArgs } = azBastionTunnelCommand(
       request,
-      additionalData?.port ?? "50022"
+      additionalData?.port ?? "50022",
+      { debug: true } // reproCommands() is only invoked in debug mode, so this is a safe assumption
     );
 
     return [
@@ -100,19 +101,21 @@ export const azureSshProvider: SshProvider<
     ];
   },
 
-  setup: async (request) => {
+  setup: async (request, options = {}) => {
+    const { debug } = options;
+
     // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
     // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
     // subscription as which contains the Bastion host or the target VM.
-    await azLogin(request.subscriptionId); // Always re-login to Azure CLI
+    await azLogin(request.subscriptionId, { debug }); // Always re-login to Azure CLI
 
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
 
     const wrappedCreateCertAndTunnel = async () => {
       try {
-        await generateSshKeyAndAzureAdCert(keyPath);
-        return await trySpawnBastionTunnel(request);
+        await generateSshKeyAndAzureAdCert(keyPath, { debug });
+        return await trySpawnBastionTunnel(request, { debug });
       } catch (error: any) {
         await sshKeyPathCleanup();
         throw error;

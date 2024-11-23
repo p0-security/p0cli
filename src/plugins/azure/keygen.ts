@@ -39,10 +39,22 @@ export const createTempDirectoryForKeys = async (): Promise<{
   return { path, cleanup };
 };
 
-export const generateSshKeyAndAzureAdCert = async (keyPath: string) => {
+export const generateSshKeyAndAzureAdCert = async (
+  keyPath: string,
+  options: { debug?: boolean } = {}
+) => {
+  const { debug } = options;
+
+  if (debug) print2("Generating Azure AD SSH certificate...");
+
   try {
     const { command, args } = azSshCertCommand(keyPath);
-    await exec(command, args, { check: true });
+    const { stdout, stderr } = await exec(command, args, { check: true });
+
+    if (debug) {
+      print2(stdout);
+      print2(stderr);
+    }
   } catch (error: any) {
     print2(error.stdout);
     print2(error.stderr);

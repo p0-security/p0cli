@@ -17,6 +17,14 @@ import { spawn } from "node:child_process";
 const TUNNEL_READY_STRING = "Tunnel is ready";
 const SPAWN_TUNNEL_TRIES = 3;
 
+// Ignore these debug messages from the tunnel process; they are far too noisy and spam the terminal with useless info
+// anytime the SSH/SCP session has network activity.
+const tunnelDebugOutputIgnorePatterns: RegExp[] = [
+  /Waiting for (debugger|websocket) data/i,
+  /Received (debugger|websocket)/i,
+  /Sending to (debugger|websocket)/i,
+];
+
 export type BastionTunnelMeta = {
   killTunnel: () => Promise<void>;
   tunnelLocalPort: string;
@@ -24,7 +32,8 @@ export type BastionTunnelMeta = {
 
 export const azBastionTunnelCommand = (
   request: AzureSshRequest,
-  port: string
+  port: string,
+  options: { debug?: boolean } = {}
 ) => ({
   command: "az",
   args: [
@@ -39,6 +48,7 @@ export const azBastionTunnelCommand = (
     "22",
     "--port",
     port,
+    ...(options.debug ? ["--debug"] : []),
   ],
 });
 
@@ -52,15 +62,20 @@ const selectRandomPort = (): string => {
 
 const spawnBastionTunnelInBackground = (
   request: AzureSshRequest,
-  port: string
+  port: string,
+  options: { debug?: boolean } = {}
 ): Promise<BastionTunnelMeta> => {
+  const { debug } = options;
+
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
     let processSignalledToExit = false;
     let processExited = false;
     let stdout = "";
     let stderr = "";
 
-    const { command, args } = azBastionTunnelCommand(request, port);
+    const { command, args } = azBastionTunnelCommand(request, port, { debug });
+
+    if (debug) print2("Spawning Azure Bastion tunnel process...");
 
     // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
     // descendent processes together.
@@ -68,10 +83,17 @@ const spawnBastionTunnelInBackground = (
 
     child.on("exit", (code) => {
       processExited = true;
-      if (code === 0) return;
+      if (code === 0) {
+        if (debug) print2("Azure Bastion tunnel process exited normally.");
+        return;
+      }
 
-      print2(stdout);
-      print2(stderr);
+      if (!debug) {
+        // stdout and stderr are printed in real-time when debugging is enabled, so we don't need to print them here
+        print2(stdout);
+        print2(stderr);
+      }
+
       reject(
         `Error running Azure Network Bastion tunnel; tunnel process ended with status ${code}`
       );
@@ -80,11 +102,23 @@ const spawnBastionTunnelInBackground = (
     child.stdout.on("data", (data) => {
       const str = data.toString("utf-8");
       stdout += str;
+      if (
+        debug &&
+        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
+      ) {
+        print2(str);
+      }
     });
 
     child.stderr.on("data", (data) => {
       const str = data.toString("utf-8");
       stderr += str;
+      if (
+        debug &&
+        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
+      ) {
+        print2(str);
+      }
 
       if (str.includes(TUNNEL_READY_STRING)) {
         print2("Azure Bastion tunnel is ready.");
@@ -103,19 +137,35 @@ const spawnBastionTunnelInBackground = (
               // necessary cleanup of its own before exiting. The negative PID is what indicates that we want to kill
               // the whole process group.
               try {
+                if (debug) {
+                  print2(
+                    `Sending SIGINT to Azure Bastion tunnel process (${child.pid})...`
+                  );
+                }
                 process.kill(-child.pid, "SIGINT");
 
                 // Give the tunnel a chance to quit gracefully after the SIGINT by waiting at least 250 ms and up to
                 // 5 seconds. If the process is still running after that, it's probably hung; SIGKILL it to force it to
                 // end immediately.
+                const SPIN_WAIT_MS = 250;
                 for (let spins = 0; spins < 20; spins++) {
-                  await sleep(250);
+                  await sleep(SPIN_WAIT_MS);
 
                   if (processExited) {
+                    if (debug) {
+                      print2(
+                        `Azure Bastion tunnel process exited after SIGINT after ${spins * SPIN_WAIT_MS} ms.`
+                      );
+                    }
                     return;
                   }
                 }
 
+                if (debug) {
+                  print2(
+                    `Azure Bastion tunnel process (${child.pid}) not responding, sending SIGKILL...`
+                  );
+                }
                 process.kill(-child.pid, "SIGKILL");
               } catch (error: any) {
                 // Ignore the error and move on; we might as well just exit without waiting since we can't control
@@ -133,13 +183,14 @@ const spawnBastionTunnelInBackground = (
 };
 
 export const trySpawnBastionTunnel = async (
-  request: AzureSshRequest
+  request: AzureSshRequest,
+  options?: { debug?: boolean }
 ): Promise<BastionTunnelMeta> => {
   // Attempt to spawn the tunnel SPAWN_TUNNEL_TRIES times, picking a new port each time. If we fail
   // too many times, then the problem is likely not the port, but something else.
 
   return await retryWithSleep(
-    () => spawnBastionTunnelInBackground(request, selectRandomPort()),
+    () => spawnBastionTunnelInBackground(request, selectRandomPort(), options),
     () => true,
     SPAWN_TUNNEL_TRIES,
     1000
