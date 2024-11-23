@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs } from "../commands/shared/ssh";
+import { CommandArgs, SshAdditionalSetup } from "../commands/shared/ssh";
 import {
   AwsSsh,
   AwsSshPermissionSpec,
@@ -56,6 +56,9 @@ export type SshProvider<
   /** Callback to ensure that this provider's CLI utils are installed */
   ensureInstall: () => Promise<void>;
 
+  /** Validate the SSH key if necessary; throw an exception if the key is invalid */
+  validateSshKey?: (request: Request<PR>, publicKey: string) => boolean;
+
   /** A human-readable name for this CSP */
   friendlyName: string;
 
@@ -78,6 +81,10 @@ export type SshProvider<
   preTestAccessPropagationArgs: (
     cmdArgs: CommandArgs
   ) => CommandArgs | undefined;
+
+  /** Perform any setup required before running the SSH command. Returns a list of additional arguments to pass to the
+   * SSH command. */
+  setup?: (request: SR) => Promise<SshAdditionalSetup>;
 
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
   proxyCommand: (request: SR) => string[];

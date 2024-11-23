@@ -51,7 +51,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
         .option("provider", {
           type: "string",
           describe: "The cloud provider where the instance is hosted",
-          choices: ["aws", "gcloud"],
+          choices: ["aws", "azure", "gcloud"],
         })
         .option("debug", {
           type: "boolean",
@@ -88,6 +88,14 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     ? args["--"].map(String)
     : [];
   args.sshOptions = sshOptions;
+
+  // TODO(ENG-3142): Azure SSH currently doesn't support specifying a port; throw an error if one is set.
+  if (
+    args.provider === "azure" &&
+    sshOptions.some((opt) => opt.startsWith("-p"))
+  ) {
+    throw "Azure SSH does not currently support specifying a port. SSH on the target VM must be listening on the default port 22.";
+  }
 
   const { request, privateKey, sshProvider } = await prepareRequest(
     authn,

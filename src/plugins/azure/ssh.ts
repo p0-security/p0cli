@@ -9,24 +9,33 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { SshProvider } from "../../types/ssh";
-import { exec } from "../../util";
-import { importSshKey } from "../google/ssh-key";
+import { azLogin } from "./auth";
 import { ensureAzInstall } from "./install";
-import { AzureSshPermissionSpec, AzureSshRequest } from "./types";
+import {
+  AD_CERT_FILENAME,
+  AD_SSH_KEY_PRIVATE,
+  createTempDirectoryForKeys,
+  generateSshKeyAndAzureAdCert,
+} from "./keygen";
+import { trySpawnBastionTunnel } from "./tunnel";
+import {
+  AzureLocalData,
+  AzureSshPermissionSpec,
+  AzureSshRequest,
+} from "./types";
+import path from "node:path";
 
 // TODO: Determine what this value should be for Azure
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
 export const azureSshProvider: SshProvider<
   AzureSshPermissionSpec,
-  { linuxUserName: string },
+  AzureLocalData,
   AzureSshRequest
 > = {
   // TODO: Natively support Azure login in P0 CLI
   cloudProviderLogin: async () => {
-    // Always invoke `az login` before each SSH access. This is needed because
-    // Azure permissions are only updated upon login.
-    await exec("az", ["login"]);
+    // Login is handled as part of setup() below
     return undefined;
   },
 
@@ -45,31 +54,81 @@ export const azureSshProvider: SshProvider<
 
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
-  // TODO: Implement
+  // TODO(ENG-3149): Implement sudo access checks here
   preTestAccessPropagationArgs: () => undefined,
 
-  // TODO: Determine if necessary
+  // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
   proxyCommand: () => [],
 
   // TODO: Determine if necessary
   reproCommands: () => undefined,
 
-  // TODO: Placeholder
+  setup: async (request) => {
+    // TODO(ENG-3129): Does this specifically need to be the subscription ID for the Bastion?
+    await azLogin(request.subscriptionId); // Always re-login to Azure CLI
+
+    const { path: keyPath, cleanup: sshKeyPathCleanup } =
+      await createTempDirectoryForKeys();
+
+    const wrappedCreateCertAndTunnel = async () => {
+      try {
+        await generateSshKeyAndAzureAdCert(keyPath);
+        return await trySpawnBastionTunnel(request);
+      } catch (error: any) {
+        await sshKeyPathCleanup();
+        throw error;
+      }
+    };
+
+    const { killTunnel, tunnelLocalPort } = await wrappedCreateCertAndTunnel();
+
+    const sshPrivateKeyPath = path.join(keyPath, AD_SSH_KEY_PRIVATE);
+    const sshCertificateKeyPath = path.join(keyPath, AD_CERT_FILENAME);
+
+    const teardown = async () => {
+      await killTunnel();
+      await sshKeyPathCleanup();
+    };
+
+    return {
+      sshOptions: [
+        `IdentityFile ${sshPrivateKeyPath}`,
+        `CertificateFile ${sshCertificateKeyPath}`,
+        "IdentitiesOnly yes",
+
+        // Because we connect to the Azure Network Bastion tunnel via a local port instead of a ProxyCommand, every
+        // instance connected to will appear to `ssh` to be the same host but presenting a different host key (i.e.,
+        // `ssh` always connects to localhost but each VM will present its own host key), which will trigger MITM attack
+        // warnings. We disable host key checking to avoid this. This is ordinarily very dangerous, but in this case,
+        // security of the connection is ensured by the Azure Bastion Network tunnel, which utilizes HTTPS and thus has
+        // its own MITM protection.
+        "StrictHostKeyChecking no",
+        "UserKnownHostsFile /dev/null",
+      ],
+      port: tunnelLocalPort,
+      teardown,
+    };
+  },
+
   requestToSsh: (request) => ({
     type: "azure",
-    id: request.permission.resource.instanceId,
+    id: "localhost",
+    ...request.cliLocalData,
     instanceId: request.permission.resource.instanceId,
-    linuxUserName: request.cliLocalData.linuxUserName,
+    subscriptionId: request.permission.resource.subscriptionId,
+    instanceResourceGroup: request.permission.resource.resourceGroupId,
+    bastionId: request.permission.bastionHostId,
   }),
 
   // TODO: Implement
   unprovisionedAccessPatterns: [],
 
-  // TODO: Placeholder
-  toCliRequest: async (request, options) => ({
-    ...request,
-    cliLocalData: {
-      linuxUserName: await importSshKey(request.permission.publicKey, options),
-    },
-  }),
+  toCliRequest: async (request) => {
+    return {
+      ...request,
+      cliLocalData: {
+        linuxUserName: request.principal,
+      },
+    };
+  },
 };

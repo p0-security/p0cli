@@ -54,6 +54,17 @@ export type SshCommandArgs = BaseSshCommandArgs & {
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
 
+export type SshAdditionalSetup = {
+  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
+  sshOptions: string[];
+
+  /** The port to connect to, overriding the default */
+  port: string;
+
+  /** Perform any teardown required after the SSH command exits but before terminating the P0 CLI */
+  teardown: () => Promise<void>;
+};
+
 export const SSH_PROVIDERS: Record<
   SupportedSshProvider,
   SshProvider<any, any, any, any>
@@ -81,6 +92,7 @@ const validateSshInstall = async (
       value.state == "installed" &&
       providersToCheck.some((prefix) => key.startsWith(prefix))
   );
+
   if (items.length === 0) {
     throw "This organization is not configured for SSH access via the P0 CLI";
   }
@@ -139,9 +151,6 @@ export const provisionRequest = async (
     authn,
     id
   );
-  if (provisionedRequest.permission.publicKey !== publicKey) {
-    throw "Public key mismatch. Please revoke the request and try again.";
-  }
 
   return { provisionedRequest, publicKey, privateKey };
 };
@@ -156,9 +165,17 @@ export const prepareRequest = async (
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { provisionedRequest } = result;
+  const { provisionedRequest, publicKey } = result;
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+
+  if (
+    sshProvider.validateSshKey &&
+    !sshProvider.validateSshKey(provisionedRequest, publicKey)
+  ) {
+    throw "Public key mismatch. Please revoke the request and try again.";
+  }
+
   await sshProvider.ensureInstall();
 
   const cliRequest = await pluginToCliRequest(provisionedRequest, {

@@ -14,10 +14,9 @@ import { CommonSshPermissionSpec } from "../ssh/types";
 
 export type AzureSshPermissionSpec = PermissionSpec<"ssh", AzureSshPermission>;
 
-// TODO: Placeholder; confirm this is correct
 export type AzureSsh = CliPermissionSpec<
   AzureSshPermissionSpec,
-  { linuxUserName: string }
+  AzureLocalData
 >;
 
 export type AzureSshPermission = CommonSshPermissionSpec & {
@@ -25,26 +24,36 @@ export type AzureSshPermission = CommonSshPermissionSpec & {
   destination: string;
   parent: string | undefined;
   group: string | undefined;
+  bastionHostId: string;
+  principal: string;
   resource: {
-    instanceName: string;
     instanceId: string;
-    subscriptionId: string;
+    instanceName: string;
     subscriptionName: string;
     resourceGroupId: string;
+    subscriptionId: string;
     region: string;
     networkInterfaceIds: string[];
   };
 };
 
-// TODO: Placeholder; probably wrong
 export type AzureNodeSpec = {
-  type: "azure";
   instanceId: string;
   sudo?: boolean;
 };
 
-// TODO: Placeholder; probably wrong
-export type AzureSshRequest = AzureNodeSpec & {
-  id: string;
+export type AzureBastionSpec = {
+  bastionId: string;
+};
+
+export type AzureSshRequest = AzureNodeSpec &
+  AzureBastionSpec &
+  AzureLocalData & {
+    type: "azure";
+    id: "localhost"; // Azure SSH always connects to the local tunnel
+    subscriptionId: string;
+  };
+
+export type AzureLocalData = {
   linuxUserName: string;
 };
