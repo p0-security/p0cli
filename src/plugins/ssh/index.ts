@@ -279,11 +279,7 @@ const addCommonArgs = (
   // Explicitly specify which private key to use to avoid "Too many authentication failures"
   // error caused by SSH trying every available key
   if (!identityFileOptionExists) {
-    if (setupData?.identityFile) {
-      sshOptions.push("-i", setupData.identityFile);
-    } else {
-      sshOptions.push("-i", PRIVATE_KEY_PATH);
-    }
+    sshOptions.push("-i", setupData?.identityFile ?? PRIVATE_KEY_PATH);
 
     // Only use the authentication identity specified by -i above
     if (!identitiesOnlyOptionExists) {
