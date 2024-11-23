@@ -91,7 +91,10 @@ export type SshProvider<
 
   /** Each element in the returned array is a command that can be run to reproduce the
    * steps of logging in the user to the ssh session. */
-  reproCommands: (request: SR) => string[] | undefined;
+  reproCommands: (
+    request: SR,
+    additionalData?: SshAdditionalSetup
+  ) => string[] | undefined;
 
   /** Unwraps this provider's types */
   requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;

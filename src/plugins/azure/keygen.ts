@@ -19,6 +19,11 @@ export const AD_CERT_FILENAME = "p0cli-azure-ad-ssh-cert.pub";
 // The `az ssh cert` command manages key generation, and generates SSH RSA keys with the standard names
 export const AD_SSH_KEY_PRIVATE = "id_rsa";
 
+export const azSshCertCommand = (keyPath: string) => ({
+  command: "az",
+  args: ["ssh", "cert", "--file", path.join(keyPath, AD_CERT_FILENAME)],
+});
+
 export const createTempDirectoryForKeys = async (): Promise<{
   path: string;
   cleanup: () => Promise<void>;
@@ -36,11 +41,8 @@ export const createTempDirectoryForKeys = async (): Promise<{
 
 export const generateSshKeyAndAzureAdCert = async (keyPath: string) => {
   try {
-    await exec(
-      "az",
-      ["ssh", "cert", "--file", path.join(keyPath, AD_CERT_FILENAME)],
-      { check: true }
-    );
+    const { command, args } = azSshCertCommand(keyPath);
+    await exec(command, args, { check: true });
   } catch (error: any) {
     print2(error.stdout);
     print2(error.stderr);
