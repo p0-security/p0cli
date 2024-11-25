@@ -57,17 +57,26 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
+  let isValidPreTestError = false;
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
-    const match = provider.unprovisionedAccessPatterns.find((message) =>
-      chunkString.match(message.pattern)
+    const matchUnprovisionedPattern = provider.unprovisionedAccessPatterns.find(
+      (message) => chunkString.match(message.pattern)
     );
 
-    if (match) {
+    const matchPreTestPattern = provider.validPreTestAccessPatterns?.find(
+      (message) => chunkString.match(message.pattern)
+    );
+
+    if (matchUnprovisionedPattern) {
       isEphemeralAccessDeniedException = true;
+    }
+
+    if (matchPreTestPattern && !matchUnprovisionedPattern) {
+      isValidPreTestError = true;
     }
 
     if (provider.loginRequiredPattern) {
@@ -83,6 +92,7 @@ const accessPropagationGuard = (
   return {
     isAccessPropagated: () => !isEphemeralAccessDeniedException,
     isLoginException: () => isLoginException,
+    isValidPreTestError: () => isValidPreTestError,
   };
 };
 
@@ -170,11 +180,8 @@ async function spawnSshNode(
     );
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isLoginException } = accessPropagationGuard(
-      provider,
-      child,
-      options
-    );
+    const { isAccessPropagated, isLoginException, isValidPreTestError } =
+      accessPropagationGuard(provider, child, options);
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
@@ -203,6 +210,15 @@ async function spawnSshNode(
 
       options.abortController?.abort(code);
       if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
+      if (
+        options.isAccessPropagationPreTest &&
+        provider.validPreTestAccessPatterns &&
+        isValidPreTestError()
+      ) {
+        // override the exit code to 0 if the expected error was found, this means access is ready.
+        resolve(0);
+        return;
+      }
       resolve(code);
     });
   });
@@ -355,6 +371,7 @@ const preTestAccessPropagationIfNeeded = async <
   credential: P extends SshProvider<infer _PR, infer _O, infer _SR, infer C>
     ? C
     : undefined,
+  setupData: SshAdditionalSetup | undefined,
   endTime: number
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
@@ -365,7 +382,7 @@ const preTestAccessPropagationIfNeeded = async <
     const { command, args } = createCommand(
       request,
       testCmdArgs,
-      undefined, // No need to re-apply SSH options from setupData
+      setupData,
       proxyCommand
     );
     // Assumes that this is a non-interactive ssh command that exits automatically
@@ -427,8 +444,6 @@ export const sshOrScp = async (args: {
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
-  let sshNodeExit;
-
   try {
     const exitCode = await preTestAccessPropagationIfNeeded(
       sshProvider,
@@ -436,13 +451,14 @@ export const sshOrScp = async (args: {
       cmdArgs,
       proxyCommand,
       credential,
+      setupData,
       endTime
     );
     if (exitCode && exitCode !== 0) {
       return exitCode; // Only exit if there was an error when pre-testing
     }
 
-    sshNodeExit = await spawnSshNode({
+    return await spawnSshNode({
       credential,
       abortController: new AbortController(),
       command,
@@ -455,6 +471,4 @@ export const sshOrScp = async (args: {
   } finally {
     await setupData?.teardown();
   }
-
-  return sshNodeExit;
 };
