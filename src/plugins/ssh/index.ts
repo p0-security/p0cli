@@ -16,7 +16,12 @@ import {
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
+import {
+  AccessPattern,
+  SshProvider,
+  SshRequest,
+  SupportedSshProvider,
+} from "../../types/ssh";
 import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
@@ -51,27 +56,38 @@ const RETRY_DELAY_MS = 5000;
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
-  provider: SshProvider,
+  invalidAccessPatterns: readonly AccessPattern[],
+  validAccessPatterns: readonly AccessPattern[] | undefined,
+  loginRequiredPattern: RegExp | undefined,
   child: ChildProcessByStdio<null, null, Readable>,
   options: SpawnSshNodeOptions
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
+  let isValidError = false;
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
-    const match = provider.unprovisionedAccessPatterns.find((message) =>
+    const matchUnprovisionedPattern = invalidAccessPatterns.find((message) =>
       chunkString.match(message.pattern)
     );
 
-    if (match) {
+    const matchPreTestPattern = validAccessPatterns?.find((message) =>
+      chunkString.match(message.pattern)
+    );
+
+    if (matchUnprovisionedPattern) {
       isEphemeralAccessDeniedException = true;
     }
 
-    if (provider.loginRequiredPattern) {
-      const loginMatch = chunkString.match(provider.loginRequiredPattern);
+    if (matchPreTestPattern && !matchUnprovisionedPattern) {
+      isValidError = true;
+    }
+
+    if (loginRequiredPattern) {
+      const loginMatch = chunkString.match(loginRequiredPattern);
       isLoginException = isLoginException || !!loginMatch; // once true, always true
     }
 
@@ -81,7 +97,9 @@ const accessPropagationGuard = (
   });
 
   return {
-    isAccessPropagated: () => !isEphemeralAccessDeniedException,
+    isAccessPropagated: () =>
+      !isEphemeralAccessDeniedException &&
+      (!validAccessPatterns || isValidError),
     isLoginException: () => isLoginException,
   };
 };
@@ -171,7 +189,9 @@ async function spawnSshNode(
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isLoginException } = accessPropagationGuard(
-      provider,
+      provider.unprovisionedAccessPatterns,
+      provider.provisionedAccessPatterns,
+      provider.loginRequiredPattern,
       child,
       options
     );
@@ -203,6 +223,11 @@ async function spawnSshNode(
 
       options.abortController?.abort(code);
       if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
+      if (options.isAccessPropagationPreTest && isAccessPropagated()) {
+        // override the exit code to 0 if the expected error was found, this means access is ready.
+        resolve(0);
+        return;
+      }
       resolve(code);
     });
   });
@@ -355,6 +380,7 @@ const preTestAccessPropagationIfNeeded = async <
   credential: P extends SshProvider<infer _PR, infer _O, infer _SR, infer C>
     ? C
     : undefined,
+  setupData: SshAdditionalSetup | undefined,
   endTime: number
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
@@ -365,7 +391,7 @@ const preTestAccessPropagationIfNeeded = async <
     const { command, args } = createCommand(
       request,
       testCmdArgs,
-      undefined, // No need to re-apply SSH options from setupData
+      setupData,
       proxyCommand
     );
     // Assumes that this is a non-interactive ssh command that exits automatically
@@ -427,8 +453,6 @@ export const sshOrScp = async (args: {
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
-  let sshNodeExit;
-
   try {
     const exitCode = await preTestAccessPropagationIfNeeded(
       sshProvider,
@@ -436,13 +460,14 @@ export const sshOrScp = async (args: {
       cmdArgs,
       proxyCommand,
       credential,
+      setupData,
       endTime
     );
     if (exitCode && exitCode !== 0) {
       return exitCode; // Only exit if there was an error when pre-testing
     }
 
-    sshNodeExit = await spawnSshNode({
+    return await spawnSshNode({
       credential,
       abortController: new AbortController(),
       command,
@@ -455,6 +480,4 @@ export const sshOrScp = async (args: {
   } finally {
     await setupData?.teardown();
   }
-
-  return sshNodeExit;
 };

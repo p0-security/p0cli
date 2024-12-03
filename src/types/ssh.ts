@@ -44,6 +44,13 @@ export type CliPermissionSpec<
 export const SupportedSshProviders = ["aws", "azure", "gcloud"] as const;
 export type SupportedSshProvider = (typeof SupportedSshProviders)[number];
 
+export type AccessPattern = {
+  /** If the error matches this string, indicates that access is not provisioned */
+  readonly pattern: RegExp;
+  /** Maximum amount of time to wait for provisioning after encountering this error */
+  readonly validationWindowMs?: number;
+};
+
 export type SshProvider<
   PR extends PluginSshRequest = PluginSshRequest,
   O extends object | undefined = undefined,
@@ -102,13 +109,15 @@ export type SshProvider<
   /** Unwraps this provider's types */
   requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;
 
-  /** Regex matches for error strings indicating that the provider has not yet fully provisioned node acces */
-  unprovisionedAccessPatterns: readonly {
-    /** If the error matches this string, indicates that access is not provisioned */
-    readonly pattern: RegExp;
-    /** Maximum amount of time to wait for provisioning after encountering this error */
-    readonly validationWindowMs?: number;
-  }[];
+  /** Regex matches for error strings indicating that the provider has not yet fully provisioned node access */
+  unprovisionedAccessPatterns: readonly AccessPattern[];
+
+  /** Regex matches for error strings indicating that the provider is ready for node access.
+   * Used to override error codes during access propagation testing.
+   */
+  provisionedAccessPatterns?: readonly AccessPattern[];
+
+  /** Regex matches for error strings indicating that the provider has fully provisioned */
 
   /** Converts a backend request to a CLI request */
   toCliRequest: (

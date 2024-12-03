@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
 import { azAccountSetCommand, azLogin, azLoginCommand } from "./auth";
 import { ensureAzInstall } from "./install";
@@ -25,6 +26,19 @@ import {
   AzureSshRequest,
 } from "./types";
 import path from "node:path";
+
+const unprovisionedAccessPatterns = [
+  {
+    // The output of `sudo -v` when the user is not allowed to run sudo
+    pattern: /Sorry, user .+ may not run sudo on .+/,
+  },
+] as const;
+
+const provisionedAccessPatterns = [
+  {
+    pattern: /sudo: a password is required/,
+  },
+] as const;
 
 // TODO: Determine what this value should be for Azure
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
@@ -55,8 +69,18 @@ export const azureSshProvider: SshProvider<
 
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
-  // TODO(ENG-3149): Implement sudo access checks here
-  preTestAccessPropagationArgs: () => undefined,
+  preTestAccessPropagationArgs: (cmdArgs) => {
+    if (isSudoCommand(cmdArgs)) {
+      return {
+        ...cmdArgs,
+        // `sudo -v` prints `Sorry, user <user> may not run sudo on <hostname>.` to stderr when user is not a sudoer.
+        // we have to use `-n` flag to avoid the oauth prompt on azure cli.
+        command: "sudo",
+        arguments: ["-nv"],
+      };
+    }
+    return undefined;
+  },
 
   // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
   proxyCommand: () => [],
@@ -161,8 +185,8 @@ export const azureSshProvider: SshProvider<
     bastionId: request.permission.bastionHostId,
   }),
 
-  // TODO: Implement
-  unprovisionedAccessPatterns: [],
+  unprovisionedAccessPatterns,
+  provisionedAccessPatterns,
 
   toCliRequest: async (request) => {
     return {
