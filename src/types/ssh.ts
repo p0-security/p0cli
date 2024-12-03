@@ -115,7 +115,7 @@ export type SshProvider<
   /** Regex matches for error strings indicating that the provider is ready for node access.
    * Used to override error codes during access propagation testing.
    */
-  validPreTestAccessPatterns?: readonly AccessPattern[];
+  provisionedAccessPatterns?: readonly AccessPattern[];
 
   /** Regex matches for error strings indicating that the provider has fully provisioned */
 

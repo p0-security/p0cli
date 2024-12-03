@@ -16,7 +16,12 @@ import {
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { SshProvider, SshRequest, SupportedSshProvider } from "../../types/ssh";
+import {
+  AccessPattern,
+  SshProvider,
+  SshRequest,
+  SupportedSshProvider,
+} from "../../types/ssh";
 import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
@@ -51,24 +56,26 @@ const RETRY_DELAY_MS = 5000;
  * do not capture stderr emitted from the wrapped shell session.
  */
 const accessPropagationGuard = (
-  provider: SshProvider,
+  invalidAccessPatterns: readonly AccessPattern[],
+  validAccessPatterns: readonly AccessPattern[] | undefined,
+  loginRequiredPattern: RegExp | undefined,
   child: ChildProcessByStdio<null, null, Readable>,
   options: SpawnSshNodeOptions
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
-  let isValidPreTestError = false;
+  let isValidError = false;
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
-    const matchUnprovisionedPattern = provider.unprovisionedAccessPatterns.find(
-      (message) => chunkString.match(message.pattern)
+    const matchUnprovisionedPattern = invalidAccessPatterns.find((message) =>
+      chunkString.match(message.pattern)
     );
 
-    const matchPreTestPattern = provider.validPreTestAccessPatterns?.find(
-      (message) => chunkString.match(message.pattern)
+    const matchPreTestPattern = validAccessPatterns?.find((message) =>
+      chunkString.match(message.pattern)
     );
 
     if (matchUnprovisionedPattern) {
@@ -76,11 +83,11 @@ const accessPropagationGuard = (
     }
 
     if (matchPreTestPattern && !matchUnprovisionedPattern) {
-      isValidPreTestError = true;
+      isValidError = true;
     }
 
-    if (provider.loginRequiredPattern) {
-      const loginMatch = chunkString.match(provider.loginRequiredPattern);
+    if (loginRequiredPattern) {
+      const loginMatch = chunkString.match(loginRequiredPattern);
       isLoginException = isLoginException || !!loginMatch; // once true, always true
     }
 
@@ -90,9 +97,10 @@ const accessPropagationGuard = (
   });
 
   return {
-    isAccessPropagated: () => !isEphemeralAccessDeniedException,
+    isAccessPropagated: () =>
+      !isEphemeralAccessDeniedException &&
+      (!validAccessPatterns || isValidError),
     isLoginException: () => isLoginException,
-    isValidPreTestError: () => isValidPreTestError,
   };
 };
 
@@ -180,8 +188,13 @@ async function spawnSshNode(
     );
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isLoginException, isValidPreTestError } =
-      accessPropagationGuard(provider, child, options);
+    const { isAccessPropagated, isLoginException } = accessPropagationGuard(
+      provider.unprovisionedAccessPatterns,
+      provider.provisionedAccessPatterns,
+      provider.loginRequiredPattern,
+      child,
+      options
+    );
 
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
@@ -210,11 +223,7 @@ async function spawnSshNode(
 
       options.abortController?.abort(code);
       if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
-      if (
-        options.isAccessPropagationPreTest &&
-        provider.validPreTestAccessPatterns &&
-        isValidPreTestError()
-      ) {
+      if (options.isAccessPropagationPreTest && isAccessPropagated()) {
         // override the exit code to 0 if the expected error was found, this means access is ready.
         resolve(0);
         return;

@@ -34,7 +34,7 @@ const unprovisionedAccessPatterns = [
   },
 ] as const;
 
-const validPreTestAccessPatterns = [
+const provisionedAccessPatterns = [
   {
     pattern: /sudo: a password is required/,
   },
@@ -186,7 +186,7 @@ export const azureSshProvider: SshProvider<
   }),
 
   unprovisionedAccessPatterns,
-  validPreTestAccessPatterns,
+  provisionedAccessPatterns,
 
   toCliRequest: async (request) => {
     return {
