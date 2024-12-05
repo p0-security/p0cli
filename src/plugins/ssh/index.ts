@@ -92,12 +92,9 @@ const accessPropagationGuard = (
   });
 
   return {
-    isAccessPropagated: () => {
-      return (
-        !isEphemeralAccessDeniedException &&
-        (!validAccessPatterns || isValidError)
-      );
-    },
+    isAccessPropagated: () =>
+      !isEphemeralAccessDeniedException &&
+      (!validAccessPatterns || isValidError),
     isLoginException: () => isLoginException,
   };
 };
