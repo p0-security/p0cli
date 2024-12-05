@@ -59,7 +59,7 @@ const accessPropagationGuard = (
 ) => {
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
-  let isValidError = false;
+  let isValidError = true;
 
   child.stderr.on("data", (chunk) => {
     const chunkString: string = chunk.toString("utf-8");
@@ -75,6 +75,7 @@ const accessPropagationGuard = (
 
     if (matchUnprovisionedPattern) {
       isEphemeralAccessDeniedException = true;
+      isValidError = false;
     }
 
     if (matchPreTestPattern && !matchUnprovisionedPattern) {
@@ -95,9 +96,7 @@ const accessPropagationGuard = (
     isAccessPropagated: () => {
       return (
         !isEphemeralAccessDeniedException &&
-        (!options.isAccessPropagationPreTest ||
-          !validAccessPatterns?.length ||
-          isValidError)
+        (!validAccessPatterns?.length || isValidError)
       );
     },
     isLoginException: () => isLoginException,
