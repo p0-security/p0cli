@@ -32,11 +32,6 @@ import {
 } from "node:child_process";
 import { Readable } from "node:stream";
 
-/** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
- *  in the process's stderr
- */
-const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
-
 const RETRY_DELAY_MS = 5000;
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -74,7 +69,7 @@ const accessPropagationGuard = (
       chunkString.match(message.pattern)
     );
 
-    const matchPreTestPattern = validAccessPatterns?.find((message) =>
+    const matchValidAccessPattern = validAccessPatterns?.find((message) =>
       chunkString.match(message.pattern)
     );
 
@@ -82,7 +77,7 @@ const accessPropagationGuard = (
       isEphemeralAccessDeniedException = true;
     }
 
-    if (matchPreTestPattern && !matchUnprovisionedPattern) {
+    if (matchValidAccessPattern && !matchUnprovisionedPattern) {
       isValidError = true;
     }
 
@@ -190,7 +185,9 @@ async function spawnSshNode(
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isLoginException } = accessPropagationGuard(
       provider.unprovisionedAccessPatterns,
-      provider.provisionedAccessPatterns,
+      options.isAccessPropagationPreTest
+        ? provider.provisionedAccessPatterns
+        : undefined,
       provider.loginRequiredPattern,
       child,
       options
