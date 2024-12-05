@@ -10,7 +10,12 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
-import { azAccountSetCommand, azLogin, azLoginCommand } from "./auth";
+import {
+  azAccountSetCommand,
+  azLogin,
+  azLoginCommand,
+  azLogoutCommand,
+} from "./auth";
 import { ensureAzInstall } from "./install";
 import {
   AD_CERT_FILENAME,
@@ -86,6 +91,7 @@ export const azureSshProvider: SshProvider<
   proxyCommand: () => [],
 
   reproCommands: (request, additionalData) => {
+    const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
     const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
     const { command: azAccountSetExe, args: azAccountSetArgs } =
       azAccountSetCommand(request.subscriptionId);
@@ -117,6 +123,7 @@ export const azureSshProvider: SshProvider<
     );
 
     return [
+      `${azLogoutExe} ${azLogoutArgs.join(" ")}`,
       `${azLoginExe} ${azLoginArgs.join(" ")}`,
       `${azAccountSetExe} ${azAccountSetArgs.join(" ")}`,
       `mkdir ${keyPath}`,

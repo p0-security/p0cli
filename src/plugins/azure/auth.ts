@@ -37,8 +37,8 @@ export const azLogin = async (
   // Logging out first ensures that any cached credentials are cleared.
   // https://github.com/Azure/azure-cli/issues/29161
   try {
-    const { command: azLogoutExe, args: azLogOutArgs } = azLogoutCommand();
-    const logoutResult = await exec(azLogoutExe, azLogOutArgs, { check: true });
+    const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
+    const logoutResult = await exec(azLogoutExe, azLogoutArgs, { check: true });
 
     if (debug) {
       print2(logoutResult.stdout);
