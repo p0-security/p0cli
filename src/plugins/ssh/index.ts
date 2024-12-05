@@ -32,11 +32,6 @@ import {
 } from "node:child_process";
 import { Readable } from "node:stream";
 
-/** Maximum amount of time after SSH subprocess starts to check for {@link UNPROVISIONED_ACCESS_MESSAGES}
- *  in the process's stderr
- */
-const DEFAULT_VALIDATION_WINDOW_MS = 5e3;
-
 const RETRY_DELAY_MS = 5000;
 
 /** Checks if access has propagated through AWS to the SSM agent
@@ -97,9 +92,14 @@ const accessPropagationGuard = (
   });
 
   return {
-    isAccessPropagated: () =>
-      !isEphemeralAccessDeniedException &&
-      (!validAccessPatterns || isValidError),
+    isAccessPropagated: () => {
+      return (
+        !isEphemeralAccessDeniedException &&
+        (!options.isAccessPropagationPreTest ||
+          !validAccessPatterns?.length ||
+          isValidError)
+      );
+    },
     isLoginException: () => isLoginException,
   };
 };
