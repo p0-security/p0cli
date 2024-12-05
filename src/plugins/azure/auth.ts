@@ -16,6 +16,11 @@ export const azLoginCommand = () => ({
   args: ["login"],
 });
 
+export const azLogoutCommand = () => ({
+  command: "az",
+  args: ["logout"],
+});
+
 export const azAccountSetCommand = (subscriptionId: string) => ({
   command: "az",
   args: ["account", "set", "--subscription", subscriptionId],
@@ -28,6 +33,23 @@ export const azLogin = async (
   const { debug } = options;
 
   if (debug) print2("Logging in to Azure...");
+
+  // Logging out first ensures that any cached credentials are cleared.
+  // https://github.com/Azure/azure-cli/issues/29161
+  try {
+    const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
+    const logoutResult = await exec(azLogoutExe, azLogoutArgs, { check: true });
+
+    if (debug) {
+      print2(logoutResult.stdout);
+      print2(logoutResult.stderr);
+    }
+  } catch (error: any) {
+    if (debug) {
+      // ignore the error if the user is not logged in.
+      print2(`Skipping logout: ${error.stderr}`);
+    }
+  }
 
   const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
   const loginResult = await exec(azLoginExe, azLoginArgs, { check: true });
