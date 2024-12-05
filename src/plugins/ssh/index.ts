@@ -95,9 +95,7 @@ const accessPropagationGuard = (
     isAccessPropagated: () => {
       return (
         !isEphemeralAccessDeniedException &&
-        (!options.isAccessPropagationPreTest ||
-          !validAccessPatterns?.length ||
-          isValidError)
+        (!validAccessPatterns?.length || isValidError)
       );
     },
     isLoginException: () => isLoginException,
@@ -190,7 +188,9 @@ async function spawnSshNode(
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isLoginException } = accessPropagationGuard(
       provider.unprovisionedAccessPatterns,
-      provider.provisionedAccessPatterns,
+      options.isAccessPropagationPreTest
+        ? provider.provisionedAccessPatterns
+        : undefined,
       provider.loginRequiredPattern,
       child,
       options
