@@ -95,7 +95,7 @@ const accessPropagationGuard = (
     isAccessPropagated: () => {
       return (
         !isEphemeralAccessDeniedException &&
-        (!validAccessPatterns?.length || isValidError)
+        (!validAccessPatterns || isValidError)
       );
     },
     isLoginException: () => isLoginException,
