@@ -45,8 +45,12 @@ const provisionedAccessPatterns = [
   },
 ] as const;
 
-// TODO: Determine what this value should be for Azure
-const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
+// Azure user access is subject to significant propagation delays of up to 10 minutes
+// when elevating access to sudo. If the user starts with sudo access, there is no
+// propagation delay. The typical time for propagation is less than 1 minute, but
+// we want to be safe, so we set the timeout to 3 minutes. With a longer timeout a
+// user doesn't have to retry the command too many times.
+const PROPAGATION_TIMEOUT_LIMIT_MS = 3 * 60 * 1000;
 
 export const azureSshProvider: SshProvider<
   AzureSshPermissionSpec,
