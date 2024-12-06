@@ -12,6 +12,11 @@ import { PermissionSpec } from "../../types/request";
 import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
+export type KnownError = {
+  pattern: RegExp;
+  message: string;
+};
+
 export type AzureSshPermissionSpec = PermissionSpec<"ssh", AzureSshPermission>;
 
 export type AzureSsh = CliPermissionSpec<

@@ -10,6 +10,34 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../../drivers/stdio";
 import { exec } from "../../util";
+import { KnownError } from "./types";
+
+const knownLoginErrors: KnownError[] = [
+  {
+    pattern:
+      /WARNING: A web browser has been opened at .+ Please continue the login in the web browser.+/,
+    message: "Login attempt was cancelled. Please try again.",
+  },
+];
+
+const knownAccountSetErrors: KnownError[] = [
+  {
+    pattern: /ERROR: The subscription of '.+' doesn't exist in cloud '.+'.+/,
+    message: "Failed to set the active Azure subscription. Please try again.",
+  },
+];
+
+export const normalizeAzureCliError = (
+  error: any,
+  normalizedErrors: KnownError[]
+) => {
+  for (const { pattern, message } of normalizedErrors) {
+    if (pattern.test(error.stderr)) {
+      throw message;
+    }
+  }
+  throw error;
+};
 
 export const azLoginCommand = () => ({
   command: "az",
@@ -26,16 +54,7 @@ export const azAccountSetCommand = (subscriptionId: string) => ({
   args: ["account", "set", "--subscription", subscriptionId],
 });
 
-export const azLogin = async (
-  subscriptionId: string,
-  options: { debug?: boolean } = {}
-) => {
-  const { debug } = options;
-
-  if (debug) print2("Logging in to Azure...");
-
-  // Logging out first ensures that any cached credentials are cleared.
-  // https://github.com/Azure/azure-cli/issues/29161
+const performLogout = async ({ debug }: { debug?: boolean }) => {
   try {
     const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
     const logoutResult = await exec(azLogoutExe, azLogoutArgs, { check: true });
@@ -50,24 +69,58 @@ export const azLogin = async (
       print2(`Skipping logout: ${error.stderr}`);
     }
   }
+};
 
-  const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
-  const loginResult = await exec(azLoginExe, azLoginArgs, { check: true });
+const performLogin = async (
+  subscriptionId: string,
+  { debug }: { debug?: boolean }
+) => {
+  try {
+    const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
+    const loginResult = await exec(azLoginExe, azLoginArgs, { check: true });
 
-  if (debug) {
-    print2(loginResult.stdout);
-    print2(loginResult.stderr);
-    print2(`Setting active Azure subscription to ${subscriptionId}...`);
+    if (debug) {
+      print2(loginResult.stdout);
+      print2(loginResult.stderr);
+      print2(`Setting active Azure subscription to ${subscriptionId}...`);
+    }
+  } catch (error: any) {
+    throw normalizeAzureCliError(error, knownLoginErrors);
   }
+};
 
-  const { command: azAccountSetExe, args: azAccountSetArgs } =
-    azAccountSetCommand(subscriptionId);
-  const accountSetResult = await exec(azAccountSetExe, azAccountSetArgs, {
-    check: true,
-  });
+const performSetAccount = async (
+  subscriptionId: string,
+  { debug }: { debug?: boolean }
+) => {
+  try {
+    const { command: azAccountSetExe, args: azAccountSetArgs } =
+      azAccountSetCommand(subscriptionId);
+    const accountSetResult = await exec(azAccountSetExe, azAccountSetArgs, {
+      check: true,
+    });
 
-  if (debug) {
-    print2(accountSetResult.stdout);
-    print2(accountSetResult.stderr);
+    if (debug) {
+      print2(accountSetResult.stdout);
+      print2(accountSetResult.stderr);
+    }
+  } catch (error) {
+    throw normalizeAzureCliError(error, knownAccountSetErrors);
   }
+};
+
+export const azLogin = async (
+  subscriptionId: string,
+  options: { debug?: boolean } = {}
+) => {
+  const { debug } = options;
+  if (debug) print2("Logging in to Azure...");
+
+  // Logging out first ensures that any cached credentials are cleared.
+  // https://github.com/Azure/azure-cli/issues/29161
+  await performLogout(options);
+
+  await performLogin(subscriptionId, options);
+
+  await performSetAccount(subscriptionId, options);
 };
