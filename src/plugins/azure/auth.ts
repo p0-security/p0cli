@@ -27,10 +27,7 @@ const knownAccountSetErrors: KnownError[] = [
   },
 ];
 
-export const normalizeAzureCliError = (
-  error: any,
-  normalizedErrors: KnownError[]
-) => {
+const normalizeAzureCliError = (error: any, normalizedErrors: KnownError[]) => {
   for (const { pattern, message } of normalizedErrors) {
     if (pattern.test(error.stderr)) {
       throw message;
