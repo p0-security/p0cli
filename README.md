@@ -16,7 +16,7 @@ Supports creating access requests for cloud resources, assuming AWS roles, and c
 - [Quickstart](#quickstart)
   - [Installation](#installation)
   - [Configuration](#configuration)
-- [Command Reference](#command-reference)
+- [Command Reference](#cli-reference)
 - [Example Usage](#example-usage)
 - [Support](#support)
 - [Contributing](#contributing)
