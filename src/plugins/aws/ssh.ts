@@ -87,7 +87,7 @@ export const awsSshProvider: SshProvider<
 
   preTestAccessPropagationArgs: () => undefined,
 
-  proxyCommand: (request) => {
+  proxyCommand: (request, port) => {
     return [
       "aws",
       "ssm",
@@ -99,7 +99,7 @@ export const awsSshProvider: SshProvider<
       "--document-name",
       START_SSH_SESSION_DOCUMENT_NAME,
       "--parameters",
-      '"portNumber=%p"',
+      port ? `"portNumber=${port}"` : '"portNumber=%p"',
     ];
   },
 

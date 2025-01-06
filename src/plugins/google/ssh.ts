@@ -89,13 +89,13 @@ export const gcpSshProvider: SshProvider<
     return undefined;
   },
 
-  proxyCommand: (request) => {
+  proxyCommand: (request, port) => {
     return [
       "gcloud",
       "compute",
       "start-iap-tunnel",
       request.id,
-      "%p",
+      port ? port : "%p",
       // --listen-on-stdin flag is required for interactive SSH session.
       // It is undocumented on page https://cloud.google.com/sdk/gcloud/reference/compute/start-iap-tunnel
       // but mention on page https://cloud.google.com/iap/docs/tcp-by-host

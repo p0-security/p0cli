@@ -97,7 +97,7 @@ export type SshProvider<
   ) => Promise<SshAdditionalSetup>;
 
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
-  proxyCommand: (request: SR) => string[];
+  proxyCommand: (request: SR, port?: string) => string[];
 
   /** Each element in the returned array is a command that can be run to reproduce the
    * steps of logging in the user to the ssh session. */

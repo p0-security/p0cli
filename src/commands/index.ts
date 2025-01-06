@@ -20,6 +20,7 @@ import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sshKeyGenCommand } from "./ssh-keygen";
+import { sshProxyCommand } from "./ssh-proxy";
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -32,6 +33,7 @@ const commands = [
   requestCommand,
   allowCommand,
   sshCommand,
+  sshProxyCommand,
   scpCommand,
   sshKeyGenCommand,
   kubeconfigCommand,

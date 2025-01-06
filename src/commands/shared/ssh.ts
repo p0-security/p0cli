@@ -52,6 +52,11 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   command?: string;
 };
 
+export type SshProxyCommandArgs = BaseSshCommandArgs & {
+  destination: string;
+  port: string;
+};
+
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
 
 export type SshAdditionalSetup = {

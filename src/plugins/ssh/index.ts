@@ -12,6 +12,7 @@ import {
   CommandArgs,
   SSH_PROVIDERS,
   SshAdditionalSetup,
+  SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
@@ -469,6 +470,50 @@ export const sshOrScp = async (args: {
       abortController: new AbortController(),
       command,
       args: commandArgs,
+      stdio: ["inherit", "inherit", "pipe"],
+      debug,
+      provider: request.type,
+      endTime: endTime,
+    });
+  } finally {
+    await setupData?.teardown();
+  }
+};
+
+export const sshProxy = async (args: {
+  authn: Authn;
+  request: SshRequest;
+  cmdArgs: SshProxyCommandArgs;
+  privateKey: string;
+  sshProvider: SshProvider<any, any, any, any>;
+  port: string;
+}) => {
+  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
+  const { debug } = cmdArgs;
+
+  if (!privateKey) {
+    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
+  }
+
+  const credential: AwsCredentials | undefined =
+    await sshProvider.cloudProviderLogin(authn, request);
+
+  const setupData = await sshProvider.setup?.(request, { debug });
+
+  const proxyCommand = sshProvider.proxyCommand(request, args.port);
+
+  const command = proxyCommand[0]!; //TODO: it's probably safe to assert this exists, but how should we handle if not (just terminate, or check and throw?)
+
+  const proxyArgs = proxyCommand.slice(1);
+
+  const endTime = Date.now() + sshProvider.propagationTimeoutMs;
+
+  try {
+    return await spawnSshNode({
+      credential,
+      abortController: new AbortController(),
+      command,
+      args: proxyArgs,
       stdio: ["inherit", "inherit", "pipe"],
       debug,
       provider: request.type,
