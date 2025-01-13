@@ -142,7 +142,7 @@ export const azureSshProvider: SshProvider<
     // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
     // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
     // subscription as which contains the Bastion host or the target VM.
-    await azLogin(request.subscriptionId, { debug }); // Always re-login to Azure CLI
+    const linuxUserName = await azLogin(request.subscriptionId, { debug }); // Always re-login to Azure CLI
 
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
@@ -182,6 +182,7 @@ export const azureSshProvider: SshProvider<
       ],
       identityFile: sshPrivateKeyPath,
       port: tunnelLocalPort,
+      linuxUserName,
       teardown,
     };
   },
