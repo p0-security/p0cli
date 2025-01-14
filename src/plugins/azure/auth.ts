@@ -51,6 +51,11 @@ export const azAccountSetCommand = (subscriptionId: string) => ({
   args: ["account", "set", "--subscription", subscriptionId],
 });
 
+export const azAccountShowUserPrincipalName = () => ({
+  command: "az",
+  args: ["account", "show", "--query", "user.name", "-o", "tsv"],
+});
+
 const performLogout = async ({ debug }: { debug?: boolean }) => {
   try {
     const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
@@ -106,6 +111,21 @@ const performSetAccount = async (
   }
 };
 
+const getUserPrincipalName = async ({ debug }: { debug?: boolean }) => {
+  try {
+    const { command, args } = azAccountShowUserPrincipalName();
+    const accountShowResult = await exec(command, args, { check: true });
+    if (debug) {
+      print2(`Found account information...`);
+      print2(accountShowResult.stdout);
+      print2(accountShowResult.stderr);
+    }
+    return accountShowResult.stdout.trim();
+  } catch (error: any) {
+    throw `Failed to get the current user name: ${error}.`;
+  }
+};
+
 export const azLogin = async (
   subscriptionId: string,
   options: { debug?: boolean } = {}
@@ -120,4 +140,6 @@ export const azLogin = async (
   await performLogin(subscriptionId, options);
 
   await performSetAccount(subscriptionId, options);
+
+  return await getUserPrincipalName(options);
 };

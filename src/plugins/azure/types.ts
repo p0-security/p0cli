@@ -17,7 +17,15 @@ export type KnownError = {
   message: string;
 };
 
-export type AzureSshPermissionSpec = PermissionSpec<"ssh", AzureSshPermission>;
+export type AzureSshGenerated = {
+  linuxUserName: string;
+};
+
+export type AzureSshPermissionSpec = PermissionSpec<
+  "ssh",
+  AzureSshPermission,
+  AzureSshGenerated
+>;
 
 export type AzureSsh = CliPermissionSpec<
   AzureSshPermissionSpec,
