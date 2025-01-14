@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { Config, RawOrgData } from "../types/org";
+import { Config, GoogleConfig, RawOrgData } from "../types/org";
 import { P0_PATH } from "../util";
 import { bootstrapConfig } from "./env";
 import { bootstrapDoc } from "./firestore";
@@ -23,6 +23,14 @@ let tenantConfig: Config;
 
 export function getTenantConfig(): Config {
   return tenantConfig;
+}
+
+/** Use only if the organization is configured with Google login to P0 */
+export function getGoogleTenantConfig(): GoogleConfig {
+  if ("google" in tenantConfig) {
+    return tenantConfig;
+  }
+  throw "Login failed!\nThis organization is configured to use Google login but the required OAuth client parameters are missing.\nPlease contact support@p0.dev to properly configure your organization login.";
 }
 
 export async function saveConfig(orgId: string) {

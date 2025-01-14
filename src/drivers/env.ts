@@ -30,7 +30,13 @@ export const bootstrapConfig = {
       "228132571547-kilcq1er15hlbl6mitghttnacp7u58l8.apps.googleusercontent.com",
     // Despite the name, this is not actually "secret" in any sense of the word.
     // Instead, the client is protected by requiring PKCE and defining the redirect URIs.
-    clientSecret:
+    // PKCE achieves similar security guarantees for public clients with an on-the-fly
+    // generated secret (the code verifier) as the static secret does for confidential clients.
+    // See also: https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce
+    // In the PKCE flow the client secret is an optional parameter, however, Google's
+    // implementation requires it. That's why the "secret" is present here.
+    // This "secret" is only used if the organization uses Google Workspace to log in to P0.
+    publicClientSecretForPkce:
       env.P0_GOOGLE_OIDC_CLIENT_SECRET ?? "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",
   },
   appUrl: env.P0_APP_URL ?? "https://api.p0.app",
