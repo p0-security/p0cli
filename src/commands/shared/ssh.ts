@@ -64,9 +64,6 @@ export type SshAdditionalSetup = {
   /** The port to connect to, overriding the default */
   port: string;
 
-  /** Override the username that we will use to log into the node */
-  linuxUserName: string;
-
   /** Perform any teardown required after the SSH command exits but before terminating the P0 CLI */
   teardown: () => Promise<void>;
 };

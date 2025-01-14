@@ -144,6 +144,10 @@ export const azureSshProvider: SshProvider<
     // subscription as which contains the Bastion host or the target VM.
     const linuxUserName = await azLogin(request.subscriptionId, { debug }); // Always re-login to Azure CLI
 
+    if (linuxUserName !== request.linuxUserName) {
+      throw `Azure CLI login returned a different user name than expected. Expected: ${request.linuxUserName}, Actual: ${linuxUserName}`;
+    }
+
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
 
@@ -182,7 +186,6 @@ export const azureSshProvider: SshProvider<
       ],
       identityFile: sshPrivateKeyPath,
       port: tunnelLocalPort,
-      linuxUserName,
       teardown,
     };
   },
@@ -204,7 +207,7 @@ export const azureSshProvider: SshProvider<
     return {
       ...request,
       cliLocalData: {
-        linuxUserName: request.principal,
+        linuxUserName: request.generated.linuxUserName ?? request.principal,
       },
     };
   },
