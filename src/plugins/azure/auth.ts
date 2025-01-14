@@ -27,7 +27,14 @@ const knownAccountSetErrors: KnownError[] = [
   },
 ];
 
-const normalizeAzureCliError = (error: any, normalizedErrors: KnownError[]) => {
+const normalizeAzureCliError = (
+  error: any,
+  normalizedErrors: KnownError[],
+  options: { debug?: boolean }
+) => {
+  if (options.debug) {
+    print2(error);
+  }
   for (const { pattern, message } of normalizedErrors) {
     if (pattern.test(error.stderr)) {
       throw message;
@@ -87,7 +94,7 @@ const performLogin = async (
       print2(`Setting active Azure subscription to ${subscriptionId}...`);
     }
   } catch (error: any) {
-    throw normalizeAzureCliError(error, knownLoginErrors);
+    throw normalizeAzureCliError(error, knownLoginErrors, { debug });
   }
 };
 
@@ -107,7 +114,7 @@ const performSetAccount = async (
       print2(accountSetResult.stderr);
     }
   } catch (error) {
-    throw normalizeAzureCliError(error, knownAccountSetErrors);
+    throw normalizeAzureCliError(error, knownAccountSetErrors, { debug });
   }
 };
 
