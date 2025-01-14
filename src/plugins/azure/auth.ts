@@ -116,9 +116,9 @@ const getUserPrincipalName = async ({ debug }: { debug?: boolean }) => {
     const { command, args } = azAccountShowUserPrincipalName();
     const accountShowResult = await exec(command, args, { check: true });
     if (debug) {
+      print2(`Found account information...`);
       print2(accountShowResult.stdout);
       print2(accountShowResult.stderr);
-      print2(`Found account information...`);
     }
     return accountShowResult.stdout.trim();
   } catch (error: any) {
