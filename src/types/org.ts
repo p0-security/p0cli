@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-type NonGoogleConfig = {
+type ApplicationConfig = {
   fs: {
     apiKey: string;
     authDomain: string;
@@ -21,14 +21,14 @@ type NonGoogleConfig = {
   environment: string;
 };
 
-export type GoogleConfig = NonGoogleConfig & {
+export type GoogleApplicationConfig = ApplicationConfig & {
   google: {
     clientId: string;
     publicClientSecretForPkce: string;
   };
 };
 
-export type Config = GoogleConfig | NonGoogleConfig;
+export type Config = ApplicationConfig | GoogleApplicationConfig;
 
 type BaseOrgData = {
   clientId: string;
