@@ -8,9 +8,27 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { bootstrapConfig } from "../drivers/env";
+type ApplicationConfig = {
+  fs: {
+    apiKey: string;
+    authDomain: string;
+    projectId: string;
+    storageBucket: string;
+    messagingSenderId: string;
+    appId: string;
+  };
+  appUrl: string;
+  environment: string;
+};
 
-export type Config = typeof bootstrapConfig;
+export type GoogleApplicationConfig = ApplicationConfig & {
+  google: {
+    clientId: string;
+    publicClientSecretForPkce: string;
+  };
+};
+
+export type Config = ApplicationConfig | GoogleApplicationConfig;
 
 type BaseOrgData = {
   clientId: string;

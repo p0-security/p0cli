@@ -21,11 +21,17 @@ export const CONFIG_FILE_PATH = path.join(P0_PATH, "config.json");
 
 let tenantConfig: Config;
 
-export function getTenantConfig(): Config {
-  return tenantConfig;
-}
+export const getTenantConfig = () => tenantConfig;
 
-export async function saveConfig(orgId: string) {
+/** Use only if the organization is configured with Google login to P0 */
+export const getGoogleTenantConfig = () => {
+  if ("google" in tenantConfig) {
+    return tenantConfig;
+  }
+  throw "Login failed!\nThis organization is configured to use Google login but the required OAuth client parameters are missing.\nPlease contact support@p0.dev to properly configure your organization login.";
+};
+
+export const saveConfig = async (orgId: string) => {
   const orgDoc = await getDoc<RawOrgData, object>(
     bootstrapDoc(`orgs/${orgId}`)
   );
@@ -42,10 +48,10 @@ export async function saveConfig(orgId: string) {
   await fs.writeFile(CONFIG_FILE_PATH, JSON.stringify(config), { mode: "600" });
 
   tenantConfig = config;
-}
+};
 
-export async function loadConfig(): Promise<Config> {
+export const loadConfig = async () => {
   const buffer = await fs.readFile(CONFIG_FILE_PATH);
   tenantConfig = JSON.parse(buffer.toString());
   return tenantConfig;
-}
+};
