@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import {
   CommandArgs,
+  ScpCommandArgs,
   SSH_PROVIDERS,
   SshAdditionalSetup,
 } from "../../commands/shared/ssh";
@@ -325,7 +326,7 @@ const addCommonArgs = (
   }
 };
 
-const addScpArgs = (args: CommandArgs) => {
+const addScpArgs = (args: ScpCommandArgs) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
   // if a response is not received after three 5 minute attempts,
@@ -349,7 +350,7 @@ const addScpArgs = (args: CommandArgs) => {
   }
 
   const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
-  if (!recursiveOptionExists) {
+  if (!recursiveOptionExists && args.recursive) {
     sshOptions.push("-r");
   }
 };
