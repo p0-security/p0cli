@@ -166,6 +166,8 @@ export const azSetSubscription = async (
   const { debug, forceLogout } = options;
   if (debug) print2("Forming Azure connection...");
 
+  // Logging out first ensures that any cached credentials are cleared.
+  // https://github.com/Azure/azure-cli/issues/29161
   if (forceLogout) await performLogout({ debug });
 
   await performSetAccount(request, options);
