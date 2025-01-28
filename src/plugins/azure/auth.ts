@@ -53,7 +53,7 @@ export const azAccountShowUserPrincipalName = () => ({
   args: ["account", "show", "--query", "user.name", "-o", "tsv"],
 });
 
-const azAccountClear = async ({ debug }: { debug?: boolean }) => {
+const performAccountClear = async ({ debug }: { debug?: boolean }) => {
   try {
     const { command: azLogoutExe, args: azLogoutArgs } =
       azAccountClearCommand();
@@ -128,7 +128,7 @@ const performSetAccount = async (
     }
 
     if (SUBSCRIPTION_NOT_FOUND_PATTERN.test(error.stderr)) {
-      await azAccountClear({ debug });
+      await performAccountClear({ debug });
       const output = await performLogin(request.directoryId, { debug });
       if (!output.includes(request.subscriptionId))
         throw `Subscription ${request.subscriptionId} not found. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
@@ -167,7 +167,7 @@ export const azSetSubscription = async (
 
   // Logging out first ensures that any cached credentials are cleared.
   // https://github.com/Azure/azure-cli/issues/29161
-  if (forceLogout) await azAccountClear({ debug });
+  if (forceLogout) await performAccountClear({ debug });
 
   await performSetAccount(request, options);
 
