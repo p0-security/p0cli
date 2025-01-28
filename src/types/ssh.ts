@@ -98,7 +98,7 @@ export type SshProvider<
 
   setupProxy?: (
     request: SR,
-    options?: { debug?: boolean }
+    options: { debug?: boolean; abortController: AbortController }
   ) => Promise<{
     teardown: () => Promise<void>;
     port: string;

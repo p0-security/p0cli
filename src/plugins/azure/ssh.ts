@@ -152,12 +152,11 @@ export const azureSshProvider: SshProvider<
 
   setupProxy: async (
     request: AzureSshRequest,
-    options: { debug?: boolean } = {}
+    options: { debug?: boolean; abortController: AbortController }
   ) => {
-    const { debug } = options;
     const { killTunnel, tunnelLocalPort } = await trySpawnBastionTunnel(
       request,
-      { debug }
+      options
     );
 
     return {
