@@ -14,8 +14,7 @@ import {
   azAccountSetCommand,
   azSetSubscription,
   azLoginCommand,
-  azLogoutCommand,
-  ACCESS_REQUEST_SUCCESSFUL,
+  azAccountClearCommand,
 } from "./auth";
 import { ensureAzInstall } from "./install";
 import {
@@ -43,9 +42,6 @@ const unprovisionedAccessPatterns = [
 const provisionedAccessPatterns = [
   {
     pattern: /sudo: a password is required/,
-  },
-  {
-    pattern: /Access is ready/,
   },
 ] as const;
 
@@ -92,17 +88,14 @@ export const azureSshProvider: SshProvider<
         arguments: ["-nv"],
       };
     }
-    return {
-      ...cmdArgs,
-      command: "echo",
-      arguments: [ACCESS_REQUEST_SUCCESSFUL],
-    };
+    return undefined;
   },
 
   proxyCommand: (_, port) => ["nc", "localhost", port ?? "22"],
 
   reproCommands: (request, additionalData) => {
-    const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
+    const { command: azAccountClearExe, args: azAccountClearArgs } =
+      azAccountClearCommand();
     const { command: azLoginExe, args: azLoginArgs } = azLoginCommand(
       request.directoryId
     );
@@ -135,7 +128,7 @@ export const azureSshProvider: SshProvider<
     );
 
     return [
-      `${azLogoutExe} ${azLogoutArgs.join(" ")}`,
+      `${azAccountClearExe} ${azAccountClearArgs.join(" ")}`,
       `${azLoginExe} ${azLoginArgs.join(" ")}`,
       `${azAccountSetExe} ${azAccountSetArgs.join(" ")}`,
       `mkdir ${keyPath}`,

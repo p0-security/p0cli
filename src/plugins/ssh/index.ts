@@ -27,10 +27,6 @@ import {
 import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
-  ABORT_CODE_AUTHORIZATION_FAILED,
-  NASCENT_ACCESS_GRANT_MESSAGE,
-} from "../azure/auth";
-import {
   ChildProcessByStdio,
   StdioNull,
   StdioPipe,
@@ -199,12 +195,8 @@ async function spawnSshNode(
       options
     );
 
-    const onAbort = () => {
-      const reason =
-        options.abortController?.signal.reason ?? "SSH session aborted";
-      reject(reason);
-      return;
-    };
+    const onAbort = () =>
+      reject(options.abortController?.signal.reason ?? "SSH session aborted");
 
     options.abortController?.signal.addEventListener("abort", onAbort);
 
@@ -430,16 +422,8 @@ export const sshOrScp = async (args: {
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
-  attempt?: number;
 }) => {
-  const {
-    authn,
-    request,
-    cmdArgs,
-    privateKey,
-    sshProvider,
-    attempt = 1,
-  } = args;
+  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
   const { debug } = cmdArgs;
 
   if (!privateKey) {
@@ -505,19 +489,6 @@ export const sshOrScp = async (args: {
       provider: request.type,
       endTime: endTime,
     });
-  } catch (error) {
-    if (debug) {
-      print2(`Failed to spawn SSH process...`);
-      print2(error);
-    }
-    if (error === ABORT_CODE_AUTHORIZATION_FAILED) {
-      if (attempt < 1) {
-        throw `Authorization failed. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
-      }
-      await sshOrScp({ ...args, attempt: attempt - 1 });
-      await sshProvider.onAuthorizationFailure?.(request, { debug });
-    }
-    return;
   } finally {
     await setupData?.teardown();
   }

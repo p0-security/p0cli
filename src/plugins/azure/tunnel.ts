@@ -12,8 +12,9 @@ import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
 import { sleep } from "../../util";
 import {
-  ABORT_CODE_AUTHORIZATION_FAILED,
+  ABORT_AUTHORIZATION_FAILED_MESSAGE,
   AUTHORIZATION_FAILED_PATTERN,
+  USER_NOT_IN_CACHE_PATTERN,
 } from "./auth";
 import { AzureSshRequest } from "./types";
 import { spawn } from "node:child_process";
@@ -128,7 +129,11 @@ const spawnBastionTunnelInBackground = (
 
       // If we get a message indicating that the user's authorization is invalid, we need to terminate all of our connection attempts.
       if (AUTHORIZATION_FAILED_PATTERN.test(str)) {
-        abortController.abort(ABORT_CODE_AUTHORIZATION_FAILED);
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
+      }
+
+      if (USER_NOT_IN_CACHE_PATTERN.test(str)) {
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
       }
 
       if (str.includes(TUNNEL_READY_STRING)) {

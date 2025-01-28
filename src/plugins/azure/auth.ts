@@ -14,20 +14,18 @@ import { AzureSshRequest } from "./types";
 
 const SUBSCRIPTION_NOT_FOUND_PATTERN =
   /ERROR: The subscription of '.+' doesn't exist in cloud '.+'.+/;
-
 const FAILED_TO_RESOLVE_TENANT_PATTERN = /Failed to resolve tenant '.+'/;
-
 const LOGIN_ATTEMPT_CANCELLED_PATTERN =
   /WARNING: A web browser has been opened at .+ Please continue the login in the web browser.+/;
-
 export const AUTHORIZATION_FAILED_PATTERN =
   /The client '.+' with object id '.+' does not have authorization to perform action '.+' over scope '.+' or the scope is invalid. If access was recently granted, please refresh your credentials/;
-
-export const ABORT_CODE_AUTHORIZATION_FAILED = "AuthorizationFailed";
-
-export const ACCESS_REQUEST_SUCCESSFUL = "Access is ready";
+export const USER_NOT_IN_CACHE_PATTERN =
+  /Exception in handling client: User '.+' does not exist in MSAL token cache./;
+export const CONTACT_SUPPORT_MESSAGE =
+  "If the issue persists, please contact support@p0.dev.";
 export const NASCENT_ACCESS_GRANT_MESSAGE =
-  "If access was recently granted, please try again in a few minutes. If the issue persists, please contact support@p0.dev.";
+  "If access was recently granted, please try again in a few minutes.";
+export const ABORT_AUTHORIZATION_FAILED_MESSAGE = `Your Microsoft Token Cache is out of date. Run 'az account clear' and 'az login' to refresh your credentials. ${CONTACT_SUPPORT_MESSAGE}`;
 
 export const azLoginCommand = (tenantId: string) => ({
   command: "az",
@@ -40,9 +38,9 @@ export const azLoginCommand = (tenantId: string) => ({
   ],
 });
 
-export const azLogoutCommand = () => ({
+export const azAccountClearCommand = () => ({
   command: "az",
-  args: ["logout"],
+  args: ["account", "clear"],
 });
 
 export const azAccountSetCommand = (subscriptionId: string) => ({
@@ -55,9 +53,10 @@ export const azAccountShowUserPrincipalName = () => ({
   args: ["account", "show", "--query", "user.name", "-o", "tsv"],
 });
 
-const performLogout = async ({ debug }: { debug?: boolean }) => {
+const azAccountClear = async ({ debug }: { debug?: boolean }) => {
   try {
-    const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
+    const { command: azLogoutExe, args: azLogoutArgs } =
+      azAccountClearCommand();
     const logoutResult = await exec(azLogoutExe, azLogoutArgs, { check: true });
 
     if (debug) {
@@ -67,7 +66,7 @@ const performLogout = async ({ debug }: { debug?: boolean }) => {
   } catch (error: any) {
     if (debug) {
       // ignore the error if the user is not logged in.
-      print2(`Skipping logout: ${error.stderr}`);
+      print2(`Skipping account clear: ${error.stderr}`);
     }
   }
 };
@@ -129,7 +128,7 @@ const performSetAccount = async (
     }
 
     if (SUBSCRIPTION_NOT_FOUND_PATTERN.test(error.stderr)) {
-      await performLogout({ debug });
+      await azAccountClear({ debug });
       const output = await performLogin(request.directoryId, { debug });
       if (!output.includes(request.subscriptionId))
         throw `Subscription ${request.subscriptionId} not found. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
@@ -168,7 +167,7 @@ export const azSetSubscription = async (
 
   // Logging out first ensures that any cached credentials are cleared.
   // https://github.com/Azure/azure-cli/issues/29161
-  if (forceLogout) await performLogout({ debug });
+  if (forceLogout) await azAccountClear({ debug });
 
   await performSetAccount(request, options);
 
