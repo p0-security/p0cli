@@ -27,6 +27,10 @@ import {
 import { delay } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
+  ABORT_CODE_AUTHORIZATION_FAILED,
+  NASCENT_ACCESS_GRANT_MESSAGE,
+} from "../azure/auth";
+import {
   ChildProcessByStdio,
   StdioNull,
   StdioPipe,
@@ -195,6 +199,15 @@ async function spawnSshNode(
       options
     );
 
+    const onAbort = () => {
+      const reason =
+        options.abortController?.signal.reason ?? "SSH session aborted";
+      reject(reason);
+      return;
+    };
+
+    options.abortController?.signal.addEventListener("abort", onAbort);
+
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
@@ -206,6 +219,8 @@ async function spawnSshNode(
           );
           return;
         }
+
+        options.abortController?.signal.removeEventListener("abort", onAbort);
 
         delay(RETRY_DELAY_MS)
           .then(() => spawnSshNode(options))
@@ -220,7 +235,6 @@ async function spawnSshNode(
         return;
       }
 
-      options.abortController?.abort(code);
       if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
       if (options.isAccessPropagationPreTest && isAccessPropagated()) {
         // override the exit code to 0 if the expected error was found, this means access is ready.
@@ -380,7 +394,8 @@ const preTestAccessPropagationIfNeeded = async <
     ? C
     : undefined,
   setupData: SshAdditionalSetup | undefined,
-  endTime: number
+  endTime: number,
+  abortController: AbortController
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
 
@@ -396,7 +411,7 @@ const preTestAccessPropagationIfNeeded = async <
     // Assumes that this is a non-interactive ssh command that exits automatically
     return spawnSshNode({
       credential,
-      abortController: new AbortController(),
+      abortController,
       command,
       args,
       stdio: ["inherit", "inherit", "pipe"],
@@ -415,18 +430,31 @@ export const sshOrScp = async (args: {
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
+  attempt?: number;
 }) => {
-  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
+  const {
+    authn,
+    request,
+    cmdArgs,
+    privateKey,
+    sshProvider,
+    attempt = 1,
+  } = args;
   const { debug } = cmdArgs;
 
   if (!privateKey) {
     throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
   }
 
+  const abortController = new AbortController();
+
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
 
-  const setupData = await sshProvider.setup?.(request, { debug });
+  const setupData = await sshProvider.setup?.(request, {
+    abortController,
+    debug,
+  });
 
   const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
 
@@ -460,7 +488,8 @@ export const sshOrScp = async (args: {
       proxyCommand,
       credential,
       setupData,
-      endTime
+      endTime,
+      abortController
     );
     if (exitCode && exitCode !== 0) {
       return exitCode; // Only exit if there was an error when pre-testing
@@ -468,7 +497,7 @@ export const sshOrScp = async (args: {
 
     return await spawnSshNode({
       credential,
-      abortController: new AbortController(),
+      abortController,
       command,
       args: commandArgs,
       stdio: ["inherit", "inherit", "pipe"],
@@ -476,6 +505,19 @@ export const sshOrScp = async (args: {
       provider: request.type,
       endTime: endTime,
     });
+  } catch (error) {
+    if (debug) {
+      print2(`Failed to spawn SSH process...`);
+      print2(error);
+    }
+    if (error === ABORT_CODE_AUTHORIZATION_FAILED) {
+      if (attempt < 1) {
+        throw `Authorization failed. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
+      }
+      await sshOrScp({ ...args, attempt: attempt - 1 });
+      await sshProvider.onAuthorizationFailure?.(request, { debug });
+    }
+    return;
   } finally {
     await setupData?.teardown();
   }

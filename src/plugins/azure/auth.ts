@@ -10,42 +10,34 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../../drivers/stdio";
 import { exec } from "../../util";
-import { KnownError } from "./types";
+import { AzureSshRequest } from "./types";
 
-const knownLoginErrors: KnownError[] = [
-  {
-    pattern:
-      /WARNING: A web browser has been opened at .+ Please continue the login in the web browser.+/,
-    message: "Login attempt was cancelled. Please try again.",
-  },
-];
+const SUBSCRIPTION_NOT_FOUND_PATTERN =
+  /ERROR: The subscription of '.+' doesn't exist in cloud '.+'.+/;
 
-const knownAccountSetErrors: KnownError[] = [
-  {
-    pattern: /ERROR: The subscription of '.+' doesn't exist in cloud '.+'.+/,
-    message: "Failed to set the active Azure subscription. Please try again.",
-  },
-];
+const FAILED_TO_RESOLVE_TENANT_PATTERN = /Failed to resolve tenant '.+'/;
 
-const normalizeAzureCliError = (
-  error: any,
-  normalizedErrors: KnownError[],
-  options: { debug?: boolean }
-) => {
-  if (options.debug) {
-    print2(error);
-  }
-  for (const { pattern, message } of normalizedErrors) {
-    if (pattern.test(error.stderr)) {
-      throw message;
-    }
-  }
-  throw error;
-};
+const LOGIN_ATTEMPT_CANCELLED_PATTERN =
+  /WARNING: A web browser has been opened at .+ Please continue the login in the web browser.+/;
 
-export const azLoginCommand = () => ({
+export const AUTHORIZATION_FAILED_PATTERN =
+  /The client '.+' with object id '.+' does not have authorization to perform action '.+' over scope '.+' or the scope is invalid. If access was recently granted, please refresh your credentials/;
+
+export const ABORT_CODE_AUTHORIZATION_FAILED = "AuthorizationFailed";
+
+export const ACCESS_REQUEST_SUCCESSFUL = "Access is ready";
+export const NASCENT_ACCESS_GRANT_MESSAGE =
+  "If access was recently granted, please try again in a few minutes. If the issue persists, please contact support@p0.dev.";
+
+export const azLoginCommand = (tenantId: string) => ({
   command: "az",
-  args: ["login"],
+  args: [
+    "login",
+    "--scope",
+    "https://management.core.windows.net//.default",
+    "--tenant",
+    tenantId,
+  ],
 });
 
 export const azLogoutCommand = () => ({
@@ -81,40 +73,70 @@ const performLogout = async ({ debug }: { debug?: boolean }) => {
 };
 
 const performLogin = async (
-  subscriptionId: string,
+  directoryId: string,
   { debug }: { debug?: boolean }
 ) => {
   try {
-    const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
+    const { command: azLoginExe, args: azLoginArgs } =
+      azLoginCommand(directoryId);
     const loginResult = await exec(azLoginExe, azLoginArgs, { check: true });
 
     if (debug) {
+      print2("Logging in to Azure...");
       print2(loginResult.stdout);
       print2(loginResult.stderr);
-      print2(`Setting active Azure subscription to ${subscriptionId}...`);
     }
+
+    return loginResult.stdout;
   } catch (error: any) {
-    throw normalizeAzureCliError(error, knownLoginErrors, { debug });
+    if (debug) {
+      print2("Failed to log in to Azure...");
+      print2(error.stderr);
+    }
+
+    if (FAILED_TO_RESOLVE_TENANT_PATTERN.test(error.stderr)) {
+      throw `Failed to resolve tenant "${directoryId}". If access was recently granted, please try again in a few minutes. If the issue persists, please contact support@p0.dev.`;
+    }
+
+    if (LOGIN_ATTEMPT_CANCELLED_PATTERN.test(error.stderr)) {
+      throw "Login attempt cancelled. Please try again.";
+    }
+
+    throw error;
   }
 };
 
 const performSetAccount = async (
-  subscriptionId: string,
+  request: { subscriptionId: string; directoryId: string },
   { debug }: { debug?: boolean }
 ) => {
   try {
     const { command: azAccountSetExe, args: azAccountSetArgs } =
-      azAccountSetCommand(subscriptionId);
+      azAccountSetCommand(request.subscriptionId);
     const accountSetResult = await exec(azAccountSetExe, azAccountSetArgs, {
       check: true,
     });
 
     if (debug) {
+      print2("Setting active Azure subscription...");
       print2(accountSetResult.stdout);
       print2(accountSetResult.stderr);
     }
-  } catch (error) {
-    throw normalizeAzureCliError(error, knownAccountSetErrors, { debug });
+  } catch (error: any) {
+    if (debug) {
+      print2("Failed to set active Azure subscription...");
+      print2(error.stderr);
+    }
+
+    if (SUBSCRIPTION_NOT_FOUND_PATTERN.test(error.stderr)) {
+      await performLogout({ debug });
+      const output = await performLogin(request.directoryId, { debug });
+      if (!output.includes(request.subscriptionId))
+        throw `Subscription ${request.subscriptionId} not found. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
+      await performSetAccount(request, { debug });
+      return;
+    }
+    throw error;
   }
 };
 
@@ -133,20 +155,20 @@ const getUserPrincipalName = async ({ debug }: { debug?: boolean }) => {
   }
 };
 
-export const azLogin = async (
-  subscriptionId: string,
-  options: { debug?: boolean } = {}
+/**
+ * Attempts to set the Azure subscription for the current ssh session request. If
+ * the user is not logged in, this function will attempt to log in.
+ */
+export const azSetSubscription = async (
+  request: AzureSshRequest,
+  options: { debug?: boolean; forceLogout?: boolean } = {}
 ) => {
-  const { debug } = options;
-  if (debug) print2("Logging in to Azure...");
+  const { debug, forceLogout } = options;
+  if (debug) print2("Forming Azure connection...");
 
-  // Logging out first ensures that any cached credentials are cleared.
-  // https://github.com/Azure/azure-cli/issues/29161
-  await performLogout(options);
+  if (forceLogout) await performLogout({ debug });
 
-  await performLogin(subscriptionId, options);
-
-  await performSetAccount(subscriptionId, options);
+  await performSetAccount(request, options);
 
   return await getUserPrincipalName(options);
 };

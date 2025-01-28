@@ -93,7 +93,7 @@ export type SshProvider<
    * SSH command. */
   setup?: (
     request: SR,
-    options?: { debug?: boolean }
+    options: { abortController: AbortController; debug?: boolean }
   ) => Promise<SshAdditionalSetup>;
 
   setupProxy?: (

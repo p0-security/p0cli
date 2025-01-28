@@ -12,13 +12,9 @@ import { PermissionSpec } from "../../types/request";
 import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
-export type KnownError = {
-  pattern: RegExp;
-  message: string;
-};
-
 export type AzureSshGenerated = {
   linuxUserName: string;
+  directoryId: string;
 };
 
 export type AzureSshPermissionSpec = PermissionSpec<
@@ -65,6 +61,7 @@ export type AzureSshRequest = AzureNodeSpec &
     type: "azure";
     id: "localhost"; // Azure SSH always connects to the local tunnel
     subscriptionId: string;
+    directoryId: string;
   };
 
 export type AzureLocalData = {

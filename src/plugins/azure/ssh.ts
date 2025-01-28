@@ -12,9 +12,10 @@ import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
 import {
   azAccountSetCommand,
-  azLogin,
+  azSetSubscription,
   azLoginCommand,
   azLogoutCommand,
+  ACCESS_REQUEST_SUCCESSFUL,
 } from "./auth";
 import { ensureAzInstall } from "./install";
 import {
@@ -42,6 +43,9 @@ const unprovisionedAccessPatterns = [
 const provisionedAccessPatterns = [
   {
     pattern: /sudo: a password is required/,
+  },
+  {
+    pattern: /Access is ready/,
   },
 ] as const;
 
@@ -88,14 +92,20 @@ export const azureSshProvider: SshProvider<
         arguments: ["-nv"],
       };
     }
-    return undefined;
+    return {
+      ...cmdArgs,
+      command: "echo",
+      arguments: [ACCESS_REQUEST_SUCCESSFUL],
+    };
   },
 
   proxyCommand: (_, port) => ["nc", "localhost", port ?? "22"],
 
   reproCommands: (request, additionalData) => {
     const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
-    const { command: azLoginExe, args: azLoginArgs } = azLoginCommand();
+    const { command: azLoginExe, args: azLoginArgs } = azLoginCommand(
+      request.directoryId
+    );
     const { command: azAccountSetExe, args: azAccountSetArgs } =
       azAccountSetCommand(request.subscriptionId);
 
@@ -121,8 +131,7 @@ export const azureSshProvider: SshProvider<
     // tunnels instead of generating a random one
     const { command: azTunnelExe, args: azTunnelArgs } = azBastionTunnelCommand(
       request,
-      additionalData?.port ?? "50022",
-      { debug: true } // reproCommands() is only invoked in debug mode, so this is a safe assumption
+      additionalData?.port ?? "50022"
     );
 
     return [
@@ -164,13 +173,11 @@ export const azureSshProvider: SshProvider<
     };
   },
 
-  setup: async (request, options = {}) => {
-    const { debug } = options;
-
+  setup: async (request, options) => {
     // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
     // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
     // subscription as which contains the Bastion host or the target VM.
-    const linuxUserName = await azLogin(request.subscriptionId, { debug }); // Always re-login to Azure CLI
+    const linuxUserName = await azSetSubscription(request, options);
 
     if (linuxUserName !== request.linuxUserName) {
       throw `Azure CLI login returned a different user name than expected. Expected: ${request.linuxUserName}, Actual: ${linuxUserName}`;
@@ -181,8 +188,8 @@ export const azureSshProvider: SshProvider<
 
     const wrappedCreateCertAndTunnel = async () => {
       try {
-        await generateSshKeyAndAzureAdCert(keyPath, { debug });
-        return await trySpawnBastionTunnel(request, { debug });
+        await generateSshKeyAndAzureAdCert(keyPath, options);
+        return await trySpawnBastionTunnel(request, options);
       } catch (error: any) {
         await sshKeyPathCleanup();
         throw error;
@@ -226,6 +233,7 @@ export const azureSshProvider: SshProvider<
     subscriptionId: request.permission.resource.subscriptionId,
     instanceResourceGroup: request.permission.resource.resourceGroupId,
     bastionId: request.permission.bastionHostId,
+    directoryId: request.generated.directoryId,
   }),
 
   unprovisionedAccessPatterns,
