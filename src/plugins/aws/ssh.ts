@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { SshProvider } from "../../types/ssh";
-import { throwAssertNever } from "../../util";
+import { P0_PATH, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
@@ -21,6 +21,7 @@ import {
   AwsSshRequest,
   AwsSshRoleRequest,
 } from "./types";
+import path from "node:path";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 30 * 1000;
 
@@ -95,11 +96,11 @@ export const awsSshProvider: SshProvider<
       "--region",
       request.region,
       "--target",
-      "%h",
+      request.id,
       "--document-name",
       START_SSH_SESSION_DOCUMENT_NAME,
       "--parameters",
-      port ? `"portNumber=${port}"` : '"portNumber=%p"',
+      port ? `portNumber=${port}` : "portNumber=%p",
     ];
   },
 
@@ -111,6 +112,12 @@ export const awsSshProvider: SshProvider<
       ];
     }
     return undefined;
+  },
+
+  generateKeys: async (_) => {
+    return {
+      privateKeyPath: path.join(P0_PATH, "ssh", "id_rsa"),
+    };
   },
 
   requestToSsh: (request) => {

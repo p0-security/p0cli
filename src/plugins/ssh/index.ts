@@ -130,7 +130,7 @@ const parseAndPrintSshOutputToStderr = (
   }
 };
 
-const spawnChildProcess = (
+export const spawnChildProcess = (
   credential: AwsCredentials | undefined,
   command: string,
   args: string[],
@@ -486,23 +486,25 @@ export const sshProxy = async (args: {
   cmdArgs: SshProxyCommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
+  debug: boolean;
   port: string;
 }) => {
-  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
-  const { debug } = cmdArgs;
-
-  if (!privateKey) {
-    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
-  }
+  const { authn, sshProvider, request, debug } = args;
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
 
-  const setupData = await sshProvider.setup?.(request, { debug });
+  const setupData = await sshProvider.setupProxy?.(request, { debug });
 
-  const proxyCommand = sshProvider.proxyCommand(request, args.port);
+  const proxyCommand = sshProvider.proxyCommand(
+    request,
+    setupData?.port ?? args.port
+  );
 
-  const command = proxyCommand[0]!; //TODO: it's probably safe to assert this exists, but how should we handle if not (just terminate, or check and throw?)
+  const command = proxyCommand[0];
+  if (!command) {
+    throw "This provider does not support running as a ProxyCommand";
+  }
 
   const proxyArgs = proxyCommand.slice(1);
 

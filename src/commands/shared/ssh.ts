@@ -52,9 +52,17 @@ export type SshCommandArgs = BaseSshCommandArgs & {
   command?: string;
 };
 
-export type SshProxyCommandArgs = BaseSshCommandArgs & {
+export type SshResolveCommandArgs = SshCommandArgs & {
+  quiet?: boolean;
+};
+
+export type SshProxyCommandArgs = {
   destination: string;
   port: string;
+  provider: "aws" | "azure" | "gcloud";
+  requestJson: string;
+  debug?: boolean;
+  identityFile: string;
 };
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
@@ -121,7 +129,9 @@ export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
 export const provisionRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
-  destination: string
+  destination: string,
+  approvedOnly?: boolean,
+  quiet?: boolean
 ) => {
   await validateSshInstall(authn, args);
 
@@ -136,6 +146,7 @@ export const provisionRequest = async (
         destination,
         "--public-key",
         publicKey,
+        ...(approvedOnly ? ["--approved-only"] : []),
         ...(args.provider ? ["--provider", args.provider] : []),
         ...(isSudoCommand(args) ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
@@ -144,14 +155,17 @@ export const provisionRequest = async (
       wait: true,
     },
     authn,
-    { message: "approval-required" }
+    { message: quiet ? "quiet" : "approval-required" }
   );
 
   if (!response) {
-    print2("Did not receive access ID from server");
+    if (!quiet) {
+      print2("Did not receive access ID from server");
+    }
     return;
   }
   const { id, isPreexisting } = response;
+  if (!quiet) print2("Did not receive access ID from server");
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   else print2("Existing access found.  Connecting to instance.");
 
@@ -166,9 +180,17 @@ export const provisionRequest = async (
 export const prepareRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
-  destination: string
+  destination: string,
+  approvedOnly?: boolean,
+  quiet?: boolean
 ) => {
-  const result = await provisionRequest(authn, args, destination);
+  const result = await provisionRequest(
+    authn,
+    args,
+    destination,
+    approvedOnly,
+    quiet
+  );
   if (!result) {
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
@@ -191,5 +213,5 @@ export const prepareRequest = async (
   });
   const request = sshProvider.requestToSsh(cliRequest);
 
-  return { ...result, request, sshProvider };
+  return { ...result, request, sshProvider, provisionedRequest };
 };

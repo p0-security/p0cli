@@ -92,7 +92,8 @@ export const azureSshProvider: SshProvider<
   },
 
   // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
-  proxyCommand: () => [],
+  // proxyCommand: (_, port) => ["ssh", "-W", "localhost", port ?? "22"],
+  proxyCommand: (_, port) => ["nc", "localhost", port ?? "22"],
 
   reproCommands: (request, additionalData) => {
     const { command: azLogoutExe, args: azLogoutArgs } = azLogoutCommand();
@@ -134,6 +135,35 @@ export const azureSshProvider: SshProvider<
       `${azCertGenExe} ${azCertGenArgs.join(" ")}`,
       `${azTunnelExe} ${azTunnelArgs.join(" ")}`,
     ];
+  },
+
+  generateKeys: async (_, options: { debug?: boolean } = {}) => {
+    const { debug } = options;
+    const { path: keyPath } = await createTempDirectoryForKeys();
+    await generateSshKeyAndAzureAdCert(keyPath, { debug });
+    const sshPrivateKeyPath = path.join(keyPath, AD_SSH_KEY_PRIVATE);
+    const sshCertificateKeyPath = path.join(keyPath, AD_CERT_FILENAME);
+
+    return {
+      privateKeyPath: sshPrivateKeyPath,
+      certificatePath: sshCertificateKeyPath,
+    };
+  },
+
+  setupProxy: async (
+    request: AzureSshRequest,
+    options: { debug?: boolean } = {}
+  ) => {
+    const { debug } = options;
+    const { killTunnel, tunnelLocalPort } = await trySpawnBastionTunnel(
+      request,
+      { debug }
+    );
+
+    return {
+      teardown: killTunnel,
+      port: tunnelLocalPort,
+    };
   },
 
   setup: async (request, options = {}) => {

@@ -12,6 +12,7 @@ import { bootstrapConfig } from "./drivers/env";
 import child_process from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { sys } from "typescript";
 
 export const P0_PATH = path.join(
   os.homedir(),
@@ -95,6 +96,15 @@ export const exec = async (
 export const throwAssertNever = (value: never) => {
   throw assertNever(value);
 };
+
+// If the condition is true, aborts the process before throwing the error
+export const conditionalAbortBeforeThrow =
+  (abortBeforeThrow: boolean) => (err: any) => {
+    if (abortBeforeThrow) {
+      sys.exit(1);
+    }
+    throw err;
+  };
 
 export const assertNever = (value: never) => {
   return unexpectedValueError(value);

@@ -10,9 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
+import { P0_PATH } from "../../util";
 import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
+import path from "node:path";
 
 // It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
@@ -87,6 +89,13 @@ export const gcpSshProvider: SshProvider<
       };
     }
     return undefined;
+  },
+
+  generateKeys: async (request, _) => {
+    return {
+      username: request.linuxUserName,
+      privateKeyPath: path.join(P0_PATH, "ssh", "id_rsa"),
+    };
   },
 
   proxyCommand: (request, port) => {

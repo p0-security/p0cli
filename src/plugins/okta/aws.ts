@@ -26,7 +26,7 @@ export const assumeRoleWithOktaSaml = async (
       );
       const { roles } = rolesFromSaml(account, samlResponse);
       if (!roles.includes(args.role))
-        throw `Role not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
+        throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
       return await assumeRoleWithSaml({
         account,
         role: args.role,
