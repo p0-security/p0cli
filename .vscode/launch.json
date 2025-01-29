@@ -18,25 +18,6 @@
             ],
             "sourceMaps": true,
             "runtimeExecutable": "ts-node",
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Launch P0 CLI (with args)",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/src/index.ts",
-            "preLaunchTask": "tsc: build - tsconfig.json",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ],
-            "sourceMaps": true,
-            "runtimeExecutable": "ts-node",
-            "args": [
-                "ssh-resolve",
-                "miguel-node-1"
-            ]
         }
     ]
 }
