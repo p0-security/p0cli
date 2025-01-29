@@ -11,7 +11,6 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authenticate } from "../drivers/auth";
 import { bootstrapConfig } from "../drivers/env";
 import { fsShutdownGuard } from "../drivers/firestore";
-import { print2 } from "../drivers/stdio";
 import { conditionalAbortBeforeThrow, P0_PATH } from "../util";
 import {
   SSH_PROVIDERS,
@@ -21,7 +20,6 @@ import {
 import fs from "fs";
 import path from "path";
 import tmp from "tmp-promise";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export const sshResolveCommand = (yargs: yargs.Argv) =>
@@ -92,16 +90,6 @@ const sshResolveAction = async (
 
   const tmpFile = tmp.fileSync();
   fs.writeFileSync(tmpFile.name, JSON.stringify(request, null, 2));
-
-  let linuxUserName = provisionedRequest.generated?.linuxUserName;
-
-  if (provisionedRequest.permission.provider === "gcloud") {
-    linuxUserName = (
-      await sshProvider.toCliRequest(provisionedRequest, {
-        debug: args.debug,
-      })
-    ).cliLocalData?.linuxUserName;
-  }
 
   const identityFile =
     keys?.privateKeyPath ?? path.join(P0_PATH, "ssh", "id_rsa");
