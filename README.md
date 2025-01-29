@@ -1,6 +1,6 @@
 <div align="center">
     <a href="https://github.com/p0-security/p0cli">
-        <img width="200" height="200" src="https://p0.dev/images/logo.png" alt="P0 Security logo">
+        <img width="200" height="200" src="./public/p0.jpg" alt="P0 Security logo">
     </a>
 </div>
 
