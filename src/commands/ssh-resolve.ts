@@ -109,9 +109,6 @@ const sshResolveAction = async (
     ? `CertificateFile ${keys.certificatePath}`
     : "";
 
-  print2("=".repeat(80));
-  print2(p0Executable);
-  print2("=".repeat(80));
   const data = `
 Hostname ${args.destination}
   User ${request.linuxUserName}
@@ -119,8 +116,6 @@ Hostname ${args.destination}
   ${certificateInfo}
   PasswordAuthentication no
   ProxyCommand ${p0Executable} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name}`;
-  print2(data);
-  print2("=".repeat(80));
 
   await fs.promises.mkdir(path.join(P0_PATH, "ssh", "configs"), {
     recursive: true,
