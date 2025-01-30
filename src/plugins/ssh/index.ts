@@ -425,9 +425,9 @@ export const sshOrScp = async (args: {
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
 
-  const proxyCommand = sshProvider.proxyCommand(request);
-
   const setupData = await sshProvider.setup?.(request, { debug });
+
+  const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
 
   const { command, args: commandArgs } = createCommand(
     request,
