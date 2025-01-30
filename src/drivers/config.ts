@@ -9,15 +9,17 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Config, RawOrgData } from "../types/org";
-import { P0_PATH } from "../util";
 import { bootstrapConfig } from "./env";
 import { bootstrapDoc } from "./firestore";
 import { print2 } from "./stdio";
 import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import process from "process";
 
-export const CONFIG_FILE_PATH = path.join(P0_PATH, "config.json");
+const getConfigFilePath = () =>
+  path.join(os.tmpdir(), "p0", `config.json-${process.ppid}`);
 
 let tenantConfig: Config;
 
@@ -41,17 +43,19 @@ export const saveConfig = async (orgId: string) => {
 
   const config = orgData.config ?? bootstrapConfig;
 
-  print2(`Saving config to ${CONFIG_FILE_PATH}.`);
+  const configFilePath = getConfigFilePath();
 
-  const dir = path.dirname(CONFIG_FILE_PATH);
+  print2(`Saving config to ${configFilePath}.`);
+
+  const dir = path.dirname(configFilePath);
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(CONFIG_FILE_PATH, JSON.stringify(config), { mode: "600" });
+  await fs.writeFile(configFilePath, JSON.stringify(config), { mode: "600" });
 
   tenantConfig = config;
 };
 
 export const loadConfig = async () => {
-  const buffer = await fs.readFile(CONFIG_FILE_PATH);
+  const buffer = await fs.readFile(getConfigFilePath());
   tenantConfig = JSON.parse(buffer.toString());
   return tenantConfig;
 };

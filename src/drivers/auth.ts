@@ -10,17 +10,19 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { login } from "../commands/login";
 import { Authn, Identity } from "../types/identity";
-import { P0_PATH } from "../util";
+import { TokenResponse } from "../types/oidc";
+import { OrgData } from "../types/org";
 import { authenticateToFirebase } from "./firestore";
 import { print2 } from "./stdio";
 import * as fs from "fs/promises";
+import * as os from "os";
 import * as path from "path";
 
-export const IDENTITY_FILE_PATH = path.join(P0_PATH, "identity.json");
-export const IDENTITY_CACHE_PATH = path.join(
-  path.dirname(IDENTITY_FILE_PATH),
-  "cache"
-);
+const getIdentityFilePath = () =>
+  path.join(os.tmpdir(), "p0", `identity-${process.ppid}.json`);
+
+const getIdentityCachePath = () =>
+  path.join(os.tmpdir(), "p0", `cache-${process.ppid}`);
 
 export const cached = async <T>(
   name: string,
@@ -28,10 +30,12 @@ export const cached = async <T>(
   options: { duration: number },
   hasExpired?: (data: T) => boolean
 ): Promise<T> => {
+  const identityCachePath = getIdentityCachePath();
+
   // Following lines sanitize input
   // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  const loc = path.resolve(path.join(IDENTITY_CACHE_PATH, `${name}.json`));
-  if (!loc.startsWith(IDENTITY_CACHE_PATH)) {
+  const loc = path.resolve(path.join(identityCachePath, `${name}.json`));
+  if (!loc.startsWith(identityCachePath)) {
     throw new Error("Illegal path traversal");
   }
 
@@ -65,11 +69,50 @@ export const cached = async <T>(
   }
 };
 
+const clearIdentityCache = async () => {
+  try {
+    const identityCachePath = getIdentityCachePath();
+    // check to see if the directory exists before trying to remove it
+    await fs.access(identityCachePath);
+    await fs.rm(identityCachePath, { recursive: true });
+  } catch {
+    return;
+  }
+};
+
+export const writeIdentity = async (
+  org: OrgData,
+  credential: TokenResponse
+) => {
+  await clearIdentityCache();
+
+  const identityFilePath = getIdentityFilePath();
+
+  const expires_at = Date.now() * 1e-3 + credential.expires_in - 1; // Add 1 second safety margin
+  print2(`Saving authorization to ${identityFilePath}.`);
+  const dir = path.dirname(identityFilePath);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    identityFilePath,
+    JSON.stringify(
+      {
+        credential: { ...credential, expires_at },
+        org,
+      },
+      null,
+      2
+    ),
+    {
+      mode: "600",
+    }
+  );
+};
+
 const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
 }): Promise<Identity> => {
   try {
-    const buffer = await fs.readFile(IDENTITY_FILE_PATH);
+    const buffer = await fs.readFile(getIdentityFilePath());
     const identity: Identity = JSON.parse(buffer.toString());
     if (
       !options?.noRefresh &&
