@@ -137,9 +137,10 @@ export const azureSshProvider: SshProvider<
     ];
   },
 
-  generateKeys: async (_, options: { debug?: boolean } = {}) => {
+  generateKeys: async (request, options: { debug?: boolean } = {}) => {
     const { debug } = options;
     const { path: keyPath } = await createTempDirectoryForKeys();
+    await azSetSubscription(request, options);
     await generateSshKeyAndAzureAdCert(keyPath, { debug });
     const sshPrivateKeyPath = path.join(keyPath, AD_SSH_KEY_PRIVATE);
     const sshCertificateKeyPath = path.join(keyPath, AD_CERT_FILENAME);

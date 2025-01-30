@@ -515,7 +515,12 @@ export const sshProxy = async (args: {
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
 
-  const setupData = await sshProvider.setupProxy?.(request, { debug });
+  const abortController = new AbortController();
+
+  const setupData = await sshProvider.setupProxy?.(request, {
+    debug,
+    abortController,
+  });
 
   const proxyCommand = sshProvider.proxyCommand(
     request,
@@ -534,7 +539,7 @@ export const sshProxy = async (args: {
   try {
     return await spawnSshNode({
       credential,
-      abortController: new AbortController(),
+      abortController,
       command,
       args: proxyArgs,
       stdio: ["inherit", "inherit", "pipe"],
