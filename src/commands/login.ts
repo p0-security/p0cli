@@ -57,6 +57,7 @@ export const login = async (
   // validate auth
   if (!options?.skipAuthenticate) {
     await authenticate();
+    await validateTenantAccess(orgData);
   }
 
   print2(`You are now logged in, and can use the p0 CLI.`);
@@ -105,3 +106,13 @@ export const loginCommand = (yargs: yargs.Argv) =>
       }),
     fsShutdownGuard(login)
   );
+
+const validateTenantAccess = async (org: RawOrgData) => {
+  try {
+    await getDoc(doc(`o/${org.tenantId}/auth/valid`));
+    return true;
+  } catch (e) {
+    await clearIdentityCache();
+    throw "Could not find organization, logging out.";
+  }
+};
