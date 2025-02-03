@@ -71,9 +71,7 @@ const sshResolveAction = async (
 ) => {
   const silentlyExit = conditionalAbortBeforeThrow(args.quiet ?? false);
 
-  const authn = await authenticate({ noRefresh: args.quiet ?? false }).catch(
-    silentlyExit
-  );
+  const authn = await authenticate({ noRefresh: true }).catch(silentlyExit);
 
   let destination = args.destination;
   try {
