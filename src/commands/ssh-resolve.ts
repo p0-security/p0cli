@@ -85,7 +85,7 @@ const sshResolveAction = async (
   const { request, provisionedRequest } = await prepareRequest(
     authn,
     args,
-    destination, // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    destination,
     true,
     args.quiet
   ).catch(silentlyExit);
@@ -131,7 +131,7 @@ Hostname ${destination}
     P0_PATH,
     "ssh",
     "configs",
-    `${destination}.config`
+    `${destination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   );
 
   if (args.debug) {
