@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
-import { P0_PATH, throwAssertNever } from "../../util";
+import { throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
@@ -22,7 +22,6 @@ import {
   AwsSshRequest,
   AwsSshRoleRequest,
 } from "./types";
-import path from "node:path";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 30 * 1000;
 
