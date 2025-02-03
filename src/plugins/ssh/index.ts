@@ -484,6 +484,7 @@ export const verifyDestinationString = (destination: string) => {
   if (destination.includes("/")) {
     throw "Destination cannot contain a forward slash (/).";
   }
+  return destination;
 };
 
 export const sshProxy = async (args: {

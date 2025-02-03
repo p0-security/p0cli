@@ -79,13 +79,13 @@ const sshProxyAction = async (
 
   const privateKey = await fs.readFile(args.identityFile, "utf8");
 
-  verifyDestinationString(args.destination);
+  const destination = verifyDestinationString(args.destination);
 
   const configLocation = path.join(
     P0_PATH,
     "ssh",
     "configs",
-    `${args.destination}.config`
+    `${destination}.config`
   );
 
   if (args.debug) {

@@ -75,8 +75,9 @@ const sshResolveAction = async (
     silentlyExit
   );
 
+  let destination = args.destination;
   try {
-    verifyDestinationString(args.destination);
+    destination = verifyDestinationString(args.destination);
   } catch (e) {
     if (!args.quiet) {
       throw e;
@@ -86,7 +87,7 @@ const sshResolveAction = async (
   const { request, provisionedRequest } = await prepareRequest(
     authn,
     args,
-    args.destination,
+    destination,
     true,
     args.quiet
   ).catch(silentlyExit);
@@ -118,7 +119,7 @@ const sshResolveAction = async (
   const p0Executable = bootstrapConfig.appPath;
 
   const data = `
-Hostname ${args.destination}
+Hostname ${destination}
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
@@ -132,7 +133,7 @@ Hostname ${args.destination}
     P0_PATH,
     "ssh",
     "configs",
-    `${args.destination}.config`
+    `${destination}.config`
   );
 
   if (args.debug) {
