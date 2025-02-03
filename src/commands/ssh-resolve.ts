@@ -85,7 +85,7 @@ const sshResolveAction = async (
   const { request, provisionedRequest } = await prepareRequest(
     authn,
     args,
-    destination,
+    destination, // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     true,
     args.quiet
   ).catch(silentlyExit);

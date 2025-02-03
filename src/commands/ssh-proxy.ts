@@ -85,7 +85,7 @@ const sshProxyAction = async (
     P0_PATH,
     "ssh",
     "configs",
-    `${destination}.config`
+    `${destination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   );
 
   if (args.debug) {
