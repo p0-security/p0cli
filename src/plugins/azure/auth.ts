@@ -94,7 +94,7 @@ const performLogin = async (
     }
 
     if (FAILED_TO_RESOLVE_TENANT_PATTERN.test(error.stderr)) {
-      throw `Failed to resolve tenant "${directoryId}". If access was recently granted, please try again in a few minutes. If the issue persists, please contact support@p0.dev.`;
+      throw `Failed to resolve tenant "${directoryId}". ${NASCENT_ACCESS_GRANT_MESSAGE} ${CONTACT_SUPPORT_MESSAGE}`;
     }
 
     if (LOGIN_ATTEMPT_CANCELLED_PATTERN.test(error.stderr)) {
@@ -107,8 +107,10 @@ const performLogin = async (
 
 const performSetAccount = async (
   request: { subscriptionId: string; directoryId: string },
-  { debug }: { debug?: boolean }
+  options: { debug?: boolean; attempts: number }
 ) => {
+  const debug = options.debug;
+  const attempts = options.attempts ?? 1;
   try {
     const { command: azAccountSetExe, args: azAccountSetArgs } =
       azAccountSetCommand(request.subscriptionId);
@@ -127,12 +129,19 @@ const performSetAccount = async (
       print2(error.stderr);
     }
 
+    if (attempts <= 0) {
+      print2(
+        `Failed to set active Azure subscription after ${options.attempts} attempts.`
+      );
+      throw error;
+    }
+
     if (SUBSCRIPTION_NOT_FOUND_PATTERN.test(error.stderr)) {
       await performAccountClear({ debug });
       const output = await performLogin(request.directoryId, { debug });
       if (!output.includes(request.subscriptionId))
         throw `Subscription ${request.subscriptionId} not found. ${NASCENT_ACCESS_GRANT_MESSAGE}`;
-      await performSetAccount(request, { debug });
+      await performSetAccount(request, { debug, attempts: attempts - 1 });
       return;
     }
     throw error;
@@ -169,7 +178,7 @@ export const azSetSubscription = async (
   // https://github.com/Azure/azure-cli/issues/29161
   if (forceLogout) await performAccountClear({ debug });
 
-  await performSetAccount(request, options);
+  await performSetAccount(request, { ...options, attempts: 2 });
 
   return await getUserPrincipalName(options);
 };
