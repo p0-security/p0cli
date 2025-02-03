@@ -91,8 +91,6 @@ export const azureSshProvider: SshProvider<
     return undefined;
   },
 
-  // Azure doesn't support ProxyCommand, as nice as that would be. Yet.
-
   proxyCommand: (_, port) => ["nc", "localhost", port ?? "22"],
 
   reproCommands: (request, additionalData) => {

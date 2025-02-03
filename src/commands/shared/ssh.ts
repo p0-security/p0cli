@@ -165,7 +165,6 @@ export const provisionRequest = async (
     return;
   }
   const { id, isPreexisting } = response;
-  if (!quiet) print2("Did not receive access ID from server");
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   else print2("Existing access found.  Connecting to instance.");
 

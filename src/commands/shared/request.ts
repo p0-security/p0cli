@@ -108,19 +108,17 @@ export const request =
           return "Requesting access";
       }
     };
+
+    const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
+      resolvedAuthn,
+      args,
+      [command, ...args.arguments]
+    );
+
     const data =
       options?.message != "quiet"
-        ? await spinUntil(
-            accessMessage(options?.message),
-            fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
-              command,
-              ...args.arguments,
-            ])
-          )
-        : await fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
-            command,
-            ...args.arguments,
-          ]);
+        ? await spinUntil(accessMessage(options?.message), fetchCommandPromise)
+        : await fetchCommandPromise;
 
     if (data && "ok" in data && "message" in data && data.ok) {
       const logMessage =

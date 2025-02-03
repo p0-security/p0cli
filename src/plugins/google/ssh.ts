@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
+import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
 import { P0_PATH } from "../../util";
 import { ensureGcpSshInstall } from "./install";
@@ -94,7 +95,7 @@ export const gcpSshProvider: SshProvider<
   generateKeys: async (request, _) => {
     return {
       username: request.linuxUserName,
-      privateKeyPath: path.join(P0_PATH, "ssh", "id_rsa"),
+      privateKeyPath: PRIVATE_KEY_PATH,
     };
   },
 

@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
 import { P0_PATH, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -116,7 +117,7 @@ export const awsSshProvider: SshProvider<
 
   generateKeys: async (_) => {
     return {
-      privateKeyPath: path.join(P0_PATH, "ssh", "id_rsa"),
+      privateKeyPath: PRIVATE_KEY_PATH,
     };
   },
 

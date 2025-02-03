@@ -480,6 +480,12 @@ export const sshOrScp = async (args: {
   }
 };
 
+export const verifyDestinationString = (destination: string) => {
+  if (destination.includes("/")) {
+    throw "Destination cannot contain a forward slash (/).";
+  }
+};
+
 export const sshProxy = async (args: {
   authn: Authn;
   request: SshRequest;

@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { fsShutdownGuard } from "../drivers/firestore";
-import { sshProxy } from "../plugins/ssh";
+import { sshProxy, verifyDestinationString } from "../plugins/ssh";
 import { P0_PATH } from "../util";
 import { SSH_PROVIDERS, SshProxyCommandArgs } from "./shared/ssh";
 import * as fs from "fs/promises";
@@ -79,6 +79,8 @@ const sshProxyAction = async (
 
   const privateKey = await fs.readFile(args.identityFile, "utf8");
 
+  verifyDestinationString(args.destination);
+
   const configLocation = path.join(
     P0_PATH,
     "ssh",
@@ -86,7 +88,14 @@ const sshProxyAction = async (
     `${args.destination}.config`
   );
 
+  if (args.debug) {
+    ("Deleting request JSON file");
+  }
   await fs.rm(args.requestJson);
+
+  if (args.debug) {
+    ("Deleting ssh Config file");
+  }
   await fs.rm(configLocation);
 
   await sshProxy({
