@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
 import { throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -87,7 +88,7 @@ export const awsSshProvider: SshProvider<
 
   preTestAccessPropagationArgs: () => undefined,
 
-  proxyCommand: (request) => {
+  proxyCommand: (request, port) => {
     return [
       "aws",
       "ssm",
@@ -95,11 +96,11 @@ export const awsSshProvider: SshProvider<
       "--region",
       request.region,
       "--target",
-      "%h",
+      request.id,
       "--document-name",
       START_SSH_SESSION_DOCUMENT_NAME,
       "--parameters",
-      '"portNumber=%p"',
+      port ? `portNumber=${port}` : "portNumber=%p",
     ];
   },
 
@@ -111,6 +112,12 @@ export const awsSshProvider: SshProvider<
       ];
     }
     return undefined;
+  },
+
+  generateKeys: async (_) => {
+    return {
+      privateKeyPath: PRIVATE_KEY_PATH,
+    };
   },
 
   requestToSsh: (request) => {

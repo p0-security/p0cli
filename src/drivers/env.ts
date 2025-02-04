@@ -40,5 +40,6 @@ export const bootstrapConfig = {
       env.P0_GOOGLE_OIDC_CLIENT_SECRET ?? "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",
   },
   appUrl: env.P0_APP_URL ?? "https://api.p0.app",
+  appPath: env.P0_APP_PATH ?? "p0",
   environment: env.P0_ENV ?? "production",
 };

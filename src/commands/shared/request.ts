@@ -95,7 +95,7 @@ export const request =
     authn?: Authn,
     options?: {
       accessMessage?: string;
-      message?: "all" | "approval-required" | "none";
+      message?: "all" | "approval-required" | "none" | "quiet";
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
@@ -108,13 +108,17 @@ export const request =
           return "Requesting access";
       }
     };
-    const data = await spinUntil(
-      accessMessage(options?.message),
-      fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
-        command,
-        ...args.arguments,
-      ])
+
+    const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
+      resolvedAuthn,
+      args,
+      [command, ...args.arguments]
     );
+
+    const data =
+      options?.message != "quiet"
+        ? await spinUntil(accessMessage(options?.message), fetchCommandPromise)
+        : await fetchCommandPromise;
 
     if (data && "ok" in data && "message" in data && data.ok) {
       const logMessage =
