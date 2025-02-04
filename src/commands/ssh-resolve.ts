@@ -116,8 +116,8 @@ const sshResolveAction = async (
 
   const p0Executable = bootstrapConfig.appPath;
 
-  const data = `
-Hostname ${destination}
+  const data = `Host ${destination}
+  Hostname ${destination}
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
