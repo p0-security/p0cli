@@ -11,6 +11,11 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
 import { sleep } from "../../util";
+import {
+  ABORT_AUTHORIZATION_FAILED_MESSAGE,
+  AUTHORIZATION_FAILED_PATTERN,
+  USER_NOT_IN_CACHE_PATTERN,
+} from "./auth";
 import { AzureSshRequest } from "./types";
 import { spawn } from "node:child_process";
 
@@ -32,8 +37,7 @@ export type BastionTunnelMeta = {
 
 export const azBastionTunnelCommand = (
   request: AzureSshRequest,
-  port: string,
-  options: { debug?: boolean } = {}
+  port: string
 ) => ({
   command: "az",
   args: [
@@ -48,7 +52,10 @@ export const azBastionTunnelCommand = (
     "22",
     "--port",
     port,
-    ...(options.debug ? ["--debug"] : []),
+    // Always include the debug flag because we use the output to determine if we need
+    // to reauthenticate the user when access fails. The output is silenced if the user
+    // doesn't pass the --debug flag to the p0 ssh process.
+    "--debug",
   ],
 });
 
@@ -63,9 +70,9 @@ const selectRandomPort = (): string => {
 const spawnBastionTunnelInBackground = (
   request: AzureSshRequest,
   port: string,
-  options: { debug?: boolean } = {}
+  options: { debug?: boolean; abortController: AbortController }
 ): Promise<BastionTunnelMeta> => {
-  const { debug } = options;
+  const { debug, abortController } = options;
 
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
     let processSignalledToExit = false;
@@ -73,7 +80,7 @@ const spawnBastionTunnelInBackground = (
     let stdout = "";
     let stderr = "";
 
-    const { command, args } = azBastionTunnelCommand(request, port, { debug });
+    const { command, args } = azBastionTunnelCommand(request, port);
 
     if (debug) print2("Spawning Azure Bastion tunnel process...");
 
@@ -118,6 +125,15 @@ const spawnBastionTunnelInBackground = (
         !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
       ) {
         print2(str);
+      }
+
+      // If we get a message indicating that the user's authorization is invalid, we need to terminate all of our connection attempts.
+      if (AUTHORIZATION_FAILED_PATTERN.test(str)) {
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
+      }
+
+      if (USER_NOT_IN_CACHE_PATTERN.test(str)) {
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
       }
 
       if (str.includes(TUNNEL_READY_STRING)) {
@@ -184,7 +200,7 @@ const spawnBastionTunnelInBackground = (
 
 export const trySpawnBastionTunnel = async (
   request: AzureSshRequest,
-  options?: { debug?: boolean }
+  options: { abortController: AbortController; debug?: boolean }
 ): Promise<BastionTunnelMeta> => {
   // Attempt to spawn the tunnel SPAWN_TUNNEL_TRIES times, picking a new port each time. If we fail
   // too many times, then the problem is likely not the port, but something else.

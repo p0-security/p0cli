@@ -93,12 +93,12 @@ export type SshProvider<
    * SSH command. */
   setup?: (
     request: SR,
-    options?: { debug?: boolean }
+    options: { abortController: AbortController; debug?: boolean }
   ) => Promise<SshAdditionalSetup>;
 
   setupProxy?: (
     request: SR,
-    options?: { debug?: boolean }
+    options: { debug?: boolean; abortController: AbortController }
   ) => Promise<{
     teardown: () => Promise<void>;
     port: string;
