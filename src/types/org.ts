@@ -49,6 +49,10 @@ type BaseOrgData = {
 export type RawOrgData = BaseOrgData &
   (
     | {
+        providerType?: "cloudflare";
+        clientSecret: string;
+      }
+    | {
         providerType?: "okta";
       }
     | {

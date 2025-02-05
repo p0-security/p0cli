@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
+import { cloudflareLogin } from "./cloudflare/login";
 import { googleLogin } from "./google/login";
 import { oktaLogin } from "./okta/login";
 import { pingLogin } from "./ping/login";
@@ -34,5 +35,6 @@ export const pluginLoginMap: Record<
   google: googleLogin,
   okta: oktaLogin,
   ping: pingLogin,
+  cloudflare: cloudflareLogin,
   "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
 };
