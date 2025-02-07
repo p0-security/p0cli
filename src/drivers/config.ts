@@ -15,9 +15,14 @@ import { bootstrapDoc } from "./firestore";
 import { print2 } from "./stdio";
 import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import process from "process";
 
-export const CONFIG_FILE_PATH = path.join(P0_PATH, "config.json");
+const getConfigFilePath = () =>
+  process.env.P0_ORG
+    ? path.join(os.tmpdir(), "p0", `config.json-${process.env.P0_ORG}`)
+    : path.join(P0_PATH, "config.json");
 
 let tenantConfig: Config;
 
@@ -41,17 +46,19 @@ export const saveConfig = async (orgId: string) => {
 
   const config = orgData.config ?? bootstrapConfig;
 
-  print2(`Saving config to ${CONFIG_FILE_PATH}.`);
+  const configFilePath = getConfigFilePath();
 
-  const dir = path.dirname(CONFIG_FILE_PATH);
+  print2(`Saving config to ${configFilePath}.`);
+
+  const dir = path.dirname(configFilePath);
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(CONFIG_FILE_PATH, JSON.stringify(config), { mode: "600" });
+  await fs.writeFile(configFilePath, JSON.stringify(config), { mode: "600" });
 
   tenantConfig = config;
 };
 
 export const loadConfig = async () => {
-  const buffer = await fs.readFile(CONFIG_FILE_PATH);
+  const buffer = await fs.readFile(getConfigFilePath());
   tenantConfig = JSON.parse(buffer.toString());
   return tenantConfig;
 };

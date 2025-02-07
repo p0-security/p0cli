@@ -6,7 +6,7 @@
 
 # P0 Security CLI
 
-The offical Command-Line Interface (CLI) for P0.
+The official Command-Line Interface (CLI) for P0.
 
 Supports creating access requests for cloud resources, assuming AWS roles, and connecting to AWS instances.
 
