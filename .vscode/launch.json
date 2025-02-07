@@ -12,28 +12,12 @@
                 "<node_internals>/**"
             ],
             "program": "${workspaceFolder}/src/index.ts",
-            "args": [ "login"],
-            // "args": [ "login", "p0-fabian"],
-            // "args": [ "login", "p0-greg"],
-            // "args": [ "login", "p0-test-splk-nonprod"],
-            // "args": [ "ls", "ssh", "session", "destination", "node-1"],
-            // "args": [ "scp", "-r", "test/", "dev-instance-fabian-joya:test/"],
-            // "args": [ "ls", "gcloud", "role", "oauth"],
-            // "args": [ "ssh", "dev-instance-fabian-joya"],
-            // "args": [ "request", "ssh", "group"],
-            // "args": [ "ssh", "dev-instance-fabian-joya", "--", "--debug" ],
-            // "args": [ "ssh", "dev-instance-fabian-joya", "--sudo"],
-            // "args": [ "allow", "gcloud", "role", "roles/viewer", "--project", "p0-gcp-project", "--to", "gergely.danyi@p0.dev", "--start", "2024-10-01", "--length", "1 week", "--request-duration", "1 day" ],
-            // "args": [ "scp", "test.txt", "dev-instance-fabian-joya:test.txt", "--", "-v" ],
             "preLaunchTask": "tsc: build - tsconfig.json",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
             "sourceMaps": true,
             "runtimeExecutable": "ts-node",
-            "env": {
-                "P0_ORG": "p0-fabian",
-            }
         }
     ]
 }
