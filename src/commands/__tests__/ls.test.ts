@@ -16,6 +16,7 @@ import yargs from "yargs";
 
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
+jest.mock("../../drivers/auth/path");
 jest.mock("../../drivers/stdio");
 jest.spyOn(process, "exit");
 
