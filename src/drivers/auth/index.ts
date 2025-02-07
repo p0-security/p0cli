@@ -16,7 +16,6 @@ import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 
 export const cached = async <T>(
