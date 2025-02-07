@@ -17,8 +17,7 @@ import { readFile, writeFile } from "fs/promises";
 
 jest.spyOn(Date, "now").mockReturnValue(1.6e12);
 jest.mock("fs/promises");
-jest.mock("../../drivers/auth", () => ({
-  ...jest.requireActual("../../drivers/auth"),
+jest.mock("../../drivers/auth/path", () => ({
   getIdentityFilePath: jest.fn(() => "/dummy/identity/file/path"),
 }));
 jest.mock("../../drivers/config", () => ({
