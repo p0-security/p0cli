@@ -8,41 +8,44 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  authenticate,
-  IDENTITY_CACHE_PATH,
-  IDENTITY_FILE_PATH,
-} from "../drivers/auth";
+import { authenticate, deleteIdentity, writeIdentity } from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
 import { fsShutdownGuard, initializeFirebase } from "../drivers/firestore";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
-import { TokenResponse } from "../types/oidc";
 import { OrgData, RawOrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
-import * as fs from "fs/promises";
-import * as path from "path";
 import yargs from "yargs";
 
-/** Logs in the user
+/** Logs in the user.
  *
- * Currently only supports login to a single organization. Login credentials, together
- * with organization details, are saved to {@link IDENTITY_FILE_PATH}.
+ * If the P0_ORG environment variable is set, it is used as the organization name,
+ * and the identity file is written to the system temp directory.
+ *
+ * Otherwise, the identity file is written to the ~/.p0 directory.
  */
 export const login = async (
   args: { org: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  await saveConfig(args.org);
+  const org = args.org || process.env.P0_ORG;
+
+  if (!org) {
+    throw new Error(
+      "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."
+    );
+  }
+
+  await saveConfig(org);
   await initializeFirebase();
 
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${args.org}`));
+  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
   const orgData = orgDoc.data();
 
   if (!orgData) throw "Could not find organization";
 
-  const orgWithSlug: OrgData = { ...orgData, slug: args.org };
+  const orgWithSlug: OrgData = { ...orgData, slug: org };
 
   const plugin = orgWithSlug?.ssoProvider;
   const loginFn = pluginLoginMap[plugin];
@@ -51,7 +54,6 @@ export const login = async (
 
   const tokenResponse = await loginFn(orgWithSlug);
 
-  await clearIdentityCache();
   await writeIdentity(orgWithSlug, tokenResponse);
 
   // validate auth
@@ -63,47 +65,22 @@ export const login = async (
   print2(`You are now logged in, and can use the p0 CLI.`);
 };
 
-const writeIdentity = async (org: OrgData, credential: TokenResponse) => {
-  const expires_at = Date.now() * 1e-3 + credential.expires_in - 1; // Add 1 second safety margin
-  print2(`Saving authorization to ${IDENTITY_FILE_PATH}.`);
-  const dir = path.dirname(IDENTITY_FILE_PATH);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(
-    IDENTITY_FILE_PATH,
-    JSON.stringify(
-      {
-        credential: { ...credential, expires_at },
-        org,
-      },
-      null,
-      2
-    ),
-    {
-      mode: "600",
-    }
-  );
-};
-
-const clearIdentityCache = async () => {
-  try {
-    // check to see if the directory exists before trying to remove it
-    await fs.access(IDENTITY_CACHE_PATH);
-    await fs.rm(IDENTITY_CACHE_PATH, { recursive: true });
-  } catch {
-    return;
-  }
-};
-
 export const loginCommand = (yargs: yargs.Argv) =>
   yargs.command<{ org: string }>(
-    "login <org>",
+    "login [org]",
     "Log in to p0 using a web browser",
     (yargs) =>
-      yargs.positional("org", {
-        demandOption: true,
-        type: "string",
-        describe: "Your P0 organization ID",
-      }),
+      yargs
+        .positional("org", {
+          type: "string",
+          describe: "Your P0 organization ID",
+        })
+        .check((argv) => {
+          if (!argv.org && !process.env.P0_ORG) {
+            throw "The 'org' argument is required if the P0_ORG environment variable is not set.";
+          }
+          return true;
+        }),
     fsShutdownGuard(login)
   );
 
@@ -112,7 +89,7 @@ const validateTenantAccess = async (org: RawOrgData) => {
     await getDoc(doc(`o/${org.tenantId}/auth/valid`));
     return true;
   } catch (e) {
-    await clearIdentityCache();
+    await deleteIdentity();
     throw "Could not find organization, logging out.";
   }
 };
