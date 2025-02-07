@@ -9,6 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { awsCommand } from "..";
+import { cached } from "../../../drivers/auth";
+import { authenticate } from "../../../drivers/auth";
 import { print1, print2 } from "../../../drivers/stdio";
 import { mockGetDoc } from "../../../testing/firestore";
 import { failure } from "../../../testing/yargs";
@@ -26,7 +28,11 @@ jest.mock("typescript", () => ({
   },
 }));
 
+const OKTA_DOMAIN = "okta.com";
+
 const mockFetch = jest.spyOn(global, "fetch");
+const mockAuthenticate = authenticate as jest.Mock;
+const mockCached = cached as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
@@ -40,9 +46,28 @@ beforeEach(() => {
         json: async () => ({}),
         // This is the XML response from fetchSamlResponse or stsAssumeRole
         text: async () =>
-          (url as string).match(/okta.com/) ? samlResponse : stsResponse,
+          (url as string).match(new RegExp(OKTA_DOMAIN))
+            ? samlResponse
+            : stsResponse,
       }) as Response
   );
+  // Short-circuit the `cached` function to always load
+  mockCached.mockImplementation(
+    async (_name, loader, _options) => await loader()
+  );
+  mockAuthenticate.mockResolvedValue({
+    userCredential: {
+      user: { tenantId: "dummy-tenant-id" },
+    },
+    identity: {
+      org: {
+        tenantId: "dummy-tenant-id",
+        slug: "dummy-org-slug",
+        providerDomain: `dummy-org.${OKTA_DOMAIN}`,
+      },
+      credential: {},
+    },
+  });
 });
 
 describe("aws role", () => {
