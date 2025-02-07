@@ -15,13 +15,12 @@ import { bootstrapDoc } from "./firestore";
 import { print2 } from "./stdio";
 import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
-import os from "os";
 import path from "path";
 import process from "process";
 
 const getConfigFilePath = () =>
   process.env.P0_ORG
-    ? path.join(os.tmpdir(), "p0", `config.json-${process.env.P0_ORG}`)
+    ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "config.json");
 
 let tenantConfig: Config;

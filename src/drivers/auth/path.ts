@@ -9,15 +9,14 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { P0_PATH } from "../../util";
-import * as os from "os";
 import * as path from "path";
 
 export const getIdentityFilePath = () =>
   process.env.P0_ORG
-    ? path.join(os.tmpdir(), "p0", `identity-${process.env.P0_ORG}.json`)
+    ? path.join(P0_PATH, `identity-${process.env.P0_ORG}.json`)
     : path.join(P0_PATH, "identity.json");
 
 export const getIdentityCachePath = () =>
   process.env.P0_ORG
-    ? path.join(os.tmpdir(), "p0", `cache-${process.env.P0_ORG}`)
+    ? path.join(P0_PATH, `cache-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "cache");
