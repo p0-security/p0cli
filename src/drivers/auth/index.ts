@@ -8,26 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { login } from "../commands/login";
-import { Authn, Identity } from "../types/identity";
-import { TokenResponse } from "../types/oidc";
-import { OrgData } from "../types/org";
-import { P0_PATH } from "../util";
-import { authenticateToFirebase } from "./firestore";
-import { print2 } from "./stdio";
+import { login } from "../../commands/login";
+import { Authn, Identity } from "../../types/identity";
+import { TokenResponse } from "../../types/oidc";
+import { OrgData } from "../../types/org";
+import { authenticateToFirebase } from "../firestore";
+import { print2 } from "../stdio";
+import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
-
-const getIdentityFilePath = () =>
-  process.env.P0_ORG
-    ? path.join(os.tmpdir(), "p0", `identity-${process.env.P0_ORG}.json`)
-    : path.join(P0_PATH, "identity.json");
-
-const getIdentityCachePath = () =>
-  process.env.P0_ORG
-    ? path.join(os.tmpdir(), "p0", `cache-${process.env.P0_ORG}`)
-    : path.join(P0_PATH, "cache");
 
 export const cached = async <T>(
   name: string,

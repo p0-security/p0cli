@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { fetchCommand } from "../../drivers/api";
+import { authenticate } from "../../drivers/auth";
 import { print1, print2 } from "../../drivers/stdio";
 import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
@@ -22,11 +23,19 @@ jest.mock("../../drivers/auth");
 jest.mock("../../drivers/stdio");
 
 const mockFetchCommand = fetchCommand as jest.Mock;
+const mockAuthenticate = authenticate as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
 
 describe("request", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAuthenticate.mockResolvedValue({
+      userCredential: {
+        user: { tenantId: "dummy-tenant-id" },
+      },
+    });
+  });
 
   describe("when valid request command", () => {
     const command = "request gcloud role viewer";
