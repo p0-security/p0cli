@@ -14,8 +14,8 @@ import * as path from "node:path";
 import yargs from "yargs";
 
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
-const publicKeyUrl = (tenant: string) =>
-  `${tenantUrl(tenant)}/integrations/ssh/public-key`;
+const publicKeysUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 
 export const fetchCommand = async <T>(
@@ -39,7 +39,7 @@ export const submitPublicKey = async <T>(
 ) =>
   baseFetch<T>(
     authn,
-    publicKeyUrl(authn.identity.org.slug),
+    publicKeysUrl(authn.identity.org.slug),
     "POST",
     JSON.stringify({
       requestId: args.requestId,
