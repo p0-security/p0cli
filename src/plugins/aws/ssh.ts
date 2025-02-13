@@ -87,7 +87,11 @@ export const awsSshProvider: SshProvider<
   preTestAccessPropagationArgs: () => undefined,
 
   async submitPublicKey(authn, request, requestId, publicKey) {
-    if (!request.generated.publicKey) {
+    if (request.generated.publicKey) {
+      if (request.generated.publicKey !== publicKey) {
+        throw "Public key mismatch. Please revoke the request and try again.";
+      }
+    } else {
       await submitPublicKey(authn, { publicKey, requestId });
     }
   },
