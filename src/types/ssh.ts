@@ -63,9 +63,6 @@ export type SshProvider<
   /** Callback to ensure that this provider's CLI utils are installed */
   ensureInstall: () => Promise<void>;
 
-  /** Validate the SSH key if necessary; throw an exception if the key is invalid */
-  validateSshKey?: (request: Request<PR>, publicKey: string) => boolean;
-
   /** A human-readable name for this CSP */
   friendlyName: string;
 

@@ -52,6 +52,7 @@ const MOCK_GENERATED: AwsSshGenerated = {
   resource: {
     name: "name",
   },
+  publicKey: "publicKey",
   linuxUserName: "linuxUserName",
 };
 

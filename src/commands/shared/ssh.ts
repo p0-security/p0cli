@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { waitForProvisioning } from ".";
 import { createKeyPair } from "../../common/keys";
+import { exerciseGrant } from "../../drivers/api";
 import { doc } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
@@ -144,8 +145,6 @@ export const provisionRequest = async (
         "ssh",
         "session",
         destination,
-        "--public-key",
-        publicKey,
         ...(approvedOnly ? ["--approved-only"] : []),
         ...(args.provider ? ["--provider", args.provider] : []),
         ...(isSudoCommand(args) ? ["--sudo"] : []),
@@ -173,6 +172,8 @@ export const provisionRequest = async (
     id
   );
 
+  await exerciseGrant<{ ok: true }>(authn, { publicKey, requestId: id });
+
   return { provisionedRequest, publicKey, privateKey };
 };
 
@@ -194,16 +195,9 @@ export const prepareRequest = async (
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { provisionedRequest, publicKey } = result;
+  const { provisionedRequest } = result;
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
-
-  if (
-    sshProvider.validateSshKey &&
-    !sshProvider.validateSshKey(provisionedRequest, publicKey)
-  ) {
-    throw "Public key mismatch. Please revoke the request and try again.";
-  }
 
   await sshProvider.ensureInstall();
 
