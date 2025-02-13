@@ -101,6 +101,13 @@ export type SshProvider<
     port: string;
   }>;
 
+  submitPublicKey?: (
+    authn: Authn,
+    request: PR,
+    requestId: string,
+    publicKey: string
+  ) => Promise<void>;
+
   generateKeys?: (
     request: SR,
     options?: { debug?: boolean }

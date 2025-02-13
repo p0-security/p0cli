@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
 import { throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -84,6 +85,12 @@ export const awsSshProvider: SshProvider<
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
   preTestAccessPropagationArgs: () => undefined,
+
+  async submitPublicKey(authn, request, requestId, publicKey) {
+    if (!request.generated.publicKey) {
+      await submitPublicKey(authn, { publicKey, requestId });
+    }
+  },
 
   proxyCommand: (request, port) => {
     return [
