@@ -21,15 +21,7 @@ export type GcpSshPermission = CommonSshPermissionSpec & {
   };
 };
 
-export type GcpSshGenerated = {
-  publicKey: string;
-};
-
-export type GcpSshPermissionSpec = PermissionSpec<
-  "ssh",
-  GcpSshPermission,
-  GcpSshGenerated
->;
+export type GcpSshPermissionSpec = PermissionSpec<"ssh", GcpSshPermission>;
 
 export type GcpSsh = CliPermissionSpec<
   GcpSshPermissionSpec,
