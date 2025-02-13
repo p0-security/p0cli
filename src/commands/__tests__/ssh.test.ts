@@ -48,13 +48,12 @@ const MOCK_PERMISSION: AwsSshPermission = {
   },
 };
 
-const MOCK_GENERATED: AwsSshGenerated = {
+const MOCK_GENERATED = {
   resource: {
     name: "name",
   },
-  publicKey: "publicKey",
   linuxUserName: "linuxUserName",
-};
+} as AwsSshGenerated;
 
 const MOCK_REQUEST = {
   status: "DONE",
