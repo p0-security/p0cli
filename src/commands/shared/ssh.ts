@@ -173,7 +173,7 @@ export const provisionRequest = async (
     id
   );
 
-  return { provisionedRequest, publicKey, privateKey };
+  return { requestId: id, provisionedRequest, publicKey, privateKey };
 };
 
 export const prepareRequest = async (
@@ -194,16 +194,16 @@ export const prepareRequest = async (
     throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
   }
 
-  const { provisionedRequest, publicKey } = result;
+  const { requestId, publicKey, provisionedRequest } = result;
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 
-  if (
-    sshProvider.validateSshKey &&
-    !sshProvider.validateSshKey(provisionedRequest, publicKey)
-  ) {
-    throw "Public key mismatch. Please revoke the request and try again.";
-  }
+  await sshProvider.submitPublicKey?.(
+    authn,
+    provisionedRequest,
+    requestId,
+    publicKey
+  );
 
   await sshProvider.ensureInstall();
 

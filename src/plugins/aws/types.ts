@@ -81,6 +81,7 @@ export type AwsSshPermission = CommonSshPermissionSpec & {
 export type AwsSshGenerated = {
   resource: { name: string };
   linuxUserName: string;
+  publicKey: string;
 };
 
 export type AwsSshPermissionSpec = PermissionSpec<

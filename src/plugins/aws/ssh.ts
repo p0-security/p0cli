@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
 import { throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -73,9 +74,6 @@ export const awsSshProvider: SshProvider<
         : throwAssertNever(config.login);
   },
 
-  validateSshKey: (request, publicKey) =>
-    request.permission.publicKey === publicKey,
-
   ensureInstall: async () => {
     if (!(await ensureSsmInstall())) {
       throw "Please try again after installing the required AWS utilities";
@@ -87,6 +85,16 @@ export const awsSshProvider: SshProvider<
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 
   preTestAccessPropagationArgs: () => undefined,
+
+  async submitPublicKey(authn, request, requestId, publicKey) {
+    if (request.generated.publicKey) {
+      if (request.generated.publicKey !== publicKey) {
+        throw "Public key mismatch. Please revoke the request and try again.";
+      }
+    } else {
+      await submitPublicKey(authn, { publicKey, requestId });
+    }
+  },
 
   proxyCommand: (request, port) => {
     return [
