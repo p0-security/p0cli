@@ -15,7 +15,7 @@ import {
   DONE_STATUSES,
   ERROR_STATUSES,
   PluginRequest,
-  Request,
+  PermissionRequest,
 } from "../../types/request";
 import { onSnapshot } from "firebase/firestore";
 
@@ -30,9 +30,9 @@ export const waitForProvisioning = async <P extends PluginRequest>(
   requestId: string
 ) => {
   let cancel: NodeJS.Timeout | undefined = undefined;
-  const result = await new Promise<Request<P>>((resolve, reject) => {
+  const result = await new Promise<PermissionRequest<P>>((resolve, reject) => {
     let isResolved = false;
-    const unsubscribe = onSnapshot<Request<P>, object>(
+    const unsubscribe = onSnapshot<PermissionRequest<P>, object>(
       doc(`o/${authn.identity.org.tenantId}/permission-requests/${requestId}`),
       (snap) => {
         const data = snap.data();

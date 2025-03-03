@@ -25,7 +25,7 @@ import {
   GcpSshRequest,
 } from "../plugins/google/types";
 import { Authn } from "./identity";
-import { Request } from "./request";
+import { PermissionRequest } from "./request";
 
 export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh;
 export type PluginSshRequest =
@@ -141,9 +141,9 @@ export type SshProvider<
 
   /** Converts a backend request to a CLI request */
   toCliRequest: (
-    request: Request<PR>,
+    request: PermissionRequest<PR>,
     options?: { debug?: boolean }
-  ) => Promise<Request<CliSshRequest>>;
+  ) => Promise<PermissionRequest<CliSshRequest>>;
 };
 
 export type SshRequest = AwsSshRequest | AzureSshRequest | GcpSshRequest;

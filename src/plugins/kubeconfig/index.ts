@@ -14,7 +14,7 @@ import { request } from "../../commands/shared/request";
 import { doc } from "../../drivers/firestore";
 import { spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { Request } from "../../types/request";
+import { PermissionRequest } from "../../types/request";
 import { assertNever } from "../../util";
 import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
@@ -85,7 +85,7 @@ export const requestAccessToCluster = async (
   args: yargs.ArgumentsCamelCase<KubeconfigCommandArgs>,
   clusterId: string,
   role: string
-): Promise<Request<K8sPermissionSpec>> => {
+): Promise<PermissionRequest<K8sPermissionSpec>> => {
   const response = await request("request")(
     {
       ...pick(args, "$0", "_"),
@@ -125,7 +125,7 @@ export const profileName = (eksCluterName: string): string =>
 export const awsCloudAuth = async (
   authn: Authn,
   awsAccountId: string,
-  request: Request<K8sPermissionSpec>,
+  request: PermissionRequest<K8sPermissionSpec>,
   loginType: "federated" | "idc"
 ): Promise<AwsCredentials> => {
   const { permission, generated } = request;
