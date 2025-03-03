@@ -31,7 +31,8 @@ export type PermissionSpec<
 
 export type PluginRequest = K8sPermissionSpec | PluginSshRequest;
 
-export type Request<P extends PluginRequest> = P & {
+export type PermissionRequest<P extends PluginRequest> = P & {
+  error?: { message: string };
   status: string;
   principal: string;
 };

@@ -13,7 +13,11 @@ import { authenticate } from "../../drivers/auth";
 import { doc } from "../../drivers/firestore";
 import { print2, spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { PluginRequest, Request, RequestResponse } from "../../types/request";
+import {
+  PluginRequest,
+  PermissionRequest,
+  RequestResponse,
+} from "../../types/request";
 import { onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -63,7 +67,7 @@ const waitForRequest = async (
     if (logMessage)
       print2("Will wait up to 5 minutes for this request to complete...");
     let cancel: NodeJS.Timeout | undefined = undefined;
-    const unsubscribe = onSnapshot<Request<PluginRequest>, object>(
+    const unsubscribe = onSnapshot<PermissionRequest<PluginRequest>, object>(
       doc(`o/${tenantId}/permission-requests/${requestId}`),
       (snap) => {
         const data = snap.data();
@@ -73,7 +77,10 @@ const waitForRequest = async (
           if (cancel) clearTimeout(cancel);
           unsubscribe?.();
           const { message, code } = COMPLETED_REQUEST_STATUSES[status];
-          if (code !== 0 || logMessage) print2(message);
+          const errorMessage = data.error
+            ? `${message}: ${data.error.message}`
+            : message;
+          if (code !== 0 || logMessage) print2(errorMessage);
           resolve(code);
         }
       }

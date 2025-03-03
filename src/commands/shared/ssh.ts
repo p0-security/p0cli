@@ -17,7 +17,7 @@ import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
-import { Request } from "../../types/request";
+import { PermissionRequest } from "../../types/request";
 import {
   CliSshRequest,
   PluginSshRequest,
@@ -115,9 +115,9 @@ const validateSshInstall = async (
 };
 
 const pluginToCliRequest = async (
-  request: Request<PluginSshRequest>,
+  request: PermissionRequest<PluginSshRequest>,
   options?: { debug?: boolean }
-): Promise<Request<CliSshRequest>> =>
+): Promise<PermissionRequest<CliSshRequest>> =>
   await SSH_PROVIDERS[request.permission.provider].toCliRequest(
     request as any,
     options
