@@ -43,6 +43,17 @@ export async function initializeFirebase() {
   }
 }
 
+const findProviderId = (identity: Identity) => {
+  switch (identity.org.ssoProvider) {
+    case "google":
+      return SignInMethod.GOOGLE;
+    case "google-oidc":
+      return "oidc.google-oidc";
+    default:
+      return identity.org.providerId;
+  }
+};
+
 export async function authenticateToFirebase(
   identity: Identity
 ): Promise<UserCredential> {
@@ -51,12 +62,7 @@ export async function authenticateToFirebase(
 
   await initializeFirebase();
 
-  // TODO: Move to map lookup
-  const provider = new OAuthProvider(
-    identity.org.ssoProvider === "google"
-      ? SignInMethod.GOOGLE
-      : identity.org.providerId
-  );
+  const provider = new OAuthProvider(findProviderId(identity));
 
   const firebaseCredential = provider.credential({
     accessToken: credential.access_token,

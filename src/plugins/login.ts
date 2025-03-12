@@ -34,5 +34,6 @@ export const pluginLoginMap: Record<
   google: googleLogin,
   okta: oktaLogin,
   ping: pingLogin,
+  "google-oidc": googleLogin,
   "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
 };
