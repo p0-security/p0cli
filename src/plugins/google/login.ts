@@ -37,7 +37,7 @@ const requestAuth = async () => {
     code_challenge_method: "S256",
     redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
     response_type: "code",
-    scope: "openid",
+    scope: "openid email",
   };
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
   open(url).catch(() => {
