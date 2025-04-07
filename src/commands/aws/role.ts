@@ -107,7 +107,11 @@ export const rolesFromSaml = (account: string, saml: string) => {
  */
 const oktaAwsAssumeRole = async (args: { account?: string; role: string }) => {
   const authn = await authenticate();
-  const awsCredential = await assumeRoleWithOktaSaml(authn, args);
+  const awsCredential = await assumeRoleWithOktaSaml(authn, {
+    accountId: args.account,
+    role: args.role,
+  });
+
   const isTty = sys.writeOutputIsTTY?.();
   if (isTty) print2("Execute the following commands:\n");
   const indent = isTty ? "  " : "";
