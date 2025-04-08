@@ -14,6 +14,22 @@ import { AwsConfig } from "./types";
 import { getDoc } from "firebase/firestore";
 import { sortBy } from "lodash";
 
+export const getFirstAwsConfig = async (authn: Authn) => {
+  const { identity } = authn;
+  const snapshot = await getDoc<AwsConfig, object>(
+    doc(`o/${identity.org.tenantId}/integrations/aws`)
+  );
+  const config = snapshot.data();
+
+  const item = Object.entries(config?.["iam-write"] ?? {}).find(
+    ([_id, { state }]) => state === "installed"
+  );
+
+  if (!item) throw `P0 is not installed on any AWS account`;
+
+  return { identity, config: { id: item[0], ...item[1] } };
+};
+
 export const getAwsConfig = async (
   authn: Authn,
   account: string | undefined

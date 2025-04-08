@@ -32,6 +32,9 @@ export type AwsIamLogin = {
 export type AwsIdcLogin = {
   type: "idc";
   parent: string;
+  idcArn: string;
+  idcRegion: string;
+  identityStoreId: string;
 };
 
 export type AwsFederatedLogin = {
