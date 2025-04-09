@@ -40,10 +40,15 @@ const lsArgs = <T>(yargs: yargs.Argv<T>) =>
       array: true,
       string: true,
       default: [] as string[],
+    })
+    .option("json", {
+      type: "boolean",
+      default: false,
+      description: "Output in JSON format",
     });
 
 export const lsCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[] }>(
+  yargs.command<{ arguments: string[]; json: boolean }>(
     "ls [arguments..]",
     "List request-command arguments",
     lsArgs,
@@ -72,6 +77,7 @@ const convertLsSizeArg = (args: string[]) => {
 const ls = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
+    json: boolean;
   }>
 ) => {
   const authn = await authenticate();
@@ -79,11 +85,19 @@ const ls = async (
 
   const data = await spinUntil(
     "Listing accessible resources",
-    fetchCommand<LsResponse>(authn, args, ["ls", ...convertedArgs])
+    fetchCommand<LsResponse>(authn, args, [
+      "ls",
+      ...(args.json ? args.arguments : convertedArgs),
+    ])
   );
-  const allArguments = [...args._, ...args.arguments];
-
   if (data && "ok" in data && data.ok) {
+    if (args.json) {
+      print2(JSON.stringify(data, null, 2));
+      return;
+    }
+
+    const allArguments = [...args._, ...args.arguments];
+
     const label = pluralize(data.arg);
     if (data.items.length === 0) {
       print2(`No ${label}`);
