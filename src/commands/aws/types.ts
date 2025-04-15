@@ -1,4 +1,4 @@
-/** Copyright © 2025-present P0 Security
+/** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
 
@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-
 export type AssumeCommandArgs = {
   account?: string;
   reason?: string;

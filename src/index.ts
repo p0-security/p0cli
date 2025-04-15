@@ -13,7 +13,7 @@ import { initializeFirebase } from "./drivers/firestore";
 import { noop } from "lodash";
 
 export const main = async () => {
-  const authn = await initializeFirebase();
+  await initializeFirebase();
 
   try {
     await cli.parseAsync();
@@ -23,5 +23,5 @@ export const main = async () => {
 };
 
 if (require.main === module) {
-  main();
+  void main();
 }
