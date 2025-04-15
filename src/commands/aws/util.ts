@@ -15,6 +15,9 @@ import { waitForProvisioning } from "../shared";
 import { request } from "../shared/request";
 import yargs from "yargs";
 
+export const PROVISIONING_ACCESS_MESSAGE =
+  "Waiting for access to be provisioned";
+export const EXISTING_ACCESS_MESSAGE = "Existing access found.";
 export const ACCESS_EXISTS_ERROR_MESSAGE =
   "This principal already has this access";
 
@@ -38,15 +41,12 @@ export const provisionRequest = async (
     const { id, isPreexisting } = response;
 
     print2(
-      !isPreexisting
-        ? "Waiting for access to be provisioned"
-        : "Existing access found. Connecting to instance."
+      !isPreexisting ? PROVISIONING_ACCESS_MESSAGE : EXISTING_ACCESS_MESSAGE
     );
-
     await waitForProvisioning<PluginRequest>(authn, id);
   } catch (error) {
     if (error === ACCESS_EXISTS_ERROR_MESSAGE) {
-      print2("Existing access found. Connecting to instance.");
+      print2(EXISTING_ACCESS_MESSAGE);
     } else {
       throw error;
     }
