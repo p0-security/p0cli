@@ -26,20 +26,3 @@ exports[`aws role a single installed account with Okta SAML assume should assume
   ],
 ]
 `;
-
-exports[`aws role a single installed account with Okta SAML ls lists roles: stderr 1`] = `
-[
-  [
-    "Your available roles for account 1:",
-  ],
-]
-`;
-
-exports[`aws role a single installed account with Okta SAML ls lists roles: stdout 1`] = `
-[
-  [
-    "  Role1
-  Role2",
-  ],
-]
-`;

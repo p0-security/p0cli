@@ -25,27 +25,30 @@ export const provisionRequest = async (
   }>,
   authn: Authn
 ) => {
-  const response = await request("request")(argv, authn, {
-    message: "approval-required",
-  });
+  try {
+    const response = await request("request")(argv, authn, {
+      message: "approval-required",
+    });
 
-  if (!response) {
-    print2("Did not receive access ID from server");
-    return;
+    if (!response) {
+      print2("Did not receive access ID from server");
+      return;
+    }
+
+    const { id, isPreexisting } = response;
+
+    print2(
+      !isPreexisting
+        ? "Waiting for access to be provisioned"
+        : "Existing access found. Connecting to instance."
+    );
+
+    await waitForProvisioning<PluginRequest>(authn, id);
+  } catch (error) {
+    if (error === ACCESS_EXISTS_ERROR_MESSAGE) {
+      print2("Existing access found. Connecting to instance.");
+    } else {}
+      throw error;
+    }
   }
-
-  const { id, isPreexisting } = response;
-
-  print2(
-    !isPreexisting
-      ? "Waiting for access to be provisioned"
-      : "Existing access found. Connecting to instance."
-  );
-
-  const provisionedRequest = await waitForProvisioning<PluginRequest>(
-    authn,
-    id
-  );
-
-  return { requestId: id, provisionedRequest };
 };

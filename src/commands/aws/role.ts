@@ -57,13 +57,7 @@ const oktaAwsAssumeRole = async (
 ) => {
   const requestCommand = buildRoleRequestCommand(argv);
 
-  try {
-    await provisionRequest(requestCommand, authn);
-  } catch (error) {
-    if (error !== ACCESS_EXISTS_ERROR_MESSAGE) {
-      throw error;
-    }
-  }
+  await provisionRequest(requestCommand, authn);
 
   const awsCredential = await assumeRoleWithOktaSaml(authn, {
     accountId: argv.account,
