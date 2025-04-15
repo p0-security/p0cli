@@ -47,7 +47,7 @@ export const provisionRequest = async (
   } catch (error) {
     if (error === ACCESS_EXISTS_ERROR_MESSAGE) {
       print2("Existing access found. Connecting to instance.");
-    } else {}
+    } else {
       throw error;
     }
   }
