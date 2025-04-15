@@ -15,11 +15,8 @@ import { noop } from "lodash";
 export const main = async () => {
   await initializeFirebase();
 
-  try {
-    await cli.parseAsync();
-  } catch (err) {
-    noop(err);
-  }
+  // We can suppress output here, as .fail() already print2 errors
+  void (cli.parse() as any).catch(noop);
 };
 
 if (require.main === module) {

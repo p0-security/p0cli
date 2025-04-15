@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { waitForProvisioning } from ".";
 import { fetchCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { doc } from "../../drivers/firestore";
@@ -23,6 +24,12 @@ import { sys } from "typescript";
 import yargs from "yargs";
 
 const WAIT_TIMEOUT = 300e3;
+
+export const PROVISIONING_ACCESS_MESSAGE =
+  "Waiting for access to be provisioned";
+export const EXISTING_ACCESS_MESSAGE = "Existing access found.";
+export const ACCESS_EXISTS_ERROR_MESSAGE =
+  "This principal already has this access";
 
 const APPROVED = { message: "Your request was approved", code: 0 };
 const DENIED = { message: "Your request was denied", code: 2 };
@@ -152,3 +159,35 @@ export const request =
       throw data;
     }
   };
+
+export const provisionRequest = async (
+  argv: yargs.ArgumentsCamelCase<{
+    arguments: string[];
+    wait?: boolean;
+  }>,
+  authn: Authn
+) => {
+  try {
+    const response = await request("request")(argv, authn, {
+      message: "approval-required",
+    });
+
+    if (!response) {
+      print2("Did not receive access ID from server");
+      return;
+    }
+
+    const { id, isPreexisting } = response;
+
+    print2(
+      !isPreexisting ? PROVISIONING_ACCESS_MESSAGE : EXISTING_ACCESS_MESSAGE
+    );
+    await waitForProvisioning<PluginRequest>(authn, id);
+  } catch (error) {
+    if (error === ACCESS_EXISTS_ERROR_MESSAGE) {
+      print2(EXISTING_ACCESS_MESSAGE);
+    } else {
+      throw error;
+    }
+  }
+};

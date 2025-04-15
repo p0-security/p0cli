@@ -25,7 +25,7 @@ jest.mock("typescript", () => ({
     writeOutputIsTTY: () => true,
   },
 }));
-jest.mock("../util", () => ({
+jest.mock("../../shared/request", () => ({
   provisionRequest: jest.fn(),
 }));
 
