@@ -92,7 +92,7 @@ const ls = async (
   );
   if (data && "ok" in data && data.ok) {
     if (args.json) {
-      print2(JSON.stringify(data, null, 2));
+      print1(JSON.stringify(data, null, 2));
       return;
     }
 
