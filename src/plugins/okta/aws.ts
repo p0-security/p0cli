@@ -18,7 +18,7 @@ import { getSamlResponse } from "./login";
 import { flatten } from "lodash";
 
 /** Extracts all roles from a SAML assertion */
-export const rolesFromSaml = (account: string, saml: string) => {
+const rolesFromSaml = (account: string, saml: string) => {
   const samlText = Buffer.from(saml, "base64").toString("ascii");
   const samlObject = parseXml(samlText);
   const samlAttributes =
@@ -50,10 +50,7 @@ const isFederatedLogin = (
  * If no account is passed, and the organization only has one account configured,
  * assumes that account.
  */
-export const initOktaSaml = async (
-  authn: Authn,
-  account: string | undefined
-) => {
+const initOktaSaml = async (authn: Authn, account: string | undefined) => {
   const { identity, config } = await getAwsConfig(authn, account);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;

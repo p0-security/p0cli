@@ -187,6 +187,7 @@ export const assumeRoleWithIdc = async (args: {
         accountId: args.accountId,
         permissionSet: args.permissionSet,
       });
+
       return {
         AWS_ACCESS_KEY_ID: credentials.roleCredentials.accessKeyId,
         AWS_SECRET_ACCESS_KEY: credentials.roleCredentials.secretAccessKey,

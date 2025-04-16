@@ -8,17 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { cli } from "./commands";
-import { initializeFirebase } from "./drivers/firestore";
-import { noop } from "lodash";
-
-export const main = async () => {
-  await initializeFirebase();
-
-  // We can suppress output here, as .fail() already print2 errors
-  void (cli.parse() as any).catch(noop);
+export type AssumeCommandArgs = {
+  account?: string;
+  reason?: string;
 };
 
-if (require.main === module) {
-  void main();
-}
+export type AssumePermissionSetCommandArgs = AssumeCommandArgs & {
+  permissionSet: string;
+};
+
+export type AssumeRoleCommandArgs = AssumeCommandArgs & {
+  role: string;
+};

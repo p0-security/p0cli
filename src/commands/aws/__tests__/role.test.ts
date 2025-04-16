@@ -25,6 +25,9 @@ jest.mock("typescript", () => ({
     writeOutputIsTTY: () => true,
   },
 }));
+jest.mock("../../shared/request", () => ({
+  provisionRequest: jest.fn(),
+}));
 
 const mockFetch = jest.spyOn(global, "fetch");
 const mockPrint1 = print1 as jest.Mock;
@@ -53,17 +56,17 @@ describe("aws role", () => {
     };
     describe("without Okta SAML", () => {
       mockGetDoc({ "iam-write": { "1": item } });
-      describe.each([
-        ["ls", "aws role ls"],
-        ["assume", "aws role assume Role1"],
-      ])("%s", (_, command) => {
-        it("should print a friendly error message", async () => {
-          const error = await failure(awsCommand(yargs()), command);
-          expect(error).toMatchInlineSnapshot(
-            `"Account test is not configured for Okta SAML login."`
-          );
-        });
-      });
+      describe.each([["assume", "aws role assume Role1"]])(
+        "%s",
+        (_, command) => {
+          it("should print a friendly error message", async () => {
+            const error = await failure(awsCommand(yargs()), command);
+            expect(error).toMatchInlineSnapshot(
+              `"Account test is not configured for Okta SAML login."`
+            );
+          });
+        }
+      );
     });
     describe("with Okta SAML", () => {
       beforeEach(() => {
@@ -86,13 +89,6 @@ describe("aws role", () => {
       describe("assume", () => {
         it("should assume a role", async () => {
           await awsCommand(yargs()).parse("aws role assume Role1");
-          expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
-          expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
-        });
-      });
-      describe("ls", () => {
-        it("lists roles", async () => {
-          await awsCommand(yargs()).parse("aws role ls");
           expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
           expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
         });

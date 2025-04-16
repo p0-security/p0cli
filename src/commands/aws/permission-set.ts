@@ -10,65 +10,69 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { fsShutdownGuard } from "../../drivers/firestore";
 import { print1, print2 } from "../../drivers/stdio";
+import { getAwsConfig } from "../../plugins/aws/config";
+import { assumeRoleWithIdc } from "../../plugins/aws/idc";
 import { AwsCredentials } from "../../plugins/aws/types";
-import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
 import { provisionRequest } from "../shared/request";
-import { AssumeRoleCommandArgs } from "./types";
+import { AssumeCommandArgs, AssumePermissionSetCommandArgs } from "./types";
 import { pick } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
 
-export const role = (
-  yargs: yargs.Argv<{ account: string | undefined }>,
+export const permissionSet = (
+  yargs: yargs.Argv<AssumeCommandArgs>,
   authn: Authn
 ) =>
-  yargs.command("role", "Interact with AWS roles", (yargs) =>
-    yargs
-      .command(
-        "assume <role>",
-        "Assume an AWS role",
-        (y: yargs.Argv<{ account: string | undefined }>) =>
-          y.positional("role", {
-            type: "string",
-            demandOption: true,
-            describe: "An AWS role name",
-          }),
-        // TODO: select based on uidLocation
-        fsShutdownGuard((argv) => oktaAwsAssumeRole(argv, authn))
-      )
-      .demandCommand(1)
+  yargs.command(
+    "permission-set",
+    "Interact with AWS permission sets",
+    (yargs) =>
+      yargs
+        .command(
+          "assume <permission-set>",
+          "Assume an AWS permission set",
+          (y: yargs.Argv<AssumeCommandArgs>) =>
+            y.positional("permission-set", {
+              type: "string",
+              demandOption: true,
+              describe: "An AWS permission set name",
+            }),
+          fsShutdownGuard((argv) => oktaAwsAssumePermissionSet(argv, authn))
+        )
+        .demandCommand(1)
   );
 
-/** Assumes a role in AWS via Okta SAML federation.
- *
- * Prerequisites:
- * - AWS is configured with a SAML identity provider
- * - This identity provider is integrated with a
- *   "AWS SAML Account Federation" app in Okta
- * - The AWS SAML identity provider name, Okta domain,
- *   and Okta SAML app identifier are all contained in
- *   the user's identity blob
- * - The requested role is assigned to the user in Okta
- */
-const oktaAwsAssumeRole = async (
-  argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>,
+const oktaAwsAssumePermissionSet = async (
+  argv: yargs.ArgumentsCamelCase<AssumePermissionSetCommandArgs>,
   authn: Authn
 ) => {
-  const requestCommand = buildRoleRequestCommand(argv);
+  const { account, permissionSet } = argv;
+  const { config } = await getAwsConfig(authn, account);
+
+  if (config.login?.type !== "idc") {
+    throw new Error(
+      `Unexpected login type. Expected IDC to be enabled for account ${account}`
+    );
+  }
+
+  const { login } = config;
+
+  const requestCommand = buildPermissionSetRequestCommand(argv);
 
   await provisionRequest(requestCommand, authn);
 
-  const awsCredential = await assumeRoleWithOktaSaml(authn, {
-    accountId: argv.account,
-    role: argv.role,
+  const awsCredential = await assumeRoleWithIdc({
+    accountId: config.id,
+    permissionSet,
+    idc: { id: login.identityStoreId, region: login.idcRegion },
   });
 
   printAwsCredentials(argv, awsCredential);
 };
 
-const buildRoleRequestCommand = (
-  argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>
+const buildPermissionSetRequestCommand = (
+  argv: yargs.ArgumentsCamelCase<AssumePermissionSetCommandArgs>
 ): yargs.ArgumentsCamelCase<{
   arguments: string[];
   wait?: boolean;
@@ -77,8 +81,8 @@ const buildRoleRequestCommand = (
     ...pick(argv, "$0", "_"),
     arguments: [
       "aws",
-      "role",
-      argv.role,
+      "permission-set",
+      argv.permissionSet,
       ...(argv.reason ? ["--reason", argv.reason] : []),
       ...(argv.account ? ["--account", argv.account] : []),
     ],
@@ -89,11 +93,11 @@ const buildRoleRequestCommand = (
 /**
  * Prints the AWS credentials to the console.
  *
- * @param argv The command line arguments.
  * @param awsCredential The AWS credentials to print.
+ * @param argv The command line arguments.
  */
 const printAwsCredentials = (
-  argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>,
+  argv: yargs.ArgumentsCamelCase<AssumePermissionSetCommandArgs>,
   awsCredential: AwsCredentials
 ) => {
   const isTty = sys.writeOutputIsTTY?.();
@@ -108,6 +112,5 @@ const printAwsCredentials = (
     print2(`
 Or, populate these environment variables using BASH command substitution:
 
-  $(p0 aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role})
-`);
+  $(p0 aws${argv.account ? ` --account ${argv.account}` : ""} permission-set assume ${argv.permissionSet}) `);
 };
