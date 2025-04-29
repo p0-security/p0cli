@@ -57,7 +57,12 @@ export const saveConfig = async (orgId: string) => {
 };
 
 export const loadConfig = async () => {
-  const buffer = await fs.readFile(getConfigFilePath());
-  tenantConfig = JSON.parse(buffer.toString());
-  return tenantConfig;
+  try {
+    const buffer = await fs.readFile(getConfigFilePath());
+    tenantConfig = JSON.parse(buffer.toString());
+    return tenantConfig;
+  } catch {
+    print2("Config file not found.");
+    return undefined;
+  }
 };

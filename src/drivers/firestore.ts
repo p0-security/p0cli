@@ -38,8 +38,10 @@ let firestore: Firestore;
 export async function initializeFirebase() {
   if (!firestore) {
     const tenantConfig = await loadConfig();
-    app = initializeApp(tenantConfig.fs, "authFirebase");
-    firestore = getFirestore(app);
+    if (tenantConfig) {
+      app = initializeApp(tenantConfig.fs, "authFirebase");
+      firestore = getFirestore(app);
+    }
   }
 }
 
