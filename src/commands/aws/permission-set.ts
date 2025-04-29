@@ -28,19 +28,17 @@ export const permissionSet = (
     "permission-set",
     "Interact with AWS permission sets",
     (yargs) =>
-      yargs
-        .command(
-          "assume <permission-set>",
-          "Assume an AWS permission set",
-          (y: yargs.Argv<AssumeCommandArgs>) =>
-            y.positional("permission-set", {
-              type: "string",
-              demandOption: true,
-              describe: "An AWS permission set name",
-            }),
-          fsShutdownGuard((argv) => oktaAwsAssumePermissionSet(argv, authn))
-        )
-        .demandCommand(1)
+      yargs.command(
+        "assume <permission-set>",
+        "Assume an AWS permission set",
+        (y: yargs.Argv<AssumeCommandArgs>) =>
+          y.positional("permission-set", {
+            type: "string",
+            demandOption: true,
+            describe: "An AWS permission set name",
+          }),
+        fsShutdownGuard((argv) => oktaAwsAssumePermissionSet(argv, authn))
+      )
   );
 
 const oktaAwsAssumePermissionSet = async (

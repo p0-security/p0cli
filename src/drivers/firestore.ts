@@ -107,7 +107,11 @@ export const fsShutdownGuard =
     try {
       await cb(args);
     } finally {
-      if (bootstrapFirestore) void terminate(bootstrapFirestore);
-      if (firestore) void terminate(firestore);
+      shutdownFirebase();
     }
   };
+
+export const shutdownFirebase = () => {
+  if (bootstrapFirestore) void terminate(bootstrapFirestore);
+  if (firestore) void terminate(firestore);
+};
