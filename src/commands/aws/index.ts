@@ -9,33 +9,48 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../../drivers/auth";
+import { shutdownFirebase } from "../../drivers/firestore";
+import { print2 } from "../../drivers/stdio";
 import { getFirstAwsConfig } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
 import { role } from "./role";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 const awsArgs = async (yargs: yargs.Argv) => {
-  const base = yargs
-    .option("account", {
-      type: "string",
-      describe: "AWS account ID or alias (or set P0_AWS_ACCOUNT)",
-    })
-    .option("reason", {
-      describe: "Reason access is needed",
-      type: "string",
-    })
-    .env("P0_AWS");
+  try {
+    const authn = await authenticate();
 
-  const authn = await authenticate();
+    const { config } = await getFirstAwsConfig(authn);
 
-  const { config } = await getFirstAwsConfig(authn);
+    const base = yargs
+      .option("account", {
+        type: "string",
+        describe: "AWS account ID or alias (or set P0_AWS_ACCOUNT)",
+      })
+      .option("reason", {
+        describe: "Reason access is needed",
+        type: "string",
+      })
+      .env("P0_AWS");
 
-  const withCommand =
-    config.login?.type === "idc"
-      ? permissionSet(base, authn)
-      : role(base, authn);
+    const withCommand =
+      config.login?.type === "idc"
+        ? permissionSet(base, authn)
+        : role(base, authn);
+    return withCommand;
+  } catch (error) {
+    // Handle authentication errors here, since
+    // this occurs during command building
 
-  return withCommand.demandCommand(1);
+    // Handle Firestore shutdown here, since Firebase is
+    // initialized as part of authentication
+    shutdownFirebase();
+
+    print2(error);
+    sys.exit(1);
+    throw error; // This will never be reached, but is needed to satisfy TypeScript
+  }
 };
 
 export const awsCommand = (yargs: yargs.Argv) =>

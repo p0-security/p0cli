@@ -24,20 +24,18 @@ export const role = (
   authn: Authn
 ) =>
   yargs.command("role", "Interact with AWS roles", (yargs) =>
-    yargs
-      .command(
-        "assume <role>",
-        "Assume an AWS role",
-        (y: yargs.Argv<{ account: string | undefined }>) =>
-          y.positional("role", {
-            type: "string",
-            demandOption: true,
-            describe: "An AWS role name",
-          }),
-        // TODO: select based on uidLocation
-        fsShutdownGuard((argv) => oktaAwsAssumeRole(argv, authn))
-      )
-      .demandCommand(1)
+    yargs.command(
+      "assume <role>",
+      "Assume an AWS role",
+      (y: yargs.Argv<{ account: string | undefined }>) =>
+        y.positional("role", {
+          type: "string",
+          demandOption: true,
+          describe: "An AWS role name",
+        }),
+      // TODO: select based on uidLocation
+      fsShutdownGuard((argv) => oktaAwsAssumeRole(argv, authn))
+    )
   );
 
 /** Assumes a role in AWS via Okta SAML federation.
