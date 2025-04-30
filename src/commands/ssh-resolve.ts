@@ -116,7 +116,7 @@ const sshResolveAction = async (
 
   const p0Executable = bootstrapConfig.appPath;
 
-  // Replace any characters that don't make a good 
+  // Replace any characters that don't make a good destination, approximates RFC-1123
   const sanitizedDestination = destination.replace(/[^a-zA-Z0-9-_]/g, "_");
 
   const data = `Host ${destination}
@@ -135,7 +135,7 @@ const sshResolveAction = async (
     P0_PATH,
     "ssh",
     "configs",
-    `${sanitizedDestination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    `${sanitizedDestination}.config`
   );
 
   if (args.debug) {
