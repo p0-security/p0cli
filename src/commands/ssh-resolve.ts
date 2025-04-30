@@ -119,6 +119,7 @@ const sshResolveAction = async (
   // Replace any characters that don't make a good destination, approximates RFC-1123
   const sanitizedDestination = destination.replace(/[^a-zA-Z0-9-_]/g, "_");
 
+  // Use the sanitized destionation in Hostname. Avoid error "Destination cannot contain a forward slash (/)."
   const data = `Host ${destination}
   Hostname ${sanitizedDestination}
   User ${request.linuxUserName}
