@@ -116,8 +116,11 @@ const sshResolveAction = async (
 
   const p0Executable = bootstrapConfig.appPath;
 
+  // Replace any characters that don't make a good 
+  const sanitizedDestination = destination.replace(/[^a-zA-Z0-9-_]/g, "_");
+
   const data = `Host ${destination}
-  Hostname ${destination}
+  Hostname ${sanitizedDestination}
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
@@ -127,11 +130,12 @@ const sshResolveAction = async (
   await fs.promises.mkdir(path.join(P0_PATH, "ssh", "configs"), {
     recursive: true,
   });
+
   const configLocation = path.join(
     P0_PATH,
     "ssh",
     "configs",
-    `${destination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    `${sanitizedDestination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   );
 
   if (args.debug) {
