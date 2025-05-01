@@ -28,7 +28,7 @@ import yargs from "yargs";
 export const sshResolveCommand = (yargs: yargs.Argv) =>
   yargs.command<SshResolveCommandArgs>(
     "ssh-resolve <destination>",
-    "Determine if a hostname is managed by p0 and prepare an ssh configuration for immediate use with p0 ssh-proxy",
+    false,
     (yargs) =>
       yargs
         .positional("destination", {
