@@ -20,7 +20,7 @@ import yargs from "yargs";
 export const sshProxyCommand = (yargs: yargs.Argv) =>
   yargs.command<SshProxyCommandArgs>(
     "ssh-proxy <destination>",
-    "SSH into a virtual machine",
+    false,
     (yargs) =>
       yargs
         .positional("destination", {

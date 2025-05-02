@@ -28,7 +28,7 @@ import yargs from "yargs";
 export const sshResolveCommand = (yargs: yargs.Argv) =>
   yargs.command<SshResolveCommandArgs>(
     "ssh-resolve <destination>",
-    "SSH into a virtual machine",
+    false,
     (yargs) =>
       yargs
         .positional("destination", {
