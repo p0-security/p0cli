@@ -8,12 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { sanitizeAsFileName } from "../common/destination";
 import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { bootstrapConfig } from "../drivers/env";
 import { fsShutdownGuard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { verifyDestinationString } from "../plugins/ssh";
 import { conditionalAbortBeforeThrow, P0_PATH } from "../util";
 import {
   SSH_PROVIDERS,
@@ -73,19 +73,10 @@ const sshResolveAction = async (
 
   const authn = await authenticate({ noRefresh: true }).catch(silentlyExit);
 
-  let destination = args.destination;
-  try {
-    destination = verifyDestinationString(args.destination);
-  } catch (e) {
-    if (!args.quiet) {
-      throw e;
-    }
-  }
-
   const { request, provisionedRequest } = await prepareRequest(
     authn,
     args,
-    destination,
+    args.destination,
     true,
     args.quiet
   ).catch(silentlyExit);
@@ -116,12 +107,17 @@ const sshResolveAction = async (
 
   const p0Executable = bootstrapConfig.appPath;
 
-  // Replace any characters that don't make a good destination, approximates RFC-1123
-  const sanitizedDestination = destination.replace(/[^a-zA-Z0-9-_]/g, "_");
+  // The config file name must be a valid file name (without forward slashes) so we can create it.
+  // The config file will be deleted by the ssh-proxy command. Sanitization here and upon deletion must match.
+  const configFile = sanitizeAsFileName(args.destination);
 
-  // Use the sanitized destionation in Hostname. Avoid error "Destination cannot contain a forward slash (/)."
-  const data = `Host ${destination}
-  Hostname ${sanitizedDestination}
+  // `Host` matches the destination entered in the `ssh` command. The rest of the config
+  // options will be used if there is a match.
+  // `Hostname` is used to translate the `Host` to a host name. If the ProxyCommand used
+  // a tool like `ssh` or `nc`, this would have to be a DNS-resolvable host name or an IP
+  // address. Since we are using `p0 ssh-proxy`, it can be anything as long as we resolve it.
+  const data = `Host ${args.destination}
+  Hostname ${args.destination}
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
@@ -136,7 +132,7 @@ const sshResolveAction = async (
     P0_PATH,
     "ssh",
     "configs",
-    `${sanitizedDestination}.config`
+    `${configFile}.config`
   );
 
   if (args.debug) {

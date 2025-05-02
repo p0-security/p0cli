@@ -8,9 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { sanitizeAsFileName } from "../common/destination";
 import { authenticate } from "../drivers/auth";
 import { fsShutdownGuard } from "../drivers/firestore";
-import { sshProxy, verifyDestinationString } from "../plugins/ssh";
+import { sshProxy } from "../plugins/ssh";
 import { P0_PATH } from "../util";
 import { SSH_PROVIDERS, SshProxyCommandArgs } from "./shared/ssh";
 import * as fs from "fs/promises";
@@ -79,13 +80,14 @@ const sshProxyAction = async (
 
   const privateKey = await fs.readFile(args.identityFile, "utf8");
 
-  const destination = verifyDestinationString(args.destination);
+  // This config file was created by the ssh-resolve command. Use the same sanitization here.
+  const configFile = sanitizeAsFileName(args.destination);
 
   const configLocation = path.join(
     P0_PATH,
     "ssh",
     "configs",
-    `${destination}.config` // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    `${configFile}.config`
   );
 
   if (args.debug) {
