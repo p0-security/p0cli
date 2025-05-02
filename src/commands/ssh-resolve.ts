@@ -30,7 +30,7 @@ const ENV_PREFIX = "P0_SSH";
 export const sshResolveCommand = (yargs: yargs.Argv) =>
   yargs.command<SshResolveCommandArgs>(
     "ssh-resolve <destination>",
-    "SSH into a virtual machine",
+    false,
     (yargs) =>
       yargs
         .positional("destination", {
