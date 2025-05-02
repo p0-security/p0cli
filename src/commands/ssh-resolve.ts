@@ -84,7 +84,7 @@ const sshResolveAction = async (
       err.toLowerCase().includes("reason is required")
     ) {
       print2(
-        `Please provide a reason for the request using the --reason flag or by setting the ${ENV_PREFIX}_REASON environment variable.`
+        `Please set the ${ENV_PREFIX}_REASON environment variable or request access with "p0 request ssh ... --reason ..." to the destination first.`
       );
     }
     return silentlyExit(err);
