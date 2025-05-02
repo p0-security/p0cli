@@ -25,6 +25,8 @@ import path from "path";
 import tmp from "tmp-promise";
 import yargs from "yargs";
 
+const ENV_PREFIX = "P0_SSH";
+
 export const sshResolveCommand = (yargs: yargs.Argv) =>
   yargs.command<SshResolveCommandArgs>(
     "ssh-resolve <destination>",
@@ -53,7 +55,12 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
           alias: "q",
           type: "boolean",
           describe: "Suppress output",
-        }),
+        })
+        .option("reason", {
+          describe: "Reason access is needed",
+          type: "string",
+        })
+        .env(ENV_PREFIX),
 
     fsShutdownGuard(sshResolveAction)
   );
@@ -71,6 +78,18 @@ const sshResolveAction = async (
 ) => {
   const silentlyExit = conditionalAbortBeforeThrow(args.quiet ?? false);
 
+  const requestErrorHandler = (err: any) => {
+    if (
+      typeof err === "string" &&
+      err.toLowerCase().includes("reason is required")
+    ) {
+      print2(
+        `Please provide a reason for the request using the --reason flag or by setting the ${ENV_PREFIX}_REASON environment variable.`
+      );
+    }
+    return silentlyExit(err);
+  };
+
   const authn = await authenticate({ noRefresh: true }).catch(silentlyExit);
 
   const { request, provisionedRequest } = await prepareRequest(
@@ -79,7 +98,7 @@ const sshResolveAction = async (
     args.destination,
     true,
     args.quiet
-  ).catch(silentlyExit);
+  ).catch(requestErrorHandler);
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 

@@ -146,7 +146,7 @@ export const provisionRequest = async (
         destination,
         "--public-key",
         publicKey,
-        ...(approvedOnly ? ["--approved-only"] : []),
+        ...(approvedOnly ? ["--approved"] : []),
         ...(args.provider ? ["--provider", args.provider] : []),
         ...(isSudoCommand(args) ? ["--sudo"] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
