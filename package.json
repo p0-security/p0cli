@@ -16,7 +16,7 @@
     "node": ">=20.14"
   },
   "files": [
-    "dist",
+    "build",
     "p0",
     "README.md",
     "CONTRIBUTING.md",

@@ -1,0 +1,16 @@
+#!/usr/bin/env node --no-deprecation
+
+const originalEmit = process.emit;
+process.emit = function (name, data, ...args) {
+  if (
+    name === `warning` &&
+    typeof data === `object` &&
+    data.name === `ExperimentalWarning` &&
+    data.message.startsWith(`The Fetch API is an experimental feature.`)
+  ) {
+    return false;
+  }
+  return originalEmit.apply(process, arguments);
+};
+
+require(`${__dirname}/build/dist/index.js`).main();
