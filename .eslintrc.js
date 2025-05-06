@@ -59,7 +59,7 @@ module.exports = {
     "prettier.config.js",
     "jest.config.js",
     "public/**",
-    "dist/**",
+    "build/**",
     "__mocks__/**",
     "node_modules/**",
     "p0.js",
