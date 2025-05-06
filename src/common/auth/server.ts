@@ -13,9 +13,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { sleep } from "../../util";
 import express from "express";
 import http from "node:http";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
-const ROOT_PATH = `${dirname(require.main!.filename)}/dist`;
+const ROOT_PATH = join(dirname(__filename), "..", "..");
 
 /** A small amount of time is necessary prior to shutting down the redirect server to
  * properly render the redirect-landing page

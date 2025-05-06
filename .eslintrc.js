@@ -62,6 +62,7 @@ module.exports = {
     "dist/**",
     "__mocks__/**",
     "node_modules/**",
+    "p0.js",
   ],
   overrides: [],
   parserOptions: {

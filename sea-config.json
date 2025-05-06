@@ -1,0 +1,5 @@
+{
+  "main": "./build/p0.js",
+  "output": "./build/p0.blob",
+  "disableExperimentalSEAWarning": true
+}

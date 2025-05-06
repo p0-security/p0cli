@@ -69,9 +69,9 @@
     "ts-node": "^10.9.2"
   },
   "scripts": {
-    "build": "tsc && cp -r public dist/",
+    "build": "tsc && cp -r public build/dist/",
     "test:unit": "NODE_ENV=unit jest --color",
-    "clean": "rm -f tsconfig.tsbuildinfo && rm -rf dist/",
+    "clean": "rm -rf build",
     "lint": "yarn prettier --check . &&  yarn run eslint --max-warnings 0 .",
     "p0": "node --no-deprecation ./p0",
     "prepublishOnly": "npm run clean && npm run build"
