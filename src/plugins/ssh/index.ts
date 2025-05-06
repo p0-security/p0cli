@@ -16,6 +16,7 @@ import {
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
@@ -207,7 +208,7 @@ async function spawnSshNode(
       if (!isAccessPropagated()) {
         if (options.endTime < Date.now()) {
           reject(
-            `Access did not propagate through ${provider.friendlyName} in time. Please contact support@p0.dev for assistance.`
+            `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
           );
           return;
         }
@@ -427,7 +428,7 @@ export const sshOrScp = async (args: {
   const { debug } = cmdArgs;
 
   if (!privateKey) {
-    throw "Failed to load a private key for this request. Please contact support@p0.dev for assistance.";
+    throw `Failed to load a private key for this request. ${getContactMessage()}`;
   }
 
   const abortController = new AbortController();

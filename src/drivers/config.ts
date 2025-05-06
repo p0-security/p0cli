@@ -27,12 +27,18 @@ let tenantConfig: Config;
 
 export const getTenantConfig = () => tenantConfig;
 
+export const getContactMessage = () =>
+  tenantConfig?.contactMessage ?? bootstrapConfig.contactMessage;
+
+export const getHelpMessage = () =>
+  tenantConfig?.helpMessage ?? bootstrapConfig.helpMessage;
+
 /** Use only if the organization is configured with Google login to P0 */
 export const getGoogleTenantConfig = () => {
   if ("google" in tenantConfig) {
     return tenantConfig;
   }
-  throw "Login failed!\nThis organization is configured to use Google login but the required OAuth client parameters are missing.\nPlease contact support@p0.dev to properly configure your organization login.";
+  throw `Login failed!\nThis organization is configured to use Google login but the required OAuth client parameters are missing.\n${getContactMessage()}`;
 };
 
 export const saveConfig = async (orgId: string) => {

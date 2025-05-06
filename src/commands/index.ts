@@ -8,7 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { print2 } from "../drivers/stdio";
+import { getHelpMessage } from "../drivers/config";
+import { print1, print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
@@ -41,8 +42,23 @@ const commands = [
   kubeconfigCommand,
 ];
 
+const argv = yargs(hideBin(process.argv));
+
+// Override the default yargs showHelp function to include a custom help message at the end
+const originalShowHelp = argv.showHelp.bind(argv);
+argv.showHelp = (arg?: string | ((s: string) => void)) => {
+  if (typeof arg === "function") {
+    originalShowHelp((s) => arg(s + "\n" + getHelpMessage()));
+  } else {
+    originalShowHelp(arg);
+    print1(`\n${getHelpMessage()}`);
+  }
+
+  return argv;
+};
+
 export const cli = commands
-  .reduce((m, c) => c(m), yargs(hideBin(process.argv)))
+  .reduce((m, c) => c(m), argv)
   .middleware(checkVersion)
   .strict()
   .demandCommand(1)
@@ -52,6 +68,7 @@ export const cli = commands
     } else {
       print2(yargs.help());
       print2(`\n${message}`);
+      print2(`\n${getHelpMessage()}`);
     }
     sys.exit(1);
   });

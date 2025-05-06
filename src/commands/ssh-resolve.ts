@@ -11,7 +11,6 @@ You should have received a copy of the GNU General Public License along with @p0
 import { sanitizeAsFileName } from "../common/destination";
 import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
-import { bootstrapConfig } from "../drivers/env";
 import { fsShutdownGuard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { conditionalAbortBeforeThrow, P0_PATH } from "../util";
@@ -22,6 +21,7 @@ import {
 } from "./shared/ssh";
 import fs from "fs";
 import path from "path";
+import { env } from "process";
 import tmp from "tmp-promise";
 import yargs from "yargs";
 
@@ -124,7 +124,7 @@ const sshResolveAction = async (
     ? `CertificateFile ${keys.certificatePath}`
     : "";
 
-  const p0Executable = bootstrapConfig.appPath;
+  const p0Executable = env.P0_APP_PATH ?? "p0";
 
   // The config file name must be a valid file name (without forward slashes) so we can create it.
   // The config file will be deleted by the ssh-proxy command. Sanitization here and upon deletion must match.

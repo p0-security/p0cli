@@ -8,13 +8,14 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { GoogleApplicationConfig } from "../types/org";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const { env } = process;
 
-export const bootstrapConfig = {
+export const bootstrapConfig: GoogleApplicationConfig = {
   fs: {
     // Falls back to public production Firestore credentials
     apiKey: env.P0_FS_API_KEY ?? "AIzaSyCaL-Ik_l_5tdmgNUNZ4Nv6NuR4o5_PPfs",
@@ -40,6 +41,7 @@ export const bootstrapConfig = {
       env.P0_GOOGLE_OIDC_CLIENT_SECRET ?? "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",
   },
   appUrl: env.P0_APP_URL ?? "https://api.p0.app",
-  appPath: env.P0_APP_PATH ?? "p0",
   environment: env.P0_ENV ?? "production",
+  contactMessage: "Please contact support@p0.dev for assistance.",
+  helpMessage: "For additional support, please contact support@p0.dev.",
 };

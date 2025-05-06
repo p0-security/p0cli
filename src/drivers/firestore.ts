@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Identity } from "../types/identity";
-import { loadConfig } from "./config";
+import { getContactMessage, loadConfig } from "./config";
 import { bootstrapConfig } from "./env";
 import { FirebaseApp, initializeApp } from "firebase/app";
 import {
@@ -75,7 +75,7 @@ export async function authenticateToFirebase(
   const userCredential = await signInWithCredential(auth, firebaseCredential);
 
   if (!userCredential?.user?.email) {
-    throw "Can not sign in: this user has previously signed in with a different identity provider.\nPlease contact support@p0.dev to enable this user.";
+    throw `Can not sign in: this user has previously signed in with a different identity provider.\n${getContactMessage()}`;
   }
 
   return userCredential;
