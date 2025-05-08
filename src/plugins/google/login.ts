@@ -15,7 +15,6 @@ import { getGoogleTenantConfig } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
-
 import pkceChallenge from "pkce-challenge";
 
 type CodeExchange = {
