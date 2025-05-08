@@ -21,7 +21,6 @@ import {
 } from "./shared/ssh";
 import fs from "fs";
 import path from "path";
-import { env } from "process";
 import tmp from "tmp-promise";
 import yargs from "yargs";
 
