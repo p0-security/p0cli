@@ -13,7 +13,7 @@ import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { fsShutdownGuard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { conditionalAbortBeforeThrow, P0_PATH } from "../util";
+import { conditionalAbortBeforeThrow, getAppPath, P0_PATH } from "../util";
 import {
   SSH_PROVIDERS,
   SshResolveCommandArgs,
@@ -124,7 +124,7 @@ const sshResolveAction = async (
     ? `CertificateFile ${keys.certificatePath}`
     : "";
 
-  const p0Executable = env.P0_APP_PATH ?? "p0";
+  const appPath = getAppPath();
 
   // The config file name must be a valid file name (without forward slashes) so we can create it.
   // The config file will be deleted by the ssh-proxy command. Sanitization here and upon deletion must match.
@@ -141,7 +141,7 @@ const sshResolveAction = async (
   IdentityFile ${identityFile}
   ${certificateInfo}
   PasswordAuthentication no
-  ProxyCommand ${p0Executable} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name} ${args.debug ? "--debug" : ""}`;
+  ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name} ${args.debug ? "--debug" : ""}`;
 
   await fs.promises.mkdir(path.join(P0_PATH, "ssh", "configs"), {
     recursive: true,

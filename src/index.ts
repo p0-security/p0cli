@@ -17,7 +17,8 @@ export const main = async () => {
   try {
     await loadConfig();
   } catch (error: any) {
-    // Ignore the error if the config file does not exist.
+    // The config file may not be present if the user has not yet logged in,
+    //  or has deleted the config. In that case, ignore the error and continue.
     // It will use the default messages instead.
     if (error?.code !== "ENOENT") {
       throw error;

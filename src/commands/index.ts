@@ -42,23 +42,27 @@ const commands = [
   kubeconfigCommand,
 ];
 
-const argv = yargs(hideBin(process.argv));
+const buildArgv = () => {
+  const argv = yargs(hideBin(process.argv));
 
-// Override the default yargs showHelp function to include a custom help message at the end
-const originalShowHelp = argv.showHelp.bind(argv);
-argv.showHelp = (arg?: string | ((s: string) => void)) => {
-  if (typeof arg === "function") {
-    originalShowHelp((s) => arg(s + "\n" + getHelpMessage()));
-  } else {
-    originalShowHelp(arg);
-    print1(`\n${getHelpMessage()}`);
-  }
+  // Override the default yargs showHelp() function to include a custom help message at the end
+  const originalShowHelp = argv.showHelp.bind(argv);
+  argv.showHelp = (arg?: string | ((s: string) => void)) => {
+    if (typeof arg === "function") {
+      originalShowHelp((s) => arg(s + "\n" + getHelpMessage()));
+    } else {
+      originalShowHelp(arg);
+      print1(`\n${getHelpMessage()}`);
+    }
+
+    return argv;
+  };
 
   return argv;
 };
 
 export const cli = commands
-  .reduce((m, c) => c(m), argv)
+  .reduce((m, c) => c(m), buildArgv())
   .middleware(checkVersion)
   .strict()
   .demandCommand(1)
