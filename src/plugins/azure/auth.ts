@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { exec } from "../../util";
 import { AzureSshRequest } from "./types";
@@ -21,11 +22,9 @@ export const AUTHORIZATION_FAILED_PATTERN =
   /The client '.+' with object id '.+' does not have authorization to perform action '.+' over scope '.+' or the scope is invalid. If access was recently granted, please refresh your credentials/;
 export const USER_NOT_IN_CACHE_PATTERN =
   /Exception in handling client: User '.+' does not exist in MSAL token cache./;
-export const CONTACT_SUPPORT_MESSAGE =
-  "If the issue persists, please contact support@p0.dev.";
 export const NASCENT_ACCESS_GRANT_MESSAGE =
   "If access was recently granted, please try again in a few minutes.";
-export const ABORT_AUTHORIZATION_FAILED_MESSAGE = `Your Microsoft Token Cache is out of date. Run 'az account clear' and 'az login' to refresh your credentials. ${CONTACT_SUPPORT_MESSAGE}`;
+export const ABORT_AUTHORIZATION_FAILED_MESSAGE = `Your Microsoft Token Cache is out of date. Run 'az account clear' and 'az login' to refresh your credentials. ${getContactMessage()}`;
 
 export const azLoginCommand = (tenantId: string) => ({
   command: "az",
@@ -94,7 +93,7 @@ const performLogin = async (
     }
 
     if (FAILED_TO_RESOLVE_TENANT_PATTERN.test(error.stderr)) {
-      throw `Failed to resolve tenant "${directoryId}". ${NASCENT_ACCESS_GRANT_MESSAGE} ${CONTACT_SUPPORT_MESSAGE}`;
+      throw `Failed to resolve tenant "${directoryId}". ${NASCENT_ACCESS_GRANT_MESSAGE} ${getContactMessage()}`;
     }
 
     if (LOGIN_ATTEMPT_CANCELLED_PATTERN.test(error.stderr)) {

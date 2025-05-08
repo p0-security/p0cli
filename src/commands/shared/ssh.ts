@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { waitForProvisioning } from ".";
 import { createKeyPair } from "../../common/keys";
+import { getContactMessage } from "../../drivers/config";
 import { doc } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
@@ -191,7 +192,7 @@ export const prepareRequest = async (
     quiet
   );
   if (!result) {
-    throw "Server did not return a request id. Please contact support@p0.dev for assistance.";
+    throw `Server did not return a request id. ${getContactMessage()}`;
   }
 
   const { requestId, publicKey, provisionedRequest } = result;

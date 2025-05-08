@@ -101,7 +101,7 @@ describe("login", () => {
       });
       await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(`
 "Can not sign in: this user has previously signed in with a different identity provider.
-Please contact support@p0.dev to enable this user."
+Please contact support@p0.dev for assistance."
 `);
     });
   });

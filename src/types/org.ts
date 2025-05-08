@@ -19,6 +19,8 @@ type ApplicationConfig = {
   };
   appUrl: string;
   environment: string;
+  contactMessage: string;
+  helpMessage: string;
 };
 
 export type GoogleApplicationConfig = ApplicationConfig & {
