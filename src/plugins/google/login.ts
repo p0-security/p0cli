@@ -16,6 +16,8 @@ import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import open from "open";
 
+import pkceChallenge from "pkce-challenge";
+
 type CodeExchange = {
   code: string;
   authuser: string;
@@ -29,7 +31,6 @@ const PKCE_LENGTH = 128;
 
 const requestAuth = async () => {
   const tenantConfig = getGoogleTenantConfig();
-  const pkceChallenge = (await import("pkce-challenge")).default as any;
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const authBody: AuthorizeRequest = {
     client_id: tenantConfig.google.clientId,

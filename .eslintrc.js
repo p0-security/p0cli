@@ -62,7 +62,7 @@ module.exports = {
     "build/**",
     "__mocks__/**",
     "node_modules/**",
-    "p0.js",
+    "esbuild.js",
   ],
   overrides: [],
   parserOptions: {

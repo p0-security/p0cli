@@ -1,5 +1,3 @@
-cp ./p0.js ./build/p0.js
-
 # See https://nodejs.org/docs/latest-v20.x/api/single-executable-applications.html for more information.
 # Some of these commands only work on macOS. Windows and Linux require slightly different commands.
 node --experimental-sea-config sea-config.json 
