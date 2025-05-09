@@ -88,7 +88,11 @@ export async function authenticateToFirebase(
       throw EXPIRED_CREDENTIALS_MESSAGE;
     } else {
       if (options?.debug) {
-        print2("Authentication error: " + error);
+        if (error instanceof Error) {
+          print2(`Authentication error: ${error.message}`);
+        } else {
+          print2(`Authentication error: ${String(error)}`);
+        }
       }
       throw `An unexpected error occurred during authentication.\n${getContactMessage()}`;
     }
