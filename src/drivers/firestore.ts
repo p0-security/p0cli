@@ -11,7 +11,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Identity } from "../types/identity";
 import { getContactMessage, loadConfig } from "./config";
 import { bootstrapConfig } from "./env";
-import { FirebaseApp, initializeApp } from "firebase/app";
+import { print2 } from "./stdio";
+import { EXPIRED_CREDENTIALS_MESSAGE } from "./util";
+import { FirebaseApp, FirebaseError, initializeApp } from "firebase/app";
 import {
   getAuth,
   OAuthProvider,
@@ -55,7 +57,10 @@ const findProviderId = (identity: Identity) => {
 };
 
 export async function authenticateToFirebase(
-  identity: Identity
+  identity: Identity,
+  options?: {
+    debug?: boolean;
+  }
 ): Promise<UserCredential> {
   const { credential } = identity;
   const tenantId = identity.org.tenantId;
@@ -72,7 +77,22 @@ export async function authenticateToFirebase(
   const auth = getAuth(app);
   auth.tenantId = tenantId;
 
-  const userCredential = await signInWithCredential(auth, firebaseCredential);
+  let userCredential;
+  try {
+    userCredential = await signInWithCredential(auth, firebaseCredential);
+  } catch (error) {
+    if (
+      error instanceof FirebaseError &&
+      error.code === "auth/invalid-credential"
+    ) {
+      throw EXPIRED_CREDENTIALS_MESSAGE;
+    } else {
+      if (options?.debug) {
+        print2("Authentication error: " + error);
+      }
+      throw `An unexpected error occurred during authentication.\n${getContactMessage()}`;
+    }
+  }
 
   if (!userCredential?.user?.email) {
     throw `Can not sign in: this user has previously signed in with a different identity provider.\n${getContactMessage()}`;
