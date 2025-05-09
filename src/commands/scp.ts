@@ -77,7 +77,7 @@ export const scpCommand = (yargs: yargs.Argv) =>
  * Implicitly gains access to the SSH resource if required.
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
-  const authn = await authenticate();
+  const authn = await authenticate(args);
 
   const sshOptions: string[] = Array.isArray(args["--"])
     ? args["--"].map(String)

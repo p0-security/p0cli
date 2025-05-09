@@ -89,7 +89,10 @@ const sshResolveAction = async (
     return silentlyExit(err);
   };
 
-  const authn = await authenticate({ noRefresh: true }).catch(silentlyExit);
+  const authn = await authenticate({
+    noRefresh: true,
+    debug: args.debug,
+  }).catch(silentlyExit);
 
   const { request, provisionedRequest } = await prepareRequest(
     authn,

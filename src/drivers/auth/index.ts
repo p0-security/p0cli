@@ -14,6 +14,7 @@ import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
+import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -85,27 +86,36 @@ const clearIdentityCache = async () => {
   }
 };
 
-const loadCredentialsWithAutoLogin = async (options?: {
-  noRefresh?: boolean;
-}): Promise<Identity> => {
+export const loadCredentials = async (): Promise<Identity> => {
   try {
     const buffer = await fs.readFile(getIdentityFilePath());
-    const identity: Identity = JSON.parse(buffer.toString());
-    if (
-      !options?.noRefresh &&
-      identity.credential.expires_at < Date.now() * 1e-3
-    ) {
-      await login({ org: identity.org.slug }, { skipAuthenticate: true });
-      print2("\u200B"); // Force a new line
-      return loadCredentialsWithAutoLogin({ noRefresh: true });
-    }
-    return identity;
+    return JSON.parse(buffer.toString());
   } catch (error: any) {
     if (error?.code === "ENOENT") {
       throw "Please run `p0 login <organization>` to use the P0 CLI.";
     }
     throw error;
   }
+};
+
+export const remainingTokenTime = (identity: Identity) =>
+  identity.credential.expires_at - Date.now() * 1e-3;
+
+const loadCredentialsWithAutoLogin = async (options?: {
+  noRefresh?: boolean;
+}): Promise<Identity> => {
+  const identity = await loadCredentials();
+  if (remainingTokenTime(identity) > 60) {
+    return identity;
+  }
+
+  if (options?.noRefresh) {
+    throw EXPIRED_CREDENTIALS_MESSAGE;
+  }
+
+  await login({ org: identity.org.slug }, { skipAuthenticate: true });
+  print2("\u200B"); // Force a new line
+  return loadCredentialsWithAutoLogin({ noRefresh: true });
 };
 
 export const writeIdentity = async (
@@ -122,17 +132,8 @@ export const writeIdentity = async (
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     identityFilePath,
-    JSON.stringify(
-      {
-        credential: { ...credential, expires_at },
-        org,
-      },
-      null,
-      2
-    ),
-    {
-      mode: "600",
-    }
+    JSON.stringify({ credential: { ...credential, expires_at }, org }, null, 2),
+    { mode: "600" }
   );
 };
 
@@ -143,9 +144,10 @@ export const deleteIdentity = async () => {
 
 export const authenticate = async (options?: {
   noRefresh?: boolean;
+  debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
-  const userCredential = await authenticateToFirebase(identity);
+  const userCredential = await authenticateToFirebase(identity, options);
 
   return { userCredential, identity };
 };
