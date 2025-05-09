@@ -13,4 +13,4 @@ process.emit = function (name, data, ...args) {
   return originalEmit.apply(process, arguments);
 };
 
-require(`${__dirname}/dist/index.js`).main();
+require(`${__dirname}/build/dist/index.js`).main();

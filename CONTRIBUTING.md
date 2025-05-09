@@ -21,3 +21,9 @@ follow certain guidelines, in order to ensure usability of the CLI:
     via `console.log`
 - Client-usage errors (that is, errors that provide feedback to the user of expected CLI misuse)
   should be emmitted using `throw <message>`; this prevents a stack trace from being shown
+
+## Single-Artifact Binary
+
+To build the CLI as a single-artifact binary, use the `yarn build` script and then
+run `build.sh`. The built binary will be output to `/build`. It can be run
+even if NodeJS isn't installed on your system. Currently only MacOS is supported.

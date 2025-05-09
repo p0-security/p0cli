@@ -19,7 +19,7 @@ import {
   oidcLoginSteps,
   validateProviderDomain,
 } from "../oidc/login";
-import { JSDOM } from "jsdom";
+import * as cheerio from "cheerio";
 import { omit } from "lodash";
 
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
@@ -71,11 +71,9 @@ const fetchSamlResponse = async (
   const response = await fetch(url, init);
   await validateResponse(response);
   const html = await response.text();
-  const dom = new JSDOM(html);
-  const samlInput = dom.window.document.querySelector(
-    'input[name="SAMLResponse"]'
-  );
-  return (samlInput as HTMLInputElement | undefined)?.value;
+  const $ = cheerio.load(html);
+  const samlInputValue = $('input[name="SAMLResponse"]').val();
+  return typeof samlInputValue === "string" ? samlInputValue : undefined;
 };
 
 /** Logs in to Okta via OIDC */
