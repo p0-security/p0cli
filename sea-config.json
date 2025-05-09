@@ -1,5 +1,9 @@
 {
   "main": "./build/p0.js",
   "output": "./build/p0.blob",
-  "disableExperimentalSEAWarning": true
+  "disableExperimentalSEAWarning": true,
+  "assets": {
+    "favicon.ico": "./public/favicon.ico",
+    "redirect-landing.html": "./public/redirect-landing.html"
+  }
 }
