@@ -70,7 +70,8 @@
     "ts-node": "^10.9.2"
   },
   "scripts": {
-    "build": "tsc && cp -r public build/dist/ && node esbuild.js",
+    "build": "tsc && cp -r public build/dist/",
+    "build:sea": "tsc && cp -r public build/dist/ && node esbuild.js && ./build.sh",
     "test:unit": "NODE_ENV=unit jest --color",
     "clean": "rm -rf build",
     "lint": "yarn prettier --check . &&  yarn run eslint --max-warnings 0 .",

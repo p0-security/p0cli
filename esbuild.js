@@ -8,7 +8,7 @@ esbuild
     platform: "node",
     target: "node20",
     format: "cjs",
-    outfile: "build/p0.js",
+    outfile: "build/sea/p0.js",
   })
   .then(() => {
     console.log("Bundling succeeded.");

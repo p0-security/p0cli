@@ -1,6 +1,6 @@
 {
-  "main": "./build/p0.js",
-  "output": "./build/p0.blob",
+  "main": "./build/sea/p0.js",
+  "output": "./build/sea/p0.blob",
   "disableExperimentalSEAWarning": true,
   "assets": {
     "favicon.ico": "./public/favicon.ico",
