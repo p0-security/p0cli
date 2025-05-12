@@ -19,6 +19,8 @@ import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import * as fs from "fs/promises";
 import * as path from "path";
 
+const MIN_REMAINING_TOKEN_TIME_SECONDS = 60;
+
 export const cached = async <T>(
   name: string,
   loader: () => Promise<T>,
@@ -105,7 +107,7 @@ const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
 }): Promise<Identity> => {
   const identity = await loadCredentials();
-  if (remainingTokenTime(identity) > 60) {
+  if (remainingTokenTime(identity) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
     return identity;
   }
 
