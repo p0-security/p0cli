@@ -8,7 +8,13 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { authenticate, deleteIdentity, writeIdentity } from "../drivers/auth";
+import {
+  authenticate,
+  deleteIdentity,
+  loadCredentials,
+  remainingTokenTime,
+  writeIdentity,
+} from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
 import { fsShutdownGuard, initializeFirebase } from "../drivers/firestore";
 import { doc } from "../drivers/firestore";
@@ -18,6 +24,25 @@ import { OrgData, RawOrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
 import yargs from "yargs";
 
+const doActualLogin = async (orgWithSlug: OrgData) => {
+  const plugin = orgWithSlug?.ssoProvider;
+  const loginFn = pluginLoginMap[plugin];
+
+  if (!loginFn) throw "Unsupported login for your organization";
+
+  const tokenResponse = await loginFn(orgWithSlug);
+
+  await writeIdentity(orgWithSlug, tokenResponse);
+};
+
+const formatTimeLeft = (seconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(seconds)); // Ensure non-negative and integer
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}h${m}m${s}s`;
+};
+
 /** Logs in the user.
  *
  * If the P0_ORG environment variable is set, it is used as the organization name,
@@ -26,18 +51,51 @@ import yargs from "yargs";
  * Otherwise, the identity file is written to the ~/.p0 directory.
  */
 export const login = async (
-  args: { org: string },
+  args: { org?: string },
   options?: { skipAuthenticate?: boolean }
 ) => {
-  const org = args.org || process.env.P0_ORG;
-
-  if (!org) {
-    throw new Error(
-      "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."
-    );
+  let identity;
+  try {
+    identity = await loadCredentials();
+  } catch {
+    // Ignore error, as no credentials may yet be present
   }
 
-  await saveConfig(org);
+  const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
+
+  let loggedIn = tokenTimeRemaining > 5 * 60;
+  let org = args.org || process.env.P0_ORG;
+
+  if (!org) {
+    if (identity && loggedIn) {
+      // If no org is provided, and the user is logged in, use the one from the identity
+      org = identity.org.slug;
+
+      print2(`You are currently logged in to the ${org} organization.`);
+      print2(
+        `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
+      );
+    } else {
+      throw "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
+    }
+  } else {
+    if (identity && loggedIn) {
+      if (org !== identity.org.slug) {
+        // Force login if user is switching organizations
+        loggedIn = false;
+      } else {
+        print2(`You are already logged in to the ${org} organization.`);
+        print2(
+          `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
+        );
+      }
+    }
+  }
+
+  if (!loggedIn) {
+    await saveConfig(org);
+  }
+
   await initializeFirebase();
 
   const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
@@ -47,22 +105,20 @@ export const login = async (
 
   const orgWithSlug: OrgData = { ...orgData, slug: org };
 
-  const plugin = orgWithSlug?.ssoProvider;
-  const loginFn = pluginLoginMap[plugin];
+  if (!loggedIn) {
+    await doActualLogin(orgWithSlug);
+  }
 
-  if (!loginFn) throw "Unsupported login for your organization";
-
-  const tokenResponse = await loginFn(orgWithSlug);
-
-  await writeIdentity(orgWithSlug, tokenResponse);
-
-  // validate auth
   if (!options?.skipAuthenticate) {
     await authenticate();
     await validateTenantAccess(orgData);
   }
 
-  print2(`You are now logged in, and can use the p0 CLI.`);
+  if (!loggedIn) {
+    print2(
+      `You are now logged in to the ${org} organization, and can use the p0 CLI.`
+    );
+  }
 };
 
 export const loginCommand = (yargs: yargs.Argv) =>
@@ -70,17 +126,10 @@ export const loginCommand = (yargs: yargs.Argv) =>
     "login [org]",
     "Log in to p0 using a web browser",
     (yargs) =>
-      yargs
-        .positional("org", {
-          type: "string",
-          describe: "Your P0 organization ID",
-        })
-        .check((argv) => {
-          if (!argv.org && !process.env.P0_ORG) {
-            throw "The 'org' argument is required if the P0_ORG environment variable is not set.";
-          }
-          return true;
-        }),
+      yargs.positional("org", {
+        type: "string",
+        describe: "Your P0 organization ID",
+      }),
     fsShutdownGuard(login)
   );
 
