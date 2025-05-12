@@ -24,6 +24,8 @@ import { OrgData, RawOrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
 import yargs from "yargs";
 
+const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
+
 const doActualLogin = async (orgWithSlug: OrgData) => {
   const plugin = orgWithSlug?.ssoProvider;
   const loginFn = pluginLoginMap[plugin];
@@ -63,7 +65,7 @@ export const login = async (
 
   const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
 
-  let loggedIn = tokenTimeRemaining > 5 * 60;
+  let loggedIn = tokenTimeRemaining > MIN_REMAINING_TOKEN_TIME_SECONDS;
   let org = args.org || process.env.P0_ORG;
 
   if (!org) {
