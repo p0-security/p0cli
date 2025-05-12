@@ -66,7 +66,7 @@ const sshProxyAction = async (
   args: yargs.ArgumentsCamelCase<SshProxyCommandArgs>
 ) => {
   // Prefix is required because the backend uses it to determine that this is an AWS request
-  const authn = await authenticate();
+  const authn = await authenticate(args);
 
   // TODO(ENG-3142): Azure SSH currently doesn't support specifying a port; throw an error if one is set.
   if (args.provider === "azure" && args.port != "22") {
