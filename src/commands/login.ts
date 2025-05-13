@@ -53,7 +53,7 @@ const formatTimeLeft = (seconds: number) => {
  * Otherwise, the identity file is written to the ~/.p0 directory.
  */
 export const login = async (
-  args: { org?: string },
+  args: { org?: string; refresh?: boolean },
   options?: { skipAuthenticate?: boolean }
 ) => {
   let identity;
@@ -82,8 +82,8 @@ export const login = async (
     }
   } else {
     if (identity && loggedIn) {
-      if (org !== identity.org.slug) {
-        // Force login if user is switching organizations
+      if (org !== identity.org.slug || args.refresh) {
+        // Force login if user is switching organizations or if --refresh argument is provided
         loggedIn = false;
       } else {
         print2(`You are already logged in to the ${org} organization.`);
@@ -128,10 +128,16 @@ export const loginCommand = (yargs: yargs.Argv) =>
     "login [org]",
     "Log in to p0 using a web browser",
     (yargs) =>
-      yargs.positional("org", {
-        type: "string",
-        describe: "Your P0 organization ID",
-      }),
+      yargs
+        .positional("org", {
+          type: "string",
+          describe: "Your P0 organization ID",
+        })
+        .option("refresh", {
+          type: "boolean",
+          describe: "Force re-authentication",
+          default: false,
+        }),
     fsShutdownGuard(login)
   );
 

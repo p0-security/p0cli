@@ -189,6 +189,14 @@ Please contact support@p0.dev for assistance."
         );
       });
 
+      it("--refresh provided, need to re-login", async () => {
+        await login({ org: "test-org", refresh: true });
+
+        expect(print2).toHaveBeenCalledWith(
+          "You are now logged in to the test-org organization, and can use the p0 CLI."
+        );
+      });
+
       it("different org provided, need to re-login", async () => {
         mockGetDoc({
           slug: "other-org",
