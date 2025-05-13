@@ -13,7 +13,7 @@
     "p0": "p0"
   },
   "engines": {
-    "node": ">=20.14"
+    "node": ">=22"
   },
   "files": [
     "build",
