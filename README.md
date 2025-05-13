@@ -35,7 +35,7 @@ To learn more about P0, see our [docs](https://docs.p0.dev/).
 
 ### Installation
 
-To install the P0 CLI, ensure your `node` version is 20 or higher, then run:
+To install the P0 CLI, ensure your `node` version is 22 or higher, then run:
 
 ```
 npm install -g @p0security/cli
@@ -46,8 +46,8 @@ You can now invoke the CLI by running `p0`.
 If your node version is incompatible, use `nvm`. E.g.:
 
 ```
-nvm install 20.14.0
-nvm use 20.14.0
+nvm install 22
+nvm use 22
 ```
 
 ### Configuration

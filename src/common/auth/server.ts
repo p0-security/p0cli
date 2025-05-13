@@ -12,15 +12,42 @@ You should have received a copy of the GNU General Public License along with @p0
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
 import { sleep } from "../../util";
 import express from "express";
+import { readFile } from "node:fs/promises";
 import http from "node:http";
-import { dirname } from "node:path";
+import { join, resolve } from "node:path";
+import { isSea, getAssetAsBlob } from "node:sea";
+import { Readable } from "node:stream";
 
-const ROOT_PATH = `${dirname(require.main!.filename)}/dist`;
+const ASSETS_PATH = resolve(`${join(__dirname, "..", "..")}/public`);
+const LANDING_HTML_PATH = "redirect-landing.html";
+const FAVICON_PATH = "favicon.ico";
 
 /** A small amount of time is necessary prior to shutting down the redirect server to
  * properly render the redirect-landing page
  */
 const SERVER_SHUTDOWN_WAIT_MILLIS = 2e3;
+
+const pipeToResponse = (
+  bytes: Buffer,
+  res: express.Response,
+  contentType: string
+) => {
+  const stream = Readable.from(bytes);
+  res.status(200);
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Content-Length", bytes.length);
+  stream.pipe(res);
+};
+
+const loadStaticAsset = async (path: string): Promise<Buffer> => {
+  if (isSea()) {
+    const blob = getAssetAsBlob(path);
+    return Buffer.from(await blob.arrayBuffer());
+  }
+  const filePath = join(ASSETS_PATH, path);
+  const bytes = await readFile(filePath);
+  return bytes;
+};
 
 /** Waits for an OIDC authorization redirect using a locally mounted server */
 export const withRedirectServer = async <S, T, U>(
@@ -29,7 +56,6 @@ export const withRedirectServer = async <S, T, U>(
   options?: { port?: number }
 ) => {
   const app = express();
-  app.use(express.static(`${ROOT_PATH}/public`));
 
   let redirectResolve: (result: U) => void;
   let redirectReject: (error: any) => void;
@@ -39,12 +65,22 @@ export const withRedirectServer = async <S, T, U>(
     redirectReject = reject;
   });
 
+  // load static assets
+  const pageBytes = await loadStaticAsset(LANDING_HTML_PATH);
+  const faviconBytes = await loadStaticAsset(FAVICON_PATH);
+
+  // handle favicon
+  app.get("/favicon.ico", (_, res) => {
+    pipeToResponse(faviconBytes, res, "image/x-icon");
+  });
+
+  // handle redirect
   const redirectRouter = express.Router();
   redirectRouter.get("/", (req, res) => {
     const token = req.query as T;
     complete(value, token)
       .then((result) => {
-        res.status(200).sendFile(`${ROOT_PATH}/public/redirect-landing.html`);
+        pipeToResponse(pageBytes, res, "text/html; charset=utf-8");
         redirectResolve(result);
       })
       .catch((error: any) => {
