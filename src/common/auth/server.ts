@@ -33,6 +33,7 @@ const pipeToResponse = (
   contentType: string
 ) => {
   const stream = Readable.from(bytes);
+  res.status(200);
   res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Length", bytes.length);
   stream.pipe(res);
