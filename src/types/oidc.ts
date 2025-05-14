@@ -34,11 +34,11 @@ export type AuthorizeResponse = {
 export type TokenResponse = {
   access_token: string;
   id_token: string;
-  token_type: string;
-  scope: string;
+  token_type?: string;
+  scope?: string;
   expires_in: number;
-  refresh_token: string;
-  device_secret: string;
+  refresh_token?: string;
+  device_secret?: string;
   expiry: string;
 };
 

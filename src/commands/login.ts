@@ -27,8 +27,11 @@ import yargs from "yargs";
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
 
 const doActualLogin = async (orgWithSlug: OrgData) => {
-  const plugin = orgWithSlug?.ssoProvider;
-  const loginFn = pluginLoginMap[plugin];
+  const plugin =
+    orgWithSlug?.ssoProvider ??
+    (orgWithSlug.usePassword ? "password" : undefined);
+
+  const loginFn = plugin && pluginLoginMap[plugin];
 
   if (!loginFn) throw "Unsupported login for your organization";
 
@@ -53,8 +56,8 @@ const formatTimeLeft = (seconds: number) => {
  * Otherwise, the identity file is written to the ~/.p0 directory.
  */
 export const login = async (
-  args: { org?: string; refresh?: boolean },
-  options?: { skipAuthenticate?: boolean }
+  args: { org: string; refresh?: boolean },
+  options?: { debug?: boolean; skipAuthenticate?: boolean }
 ) => {
   let identity;
   try {
@@ -112,7 +115,7 @@ export const login = async (
   }
 
   if (!options?.skipAuthenticate) {
-    await authenticate();
+    await authenticate({ debug: options?.debug });
     await validateTenantAccess(orgData);
   }
 
@@ -137,8 +140,21 @@ export const loginCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Force re-authentication",
           default: false,
+        })
+        .option("debug", {
+          type: "boolean",
+          describe: "Print debug information.",
         }),
-    fsShutdownGuard(login)
+    fsShutdownGuard(
+      (
+        args: yargs.ArgumentsCamelCase<{
+          org: string;
+          refresh?: boolean;
+          debug?: boolean;
+        }>
+      ) =>
+        login({ org: args.org, refresh: args.refresh }, { debug: args.debug })
+    )
   );
 
 const validateTenantAccess = async (org: RawOrgData) => {
