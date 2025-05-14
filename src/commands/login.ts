@@ -56,7 +56,7 @@ const formatTimeLeft = (seconds: number) => {
  * Otherwise, the identity file is written to the ~/.p0 directory.
  */
 export const login = async (
-  args: { org: string; refresh?: boolean },
+  args: { org?: string; refresh?: boolean },
   options?: { debug?: boolean; skipAuthenticate?: boolean }
 ) => {
   let identity;
@@ -152,8 +152,7 @@ export const loginCommand = (yargs: yargs.Argv) =>
           refresh?: boolean;
           debug?: boolean;
         }>
-      ) =>
-        login({ org: args.org, refresh: args.refresh }, { debug: args.debug })
+      ) => login(args, args)
     )
   );
 
