@@ -105,6 +105,7 @@ export const remainingTokenTime = (identity: Identity) =>
 
 const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
+  debug?: boolean;
 }): Promise<Identity> => {
   const identity = await loadCredentials();
   if (remainingTokenTime(identity) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
@@ -115,7 +116,10 @@ const loadCredentialsWithAutoLogin = async (options?: {
     throw EXPIRED_CREDENTIALS_MESSAGE;
   }
 
-  await login({ org: identity.org.slug }, { skipAuthenticate: true });
+  await login(
+    { org: identity.org.slug },
+    { debug: options?.debug, skipAuthenticate: true }
+  );
   print2("\u200B"); // Force a new line
   return loadCredentialsWithAutoLogin({ noRefresh: true });
 };
@@ -149,6 +153,9 @@ export const authenticate = async (options?: {
   debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
+  // Note: if the `providerId` is "password", we already actually already
+  // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
+  // This following call to `authenticateToFirebase` could be omitted.
   const userCredential = await authenticateToFirebase(identity, options);
 
   return { userCredential, identity };

@@ -8,16 +8,20 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getPasswordCredential } from "../plugins/email/login";
 import { Identity } from "../types/identity";
+import { OrgData } from "../types/org";
 import { getContactMessage, loadConfig } from "./config";
 import { bootstrapConfig } from "./env";
 import { print2 } from "./stdio";
 import { EXPIRED_CREDENTIALS_MESSAGE } from "./util";
 import { FirebaseApp, FirebaseError, initializeApp } from "firebase/app";
 import {
+  EmailAuthCredential,
   getAuth,
+  OAuthCredential,
   OAuthProvider,
-  SignInMethod,
+  ProviderId,
   signInWithCredential,
   UserCredential,
 } from "firebase/auth";
@@ -45,34 +49,32 @@ export async function initializeFirebase() {
   }
 }
 
-const findProviderId = (identity: Identity) => {
-  switch (identity.org.ssoProvider) {
+const findProviderId = (org: OrgData) => {
+  switch (org.ssoProvider) {
     case "google":
-      return SignInMethod.GOOGLE;
+      return ProviderId.GOOGLE;
     case "google-oidc":
       return "oidc.google-oidc";
+    // Assumes password login if no provider present
+    // This could also be email magic link sign-in,
+    // which is not supported in the P0 CLI.
+    case undefined:
+      return ProviderId.PASSWORD;
     default:
-      return identity.org.providerId;
+      return org.providerId;
   }
 };
 
-export async function authenticateToFirebase(
-  identity: Identity,
+export const signInToTenant = async (
+  org: OrgData,
+  firebaseCredential: EmailAuthCredential | OAuthCredential,
   options?: {
     debug?: boolean;
   }
-): Promise<UserCredential> {
-  const { credential } = identity;
-  const tenantId = identity.org.tenantId;
+): Promise<UserCredential> => {
+  const { tenantId } = org;
 
   await initializeFirebase();
-
-  const provider = new OAuthProvider(findProviderId(identity));
-
-  const firebaseCredential = provider.credential({
-    accessToken: credential.access_token,
-    idToken: credential.id_token,
-  });
 
   const auth = getAuth(app);
   auth.tenantId = tenantId;
@@ -103,7 +105,27 @@ export async function authenticateToFirebase(
   }
 
   return userCredential;
-}
+};
+
+export const authenticateToFirebase = async (
+  identity: Identity,
+  options?: {
+    debug?: boolean;
+  }
+): Promise<UserCredential> => {
+  const { credential, org } = identity;
+
+  const providerId = findProviderId(org);
+  const firebaseCredential =
+    providerId === ProviderId.PASSWORD
+      ? getPasswordCredential()
+      : new OAuthProvider(providerId).credential({
+          accessToken: credential.access_token,
+          idToken: credential.id_token,
+        });
+
+  return await signInToTenant(org, firebaseCredential, options);
+};
 
 export const collection = <T>(path: string, ...pathSegments: string[]) => {
   return fsCollection(

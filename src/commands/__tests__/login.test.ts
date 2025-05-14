@@ -34,6 +34,7 @@ const mockIdentity: Identity = {
   org: {
     tenantId: "test-tenant",
     slug: "test-org",
+    ssoProvider: "google",
   },
 } as Identity;
 
@@ -50,7 +51,7 @@ describe("login", () => {
 
   it("prints a friendly error if the org is not provided", async () => {
     mockGetDoc(undefined);
-    await expect(login({})).rejects.toMatchInlineSnapshot(
+    await expect(login({} as any)).rejects.toMatchInlineSnapshot(
       `"The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."`
     );
   });
@@ -166,7 +167,7 @@ Please contact support@p0.dev for assistance."
       });
 
       it("no org provided, prints current logged-in status", async () => {
-        await login({});
+        await login({} as any);
 
         expect(print2).toHaveBeenCalledWith(
           "You are currently logged in to the test-org organization."

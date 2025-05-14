@@ -36,13 +36,14 @@ type BaseOrgData = {
   clientId: string;
   providerId: string;
   providerDomain?: string;
-  ssoProvider:
+  ssoProvider?:
     | "azure-oidc"
     | "google-oidc"
     | "google"
     | "microsoft"
     | "oidc-pkce"
     | "okta";
+  usePassword?: boolean;
   tenantId: string;
   config: Config;
 };
