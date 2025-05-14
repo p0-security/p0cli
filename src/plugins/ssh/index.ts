@@ -176,7 +176,9 @@ async function spawnSshNode(
       process.on(signal, () => {
         try {
           child.kill();
-        } catch {}
+        } catch {
+          // Ignore errors
+        }
         process.exit();
       });
     });
