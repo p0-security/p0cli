@@ -132,28 +132,12 @@ const parseAndPrintSshOutputToStderr = (
   }
 };
 
-export const spawnChildProcess = (
-  credential: AwsCredentials | undefined,
-  command: string,
-  args: string[],
-  stdio: [StdioNull, StdioNull, StdioPipe]
-) =>
-  spawn(command, args, {
-    env: {
-      ...process.env,
-      ...credential,
-    },
-    stdio,
-    shell: false,
-  });
-
 type SpawnSshNodeOptions = {
   credential?: AwsCredentials;
   command: string;
   args: string[];
   endTime: number;
   abortController?: AbortController;
-  detached?: boolean;
   stdio: [StdioNull, StdioNull, StdioPipe];
   provider: SupportedSshProvider;
   debug?: boolean;
@@ -178,12 +162,26 @@ async function spawnSshNode(
       );
     }
 
-    const child = spawnChildProcess(
-      options.credential,
-      options.command,
-      options.args,
-      options.stdio
-    );
+    const child = spawn(options.command, options.args, {
+      env: {
+        ...process.env,
+        ...options.credential,
+      },
+      stdio: options.stdio,
+      shell: false,
+    });
+
+    // Make sure if the parent process is killed, we kill the child process too
+    ["exit", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"].forEach((signal) => {
+      process.on(signal, () => {
+        try {
+          child.kill();
+        } catch {
+          // Ignore errors
+        }
+        process.exit();
+      });
+    });
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const { isAccessPropagated, isLoginException } = accessPropagationGuard(
