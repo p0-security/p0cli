@@ -10,18 +10,30 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
+import { LoginPlugin, LoginPluginMethods } from "../login";
 import { oidcLogin, oidcLoginSteps } from "../oidc/login";
 
+const SCOPES = "openid email profile";
+
 /** Logs in to PingOne via OIDC */
-export const pingLogin = async (org: OrgData) =>
-  oidcLogin<AuthorizeResponse, TokenResponse>(
-    oidcLoginSteps(org, "openid email profile", () => {
-      if (org.providerType !== "ping" || org.providerType === undefined) {
-        throw `Invalid provider type ${org.providerType} (expected "ping")`;
-      }
-      return {
-        deviceAuthorizationUrl: `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`,
-        tokenUrl: `https://${org.providerDomain}/${org.environmentId}/as/token`,
-      };
-    })
-  );
+export const pingLogin: LoginPlugin = async (
+  org: OrgData
+): Promise<LoginPluginMethods> => {
+  if (org.providerType !== "ping") {
+    throw `Invalid provider type ${org.providerType} (expected "ping")`;
+  }
+
+  const urls = {
+    deviceAuthorizationUrl: `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`,
+    tokenUrl: `https://${org.providerDomain}/${org.environmentId}/as/token`,
+  };
+
+  const loginSteps = oidcLoginSteps(org, SCOPES, () => urls);
+
+  return {
+    login: async () =>
+      await oidcLogin<AuthorizeResponse, TokenResponse>(loginSteps),
+    renewAccessToken: async (_refreshToken: string) =>
+      Promise.resolve(undefined),
+  };
+};

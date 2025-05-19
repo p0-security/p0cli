@@ -28,14 +28,21 @@ const loginPlugins = [
 
 export type LoginPluginType = (typeof loginPlugins)[number];
 
-export const pluginLoginMap: Record<
-  string,
-  (org: OrgData) => Promise<TokenResponse>
-> = {
+export type LoginPluginMethods = {
+  login: (org: OrgData) => Promise<TokenResponse>;
+  renewAccessToken: (
+    refreshToken: string
+  ) => Promise<TokenResponse | undefined>;
+};
+
+export type LoginPlugin = (org: OrgData) => Promise<LoginPluginMethods>;
+
+export const loginPluginMap: Record<string, LoginPlugin> = {
   google: googleLogin,
   okta: oktaLogin,
   ping: pingLogin,
   "google-oidc": googleLogin,
-  "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
   password: emailPasswordLogin,
+  "oidc-pkce": async (org: OrgData) =>
+    await loginPluginMap[org.providerType!]!(org),
 };

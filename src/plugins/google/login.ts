@@ -14,6 +14,7 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { getGoogleTenantConfig } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
+import { LoginPlugin, LoginPluginMethods } from "../login";
 import open from "open";
 import pkceChallenge from "pkce-challenge";
 
@@ -38,13 +39,17 @@ const requestAuth = async () => {
     redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
     response_type: "code",
     scope: "openid email",
+    access_type: "offline", // Required to obtain a refresh token
+    prompt: "consent", // Required to obtain a refresh token
   };
+
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
   open(url).catch(() => {
     print2(`Please visit the following URL to continue login:
 
 ${url}`);
   });
+
   return pkce;
 };
 
@@ -70,10 +75,34 @@ const requestToken = async (
   return (await valid.json()) as TokenResponse;
 };
 
-export const googleLogin = async () => {
-  return await withRedirectServer<any, CodeExchange, TokenResponse>(
-    async () => await requestAuth(),
-    async (pkce, token) => await requestToken(token.code, pkce),
-    { port: GOOGLE_OIDC_REDIRECT_PORT }
-  );
+const renewToken = async (refreshToken: string) => {
+  const tenantConfig = getGoogleTenantConfig();
+  const body = {
+    client_id: tenantConfig.google.clientId,
+    client_secret: tenantConfig.google.publicClientSecretForPkce,
+    refresh_token: refreshToken,
+    grant_type: "refresh_token",
+  };
+  const response = await fetch(GOOGLE_OIDC_EXCHANGE_URL, {
+    method: "POST",
+    headers: OIDC_HEADERS,
+    body: urlEncode(body),
+  });
+  const valid = await validateResponse(response);
+  return (await valid.json()) as TokenResponse;
 };
+
+export const googleLogin: LoginPlugin =
+  async (): Promise<LoginPluginMethods> => {
+    return {
+      login: async () => {
+        return withRedirectServer<any, CodeExchange, TokenResponse>(
+          async () => await requestAuth(),
+          async (pkce, token) => await requestToken(token.code, pkce),
+          { port: GOOGLE_OIDC_REDIRECT_PORT }
+        );
+      },
+      renewAccessToken: async (refreshToken: string) =>
+        await renewToken(refreshToken),
+    };
+  };
