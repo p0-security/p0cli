@@ -22,6 +22,7 @@ import {
 import fs from "fs";
 import path from "path";
 import tmp from "tmp-promise";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 const ENV_PREFIX = "P0_SSH";
@@ -86,6 +87,17 @@ const sshResolveAction = async (
         `Please set the ${ENV_PREFIX}_REASON environment variable or request access with "p0 request ssh ... --reason ..." to the destination first.`
       );
     }
+
+    if (
+      typeof err === "string" &&
+      err.startsWith("Could not find any instances matching")
+    ) {
+      if (args.debug) {
+        print2(err);
+      }
+      sys.exit(1);
+    }
+
     return silentlyExit(err);
   };
 
