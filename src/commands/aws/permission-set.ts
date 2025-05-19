@@ -9,15 +9,13 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { fsShutdownGuard } from "../../drivers/firestore";
-import { print1, print2 } from "../../drivers/stdio";
 import { getAwsConfig } from "../../plugins/aws/config";
 import { assumeRoleWithIdc } from "../../plugins/aws/idc";
-import { AwsCredentials } from "../../plugins/aws/types";
 import { Authn } from "../../types/identity";
 import { provisionRequest } from "../shared/request";
 import { AssumeCommandArgs, AssumePermissionSetCommandArgs } from "./types";
+import { printAwsCredentials } from "./util";
 import { pick } from "lodash";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export const permissionSet = (
@@ -66,7 +64,8 @@ const oktaAwsAssumePermissionSet = async (
     idc: { id: login.identityStoreId, region: login.idcRegion },
   });
 
-  printAwsCredentials(argv, awsCredential);
+  const command = `p0 aws${argv.account ? ` --account ${argv.account}` : ""} permission-set assume ${argv.permissionSet}`;
+  printAwsCredentials(awsCredential, command);
 };
 
 const buildPermissionSetRequestCommand = (
@@ -86,29 +85,4 @@ const buildPermissionSetRequestCommand = (
     ],
     wait: true,
   };
-};
-
-/**
- * Prints the AWS credentials to the console.
- *
- * @param awsCredential The AWS credentials to print.
- * @param argv The command line arguments.
- */
-const printAwsCredentials = (
-  argv: yargs.ArgumentsCamelCase<AssumePermissionSetCommandArgs>,
-  awsCredential: AwsCredentials
-) => {
-  const isTty = sys.writeOutputIsTTY?.();
-  if (isTty) print2("Execute the following commands:\n");
-  const indent = isTty ? "  " : "";
-  print1(
-    Object.entries(awsCredential)
-      .map(([key, value]) => `${indent}export ${key}=${value}`)
-      .join("\n")
-  );
-  if (isTty)
-    print2(`
-Or, populate these environment variables using BASH command substitution:
-
-  $(p0 aws${argv.account ? ` --account ${argv.account}` : ""} permission-set assume ${argv.permissionSet}) `);
 };
