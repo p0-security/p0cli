@@ -9,9 +9,8 @@ exports[`aws role a single installed account with Okta SAML assume should assume
   [
     "
 Or, populate these environment variables using BASH command substitution:
-
-  $(p0 aws role assume Role1)
-",
+  
+  $(p0 aws role assume Role1) ",
   ],
 ]
 `;
@@ -19,10 +18,16 @@ Or, populate these environment variables using BASH command substitution:
 exports[`aws role a single installed account with Okta SAML assume should assume a role: stdout 1`] = `
 [
   [
-    "  export AWS_ACCESS_KEY_ID=test-access-key
-  export AWS_SECRET_ACCESS_KEY=secret-access-key
-  export AWS_SESSION_TOKEN=session-token
-  export AWS_SECURITY_TOKEN=session-token",
+    "  export AWS_ACCESS_KEY_ID=test-access-key",
+  ],
+  [
+    "  export AWS_SECRET_ACCESS_KEY=secret-access-key",
+  ],
+  [
+    "  export AWS_SESSION_TOKEN=session-token",
+  ],
+  [
+    "  export AWS_SECURITY_TOKEN=session-token",
   ],
 ]
 `;
