@@ -14,9 +14,11 @@ import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { AwsFederatedLogin } from "../aws/types";
+import { LoginPlugin, LoginPluginMethods } from "../login";
 import {
   oidcLogin,
   oidcLoginSteps,
+  oidcTokenRefresh as oidcRenewAccessToken,
   validateProviderDomain,
 } from "../oidc/login";
 import * as cheerio from "cheerio";
@@ -26,6 +28,8 @@ const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
 const TOKEN_EXCHANGE_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange";
 const WEB_SSO_TOKEN_TYPE = "urn:okta:oauth:token-type:web_sso_token";
+
+const SCOPES = "openid email profile offline_access";
 
 /** Exchanges an Okta OIDC SSO token for an Okta app SSO token */
 const fetchSsoWebToken = async (
@@ -77,18 +81,30 @@ const fetchSamlResponse = async (
 };
 
 /** Logs in to Okta via OIDC */
-export const oktaLogin = async (org: OrgData) =>
-  oidcLogin<AuthorizeResponse, TokenResponse>(
-    oidcLoginSteps(org, "openid email profile okta.apps.sso", () => {
-      if (org.providerType !== "okta") {
-        throw `Invalid provider type ${org.providerType} (expected "okta")`;
-      }
-      return {
-        deviceAuthorizationUrl: `https://${org.providerDomain}/oauth2/v1/device/authorize`,
-        tokenUrl: `https://${org.providerDomain}/oauth2/v1/token`,
-      };
-    })
-  );
+export const oktaLogin: LoginPlugin = async (
+  org: OrgData
+): Promise<LoginPluginMethods> => {
+  if (org.providerType !== "okta") {
+    throw `Invalid provider type ${org.providerType} (expected "okta")`;
+  }
+
+  const urls = {
+    deviceAuthorizationUrl: `https://${org.providerDomain}/oauth2/v1/device/authorize`,
+    tokenUrl: `https://${org.providerDomain}/oauth2/v1/token`,
+  };
+
+  const loginSteps = oidcLoginSteps(org, SCOPES, () => urls);
+
+  return {
+    login: async () =>
+      await oidcLogin<AuthorizeResponse, TokenResponse>(loginSteps),
+    renewAccessToken: async (refreshToken: string) =>
+      await oidcRenewAccessToken<AuthorizeResponse, TokenResponse>(
+        loginSteps,
+        refreshToken
+      ),
+  };
+};
 
 /** Retrieves a SAML response for an okta app */
 // TODO: Inject Okta app

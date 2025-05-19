@@ -12,9 +12,11 @@ import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
 import { bootstrapConfig } from "../../drivers/env";
 import { print2 } from "../../drivers/stdio";
-import { pluginLoginMap } from "../../plugins/login";
+import { LoginPlugin, loginPluginMap } from "../../plugins/login";
+// import * as oktaLogin from "../../plugins/okta/login";
 import { mockGetDoc } from "../../testing/firestore";
 import { Identity } from "../../types/identity";
+import { TokenResponse } from "../../types/oidc";
 import { login } from "../login";
 import { signInWithCredential } from "firebase/auth";
 import { readFile, writeFile } from "fs/promises";
@@ -25,20 +27,28 @@ jest.mock("../../drivers/auth/path", () => ({
   getIdentityFilePath: jest.fn(() => "/dummy/identity/file/path"),
 }));
 jest.mock("../../drivers/stdio");
-jest.mock("../../plugins/login");
 
-const mockIdentity: Identity = {
-  credential: {
-    expires_at: Date.now() * 1e-3 + 60 * 1000,
-  },
-  org: {
-    tenantId: "test-tenant",
-    slug: "test-org",
-    ssoProvider: "google",
-  },
-} as Identity;
+// jest.mock("../../plugins/okta/login");
+
+const buildMockIdentity = (
+  expiresInSeconds: number,
+  hasRefreshToken?: boolean
+): Identity => {
+  return {
+    credential: {
+      expires_at: Date.now() * 1e-3 + expiresInSeconds * 1000,
+      refresh_token: hasRefreshToken ? "dummy-refresh-token" : undefined,
+    },
+    org: {
+      tenantId: "test-tenant",
+      slug: "test-org",
+      ssoProvider: "google",
+    },
+  } as Identity;
+};
 
 const mockSignInWithCredential = signInWithCredential as jest.Mock;
+// const mockOktaTokenRefresh = oktaLogin.oktaTokenRefresh as jest.Mock;
 const mockReadFile = readFile as jest.Mock;
 const mockWriteFile = writeFile as jest.Mock;
 
@@ -47,6 +57,16 @@ describe("login", () => {
     jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
     jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
     // do NOT spyOn getContactMessage — you want the real one
+
+    const mockToken: TokenResponse = buildMockIdentity(360, false).credential!;
+
+    const mockLogin: LoginPlugin = async () => ({
+      login: async () => Promise.resolve(mockToken),
+      renewAccessToken: async (_refreshToken: string) =>
+        Promise.resolve(mockToken),
+    });
+
+    loginPluginMap["google"] = mockLogin;
   });
 
   it("prints a friendly error if the org is not provided", async () => {
@@ -112,6 +132,8 @@ describe("login", () => {
       mockWriteFile.mockImplementation(async (_path, data) => {
         credentialData = data;
       });
+
+      mockSignInWithCredential.mockReset();
       mockSignInWithCredential.mockImplementation(
         async (_auth, _firebaseCredential) =>
           Promise.resolve({
@@ -128,36 +150,116 @@ describe("login", () => {
       });
     });
 
-    it("should call the provider's login function", async () => {
-      await login({ org: "test-org" });
-      expect(pluginLoginMap.google).toHaveBeenCalled();
-    });
+    describe("not logged in", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
 
-    it("should write the user's identity & config to the file system", async () => {
-      await login({ org: "test-org" });
-      expect(mockWriteFile.mock.calls).toMatchSnapshot();
-    });
-
-    it("validates authentication", async () => {
-      await login({ org: "test-org" });
-      expect((signInWithCredential as jest.Mock).mock.calls).toMatchSnapshot();
-    });
-
-    it("returns an error message if firebase cannot determine the user email", async () => {
-      mockSignInWithCredential.mockResolvedValueOnce({
-        user: {},
+        jest
+          .spyOn(auth, "loadCredentials")
+          .mockResolvedValueOnce(buildMockIdentity(-60, false))
+          .mockResolvedValueOnce(buildMockIdentity(60, false));
       });
-      await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(`
-"Can not sign in: this user has previously signed in with a different identity provider.
-Please contact support@p0.dev for assistance."
-`);
+
+      it("should write the user identity & config to the file system", async () => {
+        await login({ org: "test-org" });
+        expect(mockWriteFile.mock.calls).toMatchSnapshot();
+      });
+
+      it("validates authentication", async () => {
+        await login({ org: "test-org" });
+        expect(
+          (signInWithCredential as jest.Mock).mock.calls
+        ).toMatchSnapshot();
+      });
+
+      it("returns an error message if firebase cannot determine the user email", async () => {
+        mockSignInWithCredential.mockResolvedValueOnce({
+          user: {},
+        });
+        await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(`
+  "Can not sign in: this user has previously signed in with a different identity provider.
+  Please contact support@p0.dev for assistance."
+  `);
+      });
     });
 
     describe("already logged in", () => {
       beforeEach(() => {
         jest.clearAllMocks();
 
-        jest.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
+        jest
+          .spyOn(auth, "loadCredentials")
+          .mockResolvedValue(buildMockIdentity(60, false));
+
+        mockGetDoc({
+          slug: "test-org",
+          tenantId: "test-tenant",
+          ssoProvider: "google",
+        });
+      });
+
+      it("no org provided, prints current logged-in status", async () => {
+        await login({});
+
+        expect(print2).toHaveBeenCalledWith(
+          "You are currently logged in to the test-org organization."
+        );
+
+        expect(print2).toHaveBeenCalledWith(
+          expect.stringContaining("The current session expires in ")
+        );
+      });
+
+      it("org provided, prints already logged-in status", async () => {
+        await login({ org: "test-org" });
+
+        expect(print2).toHaveBeenCalledWith(
+          "You are already logged in to the test-org organization."
+        );
+
+        expect(print2).toHaveBeenCalledWith(
+          expect.stringContaining("The current session expires in ")
+        );
+      });
+
+      it("--refresh provided, need to re-login", async () => {
+        await login({ org: "test-org", refresh: true });
+
+        expect(print2).toHaveBeenCalledWith(
+          "You are now logged in to the test-org organization, and can use the p0 CLI."
+        );
+      });
+
+      it("different org provided, need to re-login", async () => {
+        mockGetDoc({
+          slug: "other-org",
+          tenantId: "other-tenant",
+          ssoProvider: "google",
+        });
+
+        await login({ org: "other-org" });
+
+        expect(print2).toHaveBeenCalledWith(
+          "You are now logged in to the other-org organization, and can use the p0 CLI."
+        );
+      });
+    });
+
+    describe("with refresh token", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+
+        jest
+          .spyOn(auth, "loadCredentials")
+          .mockResolvedValueOnce(buildMockIdentity(-60, true))
+          .mockResolvedValueOnce(buildMockIdentity(60, true));
+
+        // mockOktaTokenRefresh.mockResolvedValue({
+        //   access_token: "mock-access-token",
+        //   id_token: "mock-id-token",
+        //   token_type: "Bearer",
+        //   expires_in: 3600,
+        // });
 
         mockGetDoc({
           slug: "test-org",

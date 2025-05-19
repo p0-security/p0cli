@@ -9,8 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { signInToTenant } from "../../drivers/firestore";
-import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
+import { LoginPlugin, LoginPluginMethods } from "../login";
 import { EmailAuthProvider } from "firebase/auth";
 
 export const getPasswordCredential = () => {
@@ -24,21 +24,27 @@ export const getPasswordCredential = () => {
   return EmailAuthProvider.credential(email, password);
 };
 
-export const emailPasswordLogin = async (
-  org: OrgData
-): Promise<TokenResponse> => {
-  const credential = getPasswordCredential();
-  const userCredential = await signInToTenant(org, credential, { debug: true });
-  const idTokenResult = await userCredential.user.getIdTokenResult();
-  // expirationTime is in UTC, e.g. "Wed, 14 May 2025 04:07:13 GMT"
-  const expiresAt = new Date(idTokenResult.expirationTime).getTime();
-  return {
-    // Placeholder, do not store the actual password
-    // We always read the password from environment variable
-    access_token: "PASSWORD",
-    id_token: idTokenResult.token,
-    expires_in: Math.floor((expiresAt - Date.now()) * 1e-3),
-    refresh_token: userCredential.user.refreshToken,
-    expiry: idTokenResult.expirationTime,
+export const emailPasswordLogin: LoginPlugin =
+  async (): Promise<LoginPluginMethods> => {
+    return {
+      login: async (org: OrgData) => {
+        const credential = getPasswordCredential();
+        const userCredential = await signInToTenant(org, credential, {
+          debug: true,
+        });
+        const idTokenResult = await userCredential.user.getIdTokenResult();
+        // expirationTime is in UTC, e.g. "Wed, 14 May 2025 04:07:13 GMT"
+        const expiresAt = new Date(idTokenResult.expirationTime).getTime();
+        return {
+          // Placeholder, do not store the actual password
+          // We always read the password from environment variable
+          access_token: "PASSWORD",
+          id_token: idTokenResult.token,
+          expires_in: Math.floor((expiresAt - Date.now()) * 1e-3),
+          refresh_token: userCredential.user.refreshToken,
+          expiry: idTokenResult.expirationTime,
+        };
+      },
+      renewAccessToken: () => Promise.resolve(undefined),
+    };
   };
-};

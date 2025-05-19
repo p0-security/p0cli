@@ -69,7 +69,7 @@ export const authorize = async <T>(
 export const fetchOidcToken = async <T>(request: {
   url: string;
   init: RequestInit;
-}) => {
+}): Promise<T | undefined> => {
   const { url, init } = request;
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -111,9 +111,11 @@ export const oidcLoginSteps = (
   urls: () => { deviceAuthorizationUrl: string; tokenUrl: string }
 ) => {
   const { deviceAuthorizationUrl, tokenUrl } = urls();
+
   if (org.providerType === undefined) {
     throw "Your organization's login configuration does not support this access. Your P0 admin will need to install a supported OIDC provider in order for you to use this command.";
   }
+
   const buildOidcAuthorizeRequest = () => {
     validateProviderDomain(org);
     return {
@@ -128,6 +130,7 @@ export const oidcLoginSteps = (
       url: deviceAuthorizationUrl,
     };
   };
+
   const buildOidcTokenRequest = (authorize: AuthorizeResponse) => {
     validateProviderDomain(org);
 
@@ -144,11 +147,31 @@ export const oidcLoginSteps = (
       },
     };
   };
+
+  const buildOidcRefreshTokenRequest = (refreshToken: string) => {
+    validateProviderDomain(org);
+
+    return {
+      url: tokenUrl,
+      init: {
+        method: "POST",
+        headers: OIDC_HEADERS,
+        body: urlEncode({
+          client_id: org.clientId,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          scope,
+        }),
+      },
+    };
+  };
+
   return {
     providerType: org.providerType,
     validateResponse,
     buildAuthorizeRequest: buildOidcAuthorizeRequest,
     buildTokenRequest: buildOidcTokenRequest,
+    buildRefreshTokenRequest: buildOidcRefreshTokenRequest,
     processAuthzExpiry: (authorize) => ({
       expires_in: authorize.expires_in,
       interval: authorize.interval,
@@ -191,4 +214,13 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
     processAuthzExpiry,
     buildTokenRequest(deviceAuthorizationResponse)
   );
+};
+
+/** Logs in to an Identity Provider via OIDC */
+export const oidcTokenRefresh = async <A, T>(
+  steps: OidcLoginSteps<A>,
+  refreshToken: string
+): Promise<T | undefined> => {
+  const request = steps.buildRefreshTokenRequest(refreshToken);
+  return await fetchOidcToken<T>(request);
 };

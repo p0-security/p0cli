@@ -1,5 +1,3 @@
-import { LoginPluginType } from "../plugins/login";
-
 /** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
@@ -10,6 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { LoginPluginType } from "../plugins/login";
+
 export type AuthorizeRequest = {
   client_id: string;
   code_challenge: string;
@@ -19,6 +19,8 @@ export type AuthorizeRequest = {
   scope: string;
   state?: string;
   login_hint?: string;
+  access_type?: string;
+  prompt?: string;
 };
 
 export type AuthorizeResponse = {
@@ -58,6 +60,10 @@ export type OidcLoginSteps<A> = {
   validateResponse: (response: Response) => Promise<Response>;
   buildAuthorizeRequest: () => { url: string; init: RequestInit };
   buildTokenRequest: (authorize: A) => {
+    url: string;
+    init: RequestInit;
+  };
+  buildRefreshTokenRequest(refreshToken: string): {
     url: string;
     init: RequestInit;
   };

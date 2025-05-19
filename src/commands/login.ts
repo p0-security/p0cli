@@ -19,26 +19,12 @@ import { saveConfig } from "../drivers/config";
 import { fsShutdownGuard, initializeFirebase } from "../drivers/firestore";
 import { doc } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
-import { pluginLoginMap } from "../plugins/login";
+import { loginPluginMap } from "../plugins/login";
 import { OrgData, RawOrgData } from "../types/org";
 import { getDoc } from "firebase/firestore";
 import yargs from "yargs";
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
-
-const doActualLogin = async (orgWithSlug: OrgData) => {
-  const plugin =
-    orgWithSlug?.ssoProvider ??
-    (orgWithSlug.usePassword ? "password" : undefined);
-
-  const loginFn = plugin && pluginLoginMap[plugin];
-
-  if (!loginFn) throw "Unsupported login for your organization";
-
-  const tokenResponse = await loginFn(orgWithSlug);
-
-  await writeIdentity(orgWithSlug, tokenResponse);
-};
 
 const formatTimeLeft = (seconds: number) => {
   const totalSeconds = Math.max(0, Math.floor(seconds)); // Ensure non-negative and integer
@@ -46,6 +32,29 @@ const formatTimeLeft = (seconds: number) => {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${h}h${m}m${s}s`;
+};
+
+const getLoginPlugin = async (orgData: OrgData) => {
+  const ssoProvider =
+    orgData?.ssoProvider ?? (orgData.usePassword ? "password" : undefined);
+  const loginPluginFactory = ssoProvider && loginPluginMap[ssoProvider];
+  if (!loginPluginFactory) throw "Unsupported login for your organization";
+  return await loginPluginFactory(orgData);
+};
+
+const initialize = async (org: string) => {
+  await initializeFirebase();
+
+  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
+  const rawOrgData = orgDoc.data();
+
+  if (!rawOrgData) throw "Could not find organization";
+
+  const orgData: OrgData = { ...rawOrgData, slug: org };
+
+  const loginPlugin = await getLoginPlugin(orgData);
+
+  return { loginPlugin, orgData };
 };
 
 /** Logs in the user.
@@ -69,61 +78,53 @@ export const login = async (
   const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
 
   let loggedIn = tokenTimeRemaining > MIN_REMAINING_TOKEN_TIME_SECONDS;
-  let org = args.org || process.env.P0_ORG;
+
+  const orgArg = args.org || process.env.P0_ORG;
+  const org = orgArg || identity?.org.slug;
 
   if (!org) {
-    if (identity && loggedIn) {
-      // If no org is provided, and the user is logged in, use the one from the identity
-      org = identity.org.slug;
+    throw "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
+  }
 
-      print2(`You are currently logged in to the ${org} organization.`);
-      print2(
-        `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-      );
-    } else {
-      throw "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
-    }
-  } else {
-    if (identity && loggedIn) {
-      if (org !== identity.org.slug || args.refresh) {
-        // Force login if user is switching organizations or if --refresh argument is provided
-        loggedIn = false;
-      } else {
-        print2(`You are already logged in to the ${org} organization.`);
-        print2(
-          `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-        );
-      }
+  await saveConfig(org);
+
+  const { loginPlugin, orgData } = await initialize(org);
+
+  if (org !== identity?.org.slug || args.refresh) {
+    // Force login if user is switching organizations or if --refresh argument is provided
+    loggedIn = false;
+  } else if (!loggedIn && identity?.credential.refresh_token) {
+    const tokenResponse = await loginPlugin.renewAccessToken(
+      identity.credential.refresh_token
+    );
+
+    if (tokenResponse) {
+      await writeIdentity(orgData, tokenResponse);
+      loggedIn = true;
     }
   }
 
-  if (!loggedIn) {
-    await saveConfig(org);
+  if (loggedIn) {
+    print2(
+      `You are ${orgArg ? "already" : "currently"} logged in to the ${org} organization.`
+    );
+    print2(
+      `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
+    );
+    return;
   }
 
-  await initializeFirebase();
-
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
-  const orgData = orgDoc.data();
-
-  if (!orgData) throw "Could not find organization";
-
-  const orgWithSlug: OrgData = { ...orgData, slug: org };
-
-  if (!loggedIn) {
-    await doActualLogin(orgWithSlug);
-  }
+  const tokenResponse = await loginPlugin.login(orgData);
+  await writeIdentity(orgData, tokenResponse);
 
   if (!options?.skipAuthenticate) {
-    await authenticate({ debug: options?.debug });
+    await authenticate();
     await validateTenantAccess(orgData);
   }
 
-  if (!loggedIn) {
-    print2(
-      `You are now logged in to the ${org} organization, and can use the p0 CLI.`
-    );
-  }
+  print2(
+    `You are now logged in to the ${org} organization, and can use the p0 CLI.`
+  );
 };
 
 export const loginCommand = (yargs: yargs.Argv) =>
