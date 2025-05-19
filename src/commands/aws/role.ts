@@ -9,14 +9,12 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { fsShutdownGuard } from "../../drivers/firestore";
-import { print1, print2 } from "../../drivers/stdio";
-import { AwsCredentials } from "../../plugins/aws/types";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
 import { provisionRequest } from "../shared/request";
 import { AssumeRoleCommandArgs } from "./types";
+import { printAwsCredentials } from "./util";
 import { pick } from "lodash";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export const role = (
@@ -62,7 +60,8 @@ const oktaAwsAssumeRole = async (
     role: argv.role,
   });
 
-  printAwsCredentials(argv, awsCredential);
+  const command = `p0 aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role}`;
+  printAwsCredentials(awsCredential, command);
 };
 
 const buildRoleRequestCommand = (
@@ -82,30 +81,4 @@ const buildRoleRequestCommand = (
     ],
     wait: true,
   };
-};
-
-/**
- * Prints the AWS credentials to the console.
- *
- * @param argv The command line arguments.
- * @param awsCredential The AWS credentials to print.
- */
-const printAwsCredentials = (
-  argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>,
-  awsCredential: AwsCredentials
-) => {
-  const isTty = sys.writeOutputIsTTY?.();
-  if (isTty) print2("Execute the following commands:\n");
-  const indent = isTty ? "  " : "";
-  print1(
-    Object.entries(awsCredential)
-      .map(([key, value]) => `${indent}export ${key}=${value}`)
-      .join("\n")
-  );
-  if (isTty)
-    print2(`
-Or, populate these environment variables using BASH command substitution:
-
-  $(p0 aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role})
-`);
 };
