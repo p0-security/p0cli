@@ -61,9 +61,26 @@ const buildArgv = () => {
   return argv;
 };
 
+// Skip the version check for these non-interactive commands
+const skipVersionCheckFor = ["ssh-proxy", "ssh-resolve"];
+
+function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
+  const invokedCommand = argv._[0];
+
+  if (typeof invokedCommand !== "string") {
+    return;
+  }
+
+  if (skipVersionCheckFor.includes(invokedCommand)) {
+    return;
+  } else {
+    return checkVersion(argv);
+  }
+}
+
 export const cli = commands
   .reduce((m, c) => c(m), buildArgv())
-  .middleware(checkVersion)
+  .middleware(conditionalCheckVersion)
   .strict()
   .demandCommand(1)
   .fail((message, error, yargs) => {
