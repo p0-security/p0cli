@@ -58,7 +58,7 @@ describe("login", () => {
     jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
     // do NOT spyOn getContactMessage — you want the real one
 
-    const mockToken: TokenResponse = buildMockIdentity(360, false).credential!;
+    const mockToken: TokenResponse = buildMockIdentity(360, false).credential;
 
     const mockLogin: LoginPlugin = async () => ({
       login: async () => Promise.resolve(mockToken),
