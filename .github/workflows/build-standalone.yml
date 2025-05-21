@@ -9,11 +9,6 @@ jobs:
   build_cli:
     name: Build CLI on MacOS
     runs-on: macos-latest
-    env:
-      # APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-      # APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
-      APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: Sample_password
-      # APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: Sample_base64_cert
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -37,7 +32,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
 
           echo "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}" | base64 --decode > certificate.p12
-          security import certificate.p12 -k build.keychain -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: |
