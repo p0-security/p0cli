@@ -55,7 +55,7 @@ jobs:
           codesign --verbose=4 --remove-signature build/sea/p0
       - name: Sign build Artifact
         run: |
-          codesign --verbose=4 --timestamp --options runtime --sign "$APPLE_CODESIGN_CERT_ID" build/sea/p0
+          codesign --verbose=4 --timestamp=none --options runtime --sign "$APPLE_CODESIGN_CERT_ID" build/sea/p0
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
