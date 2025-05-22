@@ -9,6 +9,8 @@ jobs:
   build_cli:
     name: Build CLI on MacOS
     runs-on: macos-latest
+    env:
+      APPLE_CODESIGN_CERT_ID: "F9F7EEE981D7A60F83EBEC36AD675448CA0AB41B"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -19,7 +21,7 @@ jobs:
             yarn.lock
       - name: Setup environment variables
         run: |
-          echo "::add-mask::$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD"
+          echo "::add-mask::${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}"
           echo "::add-mask::${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}"
 
           KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
@@ -49,9 +51,9 @@ jobs:
       - name: Build
         run: yarn build:sea
 
-      # - name: Sign build Artifact
-      #   run: |
-      #     security find-identity -p codesigning -v
+      - name: Sign build Artifact
+        run: |
+          codesign --timestamp --options runtime --sign "$APPLE_CODESIGN_CERT_ID" build/sea/p0
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
