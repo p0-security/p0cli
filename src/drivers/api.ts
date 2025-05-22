@@ -16,7 +16,9 @@ import yargs from "yargs";
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
+
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
+const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 
 export const fetchCommand = async <T>(
   authn: Authn,
@@ -26,6 +28,22 @@ export const fetchCommand = async <T>(
   baseFetch<T>(
     authn,
     commandUrl(authn.identity.org.slug),
+    "POST",
+    JSON.stringify({
+      argv,
+      scriptName: path.basename(args.$0),
+    })
+  );
+
+/** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
+export const fetchAdminLsCommand = async <T>(
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase,
+  argv: string[]
+) =>
+  baseFetch<T>(
+    authn,
+    adminLsCommandUrl(authn.identity.org.slug),
     "POST",
     JSON.stringify({
       argv,
