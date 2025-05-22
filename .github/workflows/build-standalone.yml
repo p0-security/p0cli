@@ -50,10 +50,11 @@ jobs:
         run: yarn install
       - name: Build
         run: yarn build:sea
-
-      - name: Sign build Artifact
+      - name: Remove existing signature
         run: |
           codesign --remove-signature build/sea/p0
+      - name: Sign build Artifact
+        run: |
           codesign --timestamp --options runtime --sign "$APPLE_CODESIGN_CERT_ID" build/sea/p0
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
