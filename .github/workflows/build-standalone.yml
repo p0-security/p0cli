@@ -35,6 +35,8 @@ jobs:
 
           echo "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}" | base64 --decode > certificate.p12
           security import certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: |
