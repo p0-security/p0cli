@@ -86,17 +86,15 @@ const ls = async (
   const isAdminCommand =
     args.arguments.includes("--all") || args.arguments.includes("--principal");
 
-  const command = isAdminCommand
-    ? fetchAdminLsCommand<LsResponse>(authn, args, [
-        "ls",
-        ...(args.json ? args.arguments : convertedArgs),
-      ])
-    : fetchCommand<LsResponse>(authn, args, [
-        "ls",
-        ...(args.json ? args.arguments : convertedArgs),
-      ]);
+  const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
-  const data = await spinUntil("Listing accessible resources", command);
+  const responsePromise: Promise<LsResponse> = command<LsResponse>(
+    authn,
+    args,
+    ["ls", ...(args.json ? args.arguments : convertedArgs)]
+  );
+
+  const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
     if (args.json) {
