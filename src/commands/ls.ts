@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { AnsiSgr } from "../drivers/ansi";
-import { fetchCommand } from "../drivers/api";
+import { fetchAdminLsCommand, fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { fsShutdownGuard } from "../drivers/firestore";
 import { print2, print1, spinUntil } from "../drivers/stdio";
@@ -83,13 +83,19 @@ const ls = async (
   const authn = await authenticate();
   const { convertedArgs, requestedSize } = convertLsSizeArg(args.arguments);
 
-  const data = await spinUntil(
-    "Listing accessible resources",
-    fetchCommand<LsResponse>(authn, args, [
-      "ls",
-      ...(args.json ? args.arguments : convertedArgs),
-    ])
+  const isAdminCommand =
+    args.arguments.includes("--all") || args.arguments.includes("--principal");
+
+  const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
+
+  const responsePromise: Promise<LsResponse> = command<LsResponse>(
+    authn,
+    args,
+    ["ls", ...(args.json ? args.arguments : convertedArgs)]
   );
+
+  const data = await spinUntil("Listing accessible resources", responsePromise);
+
   if (data && "ok" in data && data.ok) {
     if (args.json) {
       print1(JSON.stringify(data, null, 2));
