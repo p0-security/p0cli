@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { P0_VERSION } from "..";
 import { Authn } from "../types/identity";
 import { getTenantConfig } from "./config";
 import * as path from "node:path";
@@ -79,6 +80,7 @@ export const baseFetch = async <T>(
       headers: {
         authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "User-Agent": `P0 CLI/${P0_VERSION}`,
       },
       body,
     });
