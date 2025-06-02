@@ -12,6 +12,8 @@ import { cli } from "./commands";
 import { loadConfig } from "./drivers/config";
 import { noop } from "lodash";
 
+export const P0_VERSION = "0.18.1';";
+
 export const main = async () => {
   // Try to load the config early here to get the custom help/contact messages (if any)
   try {
