@@ -26,7 +26,7 @@ import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const prefix = "p0cli-managed-eks";
+const KUBECONFIG_PREFIX = "p0";
 
 export const getAndValidateK8sIntegration = async (
   authn: Authn,
@@ -118,10 +118,10 @@ export const requestAccessToCluster = async (
 };
 
 export const profileName = (eksCluterName: string): string =>
-  `${prefix}-${eksCluterName}`;
+  `${KUBECONFIG_PREFIX}-${eksCluterName}`;
 
 export const aliasedArn = (eksCluterArn: string): string =>
-  `${prefix}-${eksCluterArn}`;
+  `${KUBECONFIG_PREFIX}-${eksCluterArn}`;
 
 export const awsCloudAuth = async (
   authn: Authn,
