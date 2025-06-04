@@ -26,6 +26,8 @@ import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
+const KUBECONFIG_PREFIX = "p0";
+
 export const getAndValidateK8sIntegration = async (
   authn: Authn,
   clusterId: string
@@ -71,11 +73,7 @@ export const getAndValidateK8sIntegration = async (
   }
 
   return {
-    clusterConfig: {
-      clusterId,
-      awsAccountId,
-      awsClusterArn,
-    },
+    clusterConfig: { clusterId, awsAccountId, awsClusterArn },
     awsLoginType: awsLogin.type,
   };
 };
@@ -120,7 +118,10 @@ export const requestAccessToCluster = async (
 };
 
 export const profileName = (eksCluterName: string): string =>
-  `p0cli-managed-eks-${eksCluterName}`;
+  `${KUBECONFIG_PREFIX}-${eksCluterName}`;
+
+export const aliasedArn = (eksCluterArn: string): string =>
+  `${KUBECONFIG_PREFIX}-${eksCluterArn}`;
 
 export const awsCloudAuth = async (
   authn: Authn,

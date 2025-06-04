@@ -19,6 +19,7 @@ import {
   profileName,
   requestAccessToCluster,
   getAndValidateK8sIntegration,
+  aliasedArn,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
 import { ciEquals, exec } from "../util";
@@ -100,11 +101,12 @@ const kubeconfigAction = async (
   );
 
   const profile = profileName(clusterId);
+  const alias = aliasedArn(awsClusterArn);
 
   // The `aws eks update-kubeconfig` command can't handle the ARN of the EKS cluster.
   // So we must, with great annoyance, parse it to extract the cluster name and region.
-  const clusterInfo = extractClusterNameAndRegion(awsClusterArn);
-  const { clusterRegion, clusterName } = clusterInfo;
+  const { clusterRegion, clusterName } =
+    extractClusterNameAndRegion(awsClusterArn);
 
   await writeAwsTempCredentials(profile, awsAuth);
   await writeAwsConfigProfile(profile, { region: clusterRegion });
@@ -118,6 +120,13 @@ const kubeconfigAction = async (
     clusterRegion,
     "--profile",
     profile,
+    // The alias and user-alias are used to avoid conflicts with existing kubeconfig cluster and user in the kubeconfig file.
+    // If aliases are not provided, they default to the cluster ARN. See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/eks/update-kubeconfig.html
+    "--alias",
+    alias,
+    // The user-alias argument was added in AWS CLI v2.11.6
+    "--user-alias",
+    alias,
   ];
 
   try {
@@ -127,7 +136,20 @@ const kubeconfigAction = async (
       "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
       retryWithSleep(
         async () => await exec("aws", updateKubeconfigArgs, { check: true }),
-        () => true,
+        (error: any) => {
+          if (error?.stderr) {
+            if (
+              error.stderr.includes("Unknown options") ||
+              error.stderr.includes("--user-alias")
+            ) {
+              print2(
+                "\nThe AWS CLI version is not compatible with the p0 kubeconfig command. Please update to at least version 2.11.6."
+              );
+              return false; // Stop retrying if the CLI version is incompatible
+            }
+          }
+          return true;
+        },
         8,
         2500
       )
@@ -144,7 +166,7 @@ const kubeconfigAction = async (
   try {
     const kubectlResult = await exec(
       "kubectl",
-      ["config", "use-context", awsClusterArn],
+      ["config", "use-context", alias],
       { check: true }
     );
     print2(kubectlResult.stdout);
