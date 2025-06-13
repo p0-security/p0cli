@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { cli } from "./commands";
 import { loadConfig } from "./drivers/config";
 import { noop } from "lodash";
+import { isSea } from "node:sea";
 
 export const P0_VERSION = "0.18.3';";
 
@@ -31,6 +32,6 @@ export const main = async () => {
   void (cli.parse() as any).catch(noop);
 };
 
-if (require.main === module) {
+if (require.main === module || isSea()) {
   void main();
 }
