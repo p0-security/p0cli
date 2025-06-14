@@ -11,7 +11,9 @@ jobs:
     env:
       APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
-      APPLE_CODESIGN_CERT_ID: "F9F7EEE981D7A60F83EBEC36AD675448CA0AB41B"
+      APPLE_CODESIGN_CERT_NAME: "Developer ID Application: P0 Security, Inc. (FFR8KSH76M)"
+      APPLE_INSTALLER_CERT_NAME: "Developer ID Installer: P0 Security, Inc. (FFR8KSH76M)"
+      VERSION: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,6 +30,7 @@ jobs:
       - name: Import certificates and setup Keychain
         run: |
           echo "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}" | base64 --decode > codesign_certificate.p12
+          echo "${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_CERT_BASE64 }}" | base64 --decode > installer_certificate.p12
           echo "${{ secrets.APPLE_APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}" | base64 --decode > app_store_connect_private_key.p8
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
@@ -35,28 +38,34 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
 
           security import codesign_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          security import installer_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/pkgbuild
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
       - name: Yarn install
         run: yarn install
       - name: Build
         run: yarn build:sea
-      - name: Sign build artifact
+      - name: Codesign binary
         run: |
           codesign --verbose=4 --remove-signature build/sea/p0
-          codesign --verbose=4 --timestamp --entitlements entitlements.plist --options runtime --sign "$APPLE_CODESIGN_CERT_ID" --keychain "build.keychain" build/sea/p0
-      - name: Notarize build Artifact
+          codesign --verbose=4 --timestamp --entitlements entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
+      - name: Package application
         run: |
-          zip build/sea/p0-macos-${{ github.event.release.tag_name }}.zip build/sea/p0
-          xcrun notarytool submit build/sea/p0-macos-${{ github.event.release.tag_name }}.zip --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
+          mkdir -p build/sea/root/usr/local/bin
+          cp build/sea/p0 build/sea/root/usr/local/bin/p0
+          pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-${{ env.VERSION }}.pkg
+      - name: Notarize build artifact
+        run: |
+          xcrun notarytool submit build/sea/p0-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
+          xcrun stapler staple build/sea/p0-${{ env.VERSION }}.pkg
       - name: Upload artifact to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: p0-macos-${{ github.event.release.tag_name }}
-          path: build/sea/p0
+          name: p0-macos-${{ env.VERSION }}
+          path: build/sea/p0-${{ env.VERSION }}.pkg
       - name: Upload artifact to release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/sea/p0-macos-${{ github.event.release.tag_name }}.zip
+          files: build/sea/p0-macos-${{ env.VERSION }}.pkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Cleanup keychain
