@@ -13,7 +13,7 @@ import { loadConfig } from "./drivers/config";
 import { noop } from "lodash";
 import { isSea } from "node:sea";
 
-export const P0_VERSION = "0.18.3';";
+export const P0_VERSION = "0.18.4";
 
 export const main = async () => {
   // Try to load the config early here to get the custom help/contact messages (if any)
