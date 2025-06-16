@@ -52,20 +52,20 @@ jobs:
         run: |
           mkdir -p build/sea/root/usr/local/bin
           cp build/sea/p0 build/sea/root/usr/local/bin/p0
-          pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-${{ env.VERSION }}.pkg
+          pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Notarize build artifact
         run: |
-          xcrun notarytool submit build/sea/p0-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
-          xcrun stapler staple build/sea/p0-${{ env.VERSION }}.pkg
+          xcrun notarytool submit build/sea/p0-macOS-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
+          xcrun stapler staple build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: p0-macos-${{ env.VERSION }}
-          path: build/sea/p0-${{ env.VERSION }}.pkg
+          name: p0-macOS-${{ env.VERSION }}
+          path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/sea/p0-macos-${{ env.VERSION }}.pkg
+          files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Cleanup keychain
