@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Authn } from "../types/identity";
-import { P0_VERSION_INFO } from "../version";
+import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -73,7 +73,7 @@ export const baseFetch = async <T>(
   body: string
 ) => {
   const token = await authn.userCredential.user.getIdToken();
-  const { version } = await P0_VERSION_INFO;
+  const { version } = await p0VersionInfo;
 
   try {
     const response = await fetch(url, {

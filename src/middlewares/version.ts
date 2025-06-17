@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../drivers/stdio";
 import { P0_PATH, exec, timeout } from "../util";
-import { P0_VERSION_INFO } from "../version";
+import { p0VersionInfo } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isSea } from "node:sea";
@@ -45,7 +45,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     // Write the version-check file first to avoid retrying errors
     await fs.writeFile(latestFile, "");
 
-    const { name, version } = await P0_VERSION_INFO;
+    const { name, version } = await p0VersionInfo;
 
     const npmResult = exec("npm", ["view", name, "--json"], { check: true });
     const npmPackage = await timeout(npmResult, VERSION_CHECK_TIMEOUT_MILLIS);
@@ -56,13 +56,13 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     if (semver.lt(version, latest)) {
       if (isSea()) {
         print2(
-          `╔══════════════════════════════════════╗
-║ A new version of P0 CLI is available ║
-║                                      ║
-║ To install, please view our GitHub   ║
-║ repository README for instructions:  ║
-║ https://github.com/p0-security/p0cli ║
-╚══════════════════════════════════════╝
+          `╔═══════════════════════════════════════════════╗
+║ A new version of P0 CLI is available          ║
+║                                               ║
+║ To install, download the latest version       ║
+║ from the GitHub releases page:                ║
+║ https://github.com/p0-security/p0cli/releases ║
+╚═══════════════════════════════════════════════╝
 `
         );
       } else {

@@ -15,26 +15,30 @@ const loadCurrentVersion = async (): Promise<{
   name: string;
   version: string;
 }> => {
-  if (isSea()) {
-    // When building with the standalone CLI, we need to manually include the package.json as a
-    // static asset in sea-config.json, as it is not included in the build by default.
-    const packageJsonBytes = getAssetAsBlob("package.json");
-    const json = JSON.parse(await packageJsonBytes.text());
-    const { name, version } = json;
+  try {
+    if (isSea()) {
+      // When building with the standalone CLI, we need to manually include the package.json as a
+      // static asset in sea-config.json, as it is not included in the build by default.
+      const packageJsonBytes = getAssetAsBlob("package.json");
+      const json = JSON.parse(await packageJsonBytes.text());
+      const { name, version } = json;
+      return { name, version };
+    }
+
+    // Note that package.json is installed at <root>/package.json,
+    // whereas this gets compiled to <root>/build/dist/version.js
+    // in the build. We also need to adjust the path when running tests
+    const packageJsonPath = process.env.TS_JEST
+      ? `${__dirname}/../package.json`
+      : `${__dirname}/../../package.json`;
+    const { name, version } = JSON.parse(
+      (await fs.readFile(packageJsonPath)).toString("utf-8")
+    );
+
     return { name, version };
+  } catch {
+    return { name: "@p0security/cli", version: "unknown" };
   }
-
-  // Note that package.json is installed at <root>/package.json,
-  // whereas this gets compiled to <root>/build/dist/version.js
-  // in the build. We also need to adjust the path when running tests
-  const packageJsonPath = process.env.TS_JEST
-    ? `${__dirname}/../package.json`
-    : `${__dirname}/../../package.json`;
-  const { name, version } = JSON.parse(
-    (await fs.readFile(packageJsonPath)).toString("utf-8")
-  );
-
-  return { name, version };
 };
 
-export const P0_VERSION_INFO = loadCurrentVersion();
+export const p0VersionInfo = loadCurrentVersion();
