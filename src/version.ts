@@ -16,6 +16,8 @@ const loadCurrentVersion = async (): Promise<{
   version: string;
 }> => {
   if (isSea()) {
+    // When building with the standalone CLI, we need to manually include the package.json as a
+    // static asset in sea-config.json, as it is not included in the build by default.
     const packageJsonBytes = getAssetAsBlob("package.json");
     const json = JSON.parse(await packageJsonBytes.text());
     const { name, version } = json;
