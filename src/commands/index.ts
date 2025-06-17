@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getHelpMessage } from "../drivers/config";
 import { print1, print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
+import { P0_VERSION_INFO } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
@@ -42,8 +43,9 @@ const commands = [
   kubeconfigCommand,
 ];
 
-const buildArgv = () => {
-  const argv = yargs(hideBin(process.argv));
+const buildArgv = async () => {
+  const { version } = await P0_VERSION_INFO;
+  const argv = yargs(hideBin(process.argv)).version(version);
 
   // Override the default yargs showHelp() function to include a custom help message at the end
   const originalShowHelp = argv.showHelp.bind(argv);
@@ -78,18 +80,22 @@ function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
   }
 }
 
-export const cli = commands
-  .reduce((m, c) => c(m), buildArgv())
-  .middleware(conditionalCheckVersion)
-  .strict()
-  .demandCommand(1)
-  .fail((message, error, yargs) => {
-    if (error) {
-      print2(error);
-    } else {
-      print2(yargs.help());
-      print2(`\n${message}`);
-      print2(`\n${getHelpMessage()}`);
-    }
-    sys.exit(1);
-  });
+export const getCli = async () => {
+  const cli = commands
+    .reduce((m, c) => c(m), await buildArgv())
+    .middleware(conditionalCheckVersion)
+    .strict()
+    .demandCommand(1)
+    .fail((message, error, yargs) => {
+      if (error) {
+        print2(error);
+      } else {
+        print2(yargs.help());
+        print2(`\n${message}`);
+        print2(`\n${getHelpMessage()}`);
+      }
+      sys.exit(1);
+    });
+
+  return cli;
+};

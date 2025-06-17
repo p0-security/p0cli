@@ -8,12 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { cli } from "./commands";
+import { getCli } from "./commands";
 import { loadConfig } from "./drivers/config";
 import { noop } from "lodash";
 import { isSea } from "node:sea";
-
-export const P0_VERSION = "0.18.4";
 
 export const main = async () => {
   // Try to load the config early here to get the custom help/contact messages (if any)
@@ -28,6 +26,7 @@ export const main = async () => {
     }
   }
 
+  const cli = await getCli();
   // We can suppress output here, as .fail() already print2 errors
   void (cli.parse() as any).catch(noop);
 };

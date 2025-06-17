@@ -4,6 +4,7 @@
   "disableExperimentalSEAWarning": true,
   "assets": {
     "favicon.ico": "./public/favicon.ico",
-    "redirect-landing.html": "./public/redirect-landing.html"
+    "redirect-landing.html": "./public/redirect-landing.html",
+    "package.json": "./package.json"
   }
 }
