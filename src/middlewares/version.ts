@@ -10,8 +10,10 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../drivers/stdio";
 import { P0_PATH, exec, timeout } from "../util";
+import { p0VersionInfo } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isSea } from "node:sea";
 import semver from "semver";
 import yargs from "yargs";
 
@@ -43,11 +45,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     // Write the version-check file first to avoid retrying errors
     await fs.writeFile(latestFile, "");
 
-    // Note that package.json is installed one level above "dist"
-    // We can't require package.json as it is outside the TypeScript root
-    const { name, version } = JSON.parse(
-      (await fs.readFile(`${__dirname}/../../package.json`)).toString("utf-8")
-    );
+    const { name, version } = await p0VersionInfo;
 
     const npmResult = exec("npm", ["view", name, "--json"], { check: true });
     const npmPackage = await timeout(npmResult, VERSION_CHECK_TIMEOUT_MILLIS);
@@ -56,15 +54,28 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     } = JSON.parse(npmPackage.stdout);
 
     if (semver.lt(version, latest)) {
-      print2(
-        `╔══════════════════════════════════════╗
+      if (isSea()) {
+        print2(
+          `╔═══════════════════════════════════════════════╗
+║ A new version of P0 CLI is available          ║
+║                                               ║
+║ To install, download the latest version       ║
+║ from the GitHub releases page:                ║
+║ https://github.com/p0-security/p0cli/releases ║
+╚═══════════════════════════════════════════════╝
+`
+        );
+      } else {
+        print2(
+          `╔══════════════════════════════════════╗
 ║ A new version of P0 CLI is available ║
 ║                                      ║
 ║ To install, run                      ║
 ║   npm -g update ${name.padEnd(20)} ║
 ╚══════════════════════════════════════╝
 `
-      );
+        );
+      }
     }
   } catch (error: any) {
     // Silently pass errors

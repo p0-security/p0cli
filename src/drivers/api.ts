@@ -8,8 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { P0_VERSION } from "..";
 import { Authn } from "../types/identity";
+import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -73,6 +73,7 @@ export const baseFetch = async <T>(
   body: string
 ) => {
   const token = await authn.userCredential.user.getIdToken();
+  const { version } = await p0VersionInfo;
 
   try {
     const response = await fetch(url, {
@@ -80,7 +81,7 @@ export const baseFetch = async <T>(
       headers: {
         authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "User-Agent": `P0 CLI/${P0_VERSION}`,
+        "User-Agent": `P0 CLI/${version}`,
       },
       body,
     });

@@ -35,7 +35,7 @@ To learn more about P0, see our [docs](https://docs.p0.dev/).
 
 ### Installation
 
-To install the P0 CLI, ensure your `node` version is 22 or higher, then run:
+To install the P0 CLI as an NPM package, ensure your `node` version is 22 or higher, then run:
 
 ```
 npm install -g @p0security/cli
@@ -49,6 +49,12 @@ If your node version is incompatible, use `nvm`. E.g.:
 nvm install 22
 nvm use 22
 ```
+
+We also provide the ability to install the P0 CLI as a standalone executable that does not require
+an existing installation of NodeJS. The installer is available on the GitHub [releases page](https://github.com/p0-security/p0cli/releases)
+
+The standalone CLI is currently only available on MacOS. Using the standalone CLI doesn't have any functionality that is not included
+when installing via NPM, so for most users installing via NPM is likely to fulfill your needs.
 
 ### Configuration
 
