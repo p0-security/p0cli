@@ -41,4 +41,10 @@ const loadCurrentVersion = async (): Promise<{
   }
 };
 
+// p0VersionInfo is a promise that resolves to the current version info
+// The importer needs to await this promise to actually read the version number
+// e.g. `const { name, version } = await p0VersionInfo;`
+//
+// This allows us to memoize the version info and avoid reading the
+// package.json files multiple times
 export const p0VersionInfo = loadCurrentVersion();
