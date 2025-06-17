@@ -13,6 +13,7 @@ import { P0_PATH, exec, timeout } from "../util";
 import { P0_VERSION_INFO } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isSea } from "node:sea";
 import semver from "semver";
 import yargs from "yargs";
 
@@ -53,15 +54,28 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     } = JSON.parse(npmPackage.stdout);
 
     if (semver.lt(version, latest)) {
-      print2(
-        `╔══════════════════════════════════════╗
+      if (isSea()) {
+        print2(
+          `╔══════════════════════════════════════╗
+║ A new version of P0 CLI is available ║
+║                                      ║
+║ To install, please view our GitHub   ║
+║ repository README for instructions:  ║
+║ https://github.com/p0-security/p0cli ║
+╚══════════════════════════════════════╝
+`
+        );
+      } else {
+        print2(
+          `╔══════════════════════════════════════╗
 ║ A new version of P0 CLI is available ║
 ║                                      ║
 ║ To install, run                      ║
 ║   npm -g update ${name.padEnd(20)} ║
 ╚══════════════════════════════════════╝
 `
-      );
+        );
+      }
     }
   } catch (error: any) {
     // Silently pass errors
