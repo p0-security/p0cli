@@ -1,11 +1,11 @@
 on:
-  release:
-    types: [created]
-
+  pull_request:
+    branches:
+      - main
 name: Build Standalone CLI
 
 jobs:
-  build_cli:
+  build_macos:
     name: Build CLI on MacOS
     runs-on: macos-latest
     env:
@@ -13,7 +13,7 @@ jobs:
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
       APPLE_CODESIGN_CERT_NAME: "Developer ID Application: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_INSTALLER_CERT_NAME: "Developer ID Installer: P0 Security, Inc. (FFR8KSH76M)"
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: 0.0.0 # ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,7 +43,9 @@ jobs:
       - name: Yarn install
         run: yarn install
       - name: Build
-        run: yarn build:sea
+        run: |
+          yarn build:macos
+          ./build-macOS.sh
       - name: Codesign binary
         run: |
           codesign --verbose=4 --remove-signature build/sea/p0
@@ -62,12 +64,41 @@ jobs:
         with:
           name: p0-macOS-${{ env.VERSION }}
           path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
-      - name: Upload artifact to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload artifact to release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Cleanup keychain
         run: |
           security delete-keychain build.keychain
+  build_windows:
+    name: Build CLI on Windows
+    runs-on: windows-latest
+    env:
+      VERSION: 0.0.0 # ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+      - uses: KamaranL/add-signtool-action@v1
+      - name: Yarn install
+        run: yarn install
+      - name: Build
+        run: |
+          yarn build:windows
+          ./build-windows.bat
+      - name: List files in build directory
+        run: |
+          dir build
+          dir build/sea
+      - name: Upload artifact to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-windows-${{ env.VERSION }}
+          path: build/sea
