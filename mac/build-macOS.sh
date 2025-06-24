@@ -1,5 +1,4 @@
 # See https://nodejs.org/docs/latest-v20.x/api/single-executable-applications.html for more information.
-# Some of these commands only work on macOS. Windows and Linux require slightly different commands.
 node --experimental-sea-config sea-config.json 
 cp $(node -p process.execPath) ./build/sea/p0
 codesign --remove-signature ./build/sea/p0
