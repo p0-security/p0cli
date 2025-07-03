@@ -81,7 +81,6 @@ jobs:
       SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
       SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
       SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
-      SSL_COM_ORDER_ID: ${{ secrets.SSL_COM_ORDER_ID }}
       VERSION: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
