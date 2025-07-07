@@ -45,7 +45,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
     // Write the version-check file first to avoid retrying errors
     await fs.writeFile(latestFile, "");
 
-    const { name, version } = await p0VersionInfo;
+    const { name, version } = p0VersionInfo;
 
     const npmResult = exec("npm", ["view", name, "--json"], { check: true });
     const npmPackage = await timeout(npmResult, VERSION_CHECK_TIMEOUT_MILLIS);

@@ -8,19 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import fs from "node:fs/promises";
-import { getAssetAsBlob, isSea } from "node:sea";
+import fs from "node:fs";
+import { getAsset, isSea } from "node:sea";
 
-const loadCurrentVersion = async (): Promise<{
+const loadCurrentVersion = (): {
   name: string;
   version: string;
-}> => {
+} => {
   try {
     if (isSea()) {
       // When building with the standalone CLI, we need to manually include the package.json as a
       // static asset in sea-config.json, as it is not included in the build by default.
-      const packageJsonBytes = getAssetAsBlob("package.json");
-      const json = JSON.parse(await packageJsonBytes.text());
+      const packageJsonText = getAsset("package.json", "utf-8");
+      const json = JSON.parse(packageJsonText);
       const { name, version } = json;
       return { name, version };
     }
@@ -32,7 +32,7 @@ const loadCurrentVersion = async (): Promise<{
       ? `${__dirname}/../package.json`
       : `${__dirname}/../../package.json`;
     const { name, version } = JSON.parse(
-      (await fs.readFile(packageJsonPath)).toString("utf-8")
+      fs.readFileSync(packageJsonPath).toString("utf-8")
     );
 
     return { name, version };

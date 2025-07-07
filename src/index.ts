@@ -8,12 +8,34 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+
+// Tracing initialization must happen before any other imports
+// to ensure auto-instrumentation can monkey-patch imported libraries.
+import { startTracing } from "./opentelemetry/instrumentation";
+startTracing();
+
 import { getCli } from "./commands";
 import { loadConfig } from "./drivers/config";
-import { noop } from "lodash";
+import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
+import { noop } from "lodash";
+
+const tracer = trace.getTracer("p0cli", "0.0.1");
 
 export const main = async () => {
+  await tracer.startActiveSpan("main", async (span) => {
+    try {
+      await run();
+    } catch (error: any) {
+      span.recordException(error);
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+};
+
+const run = async () => {
   // Try to load the config early here to get the custom help/contact messages (if any)
   try {
     await loadConfig();
