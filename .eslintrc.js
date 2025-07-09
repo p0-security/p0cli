@@ -63,6 +63,8 @@ module.exports = {
     "__mocks__/**",
     "node_modules/**",
     "esbuild.js",
+    "win",
+    "mac",
   ],
   overrides: [],
   parserOptions: {
