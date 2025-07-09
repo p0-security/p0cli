@@ -24,6 +24,9 @@ const awsArgs = async (yargs: yargs.Argv) => {
     const { config } = await getFirstAwsConfig(authn);
 
     const base = yargs
+      // This parent command hangs without a handler, if we require at
+      // least 1 arg we'll always correctly display a help message.
+      .demandCommand(1)
       .option("account", {
         type: "string",
         describe: "AWS account ID or alias (or set P0_AWS_ACCOUNT)",
