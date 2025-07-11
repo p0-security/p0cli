@@ -20,6 +20,9 @@ import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
 
+// The tracer version number is the version of the manual P0 CLI instrumentation.
+// It is not the version of the P0 CLI itself or the version of the OpenTelemetry library.
+// Change this when the manual instrumentation adds / removes spans, attributes, etc.
 const tracer = trace.getTracer("p0cli", "0.0.1");
 
 export const main = async () => {

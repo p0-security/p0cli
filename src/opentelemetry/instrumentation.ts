@@ -28,12 +28,11 @@ const sdk = new NodeSDK({
   }),
   traceExporter: bufferedExporter,
   instrumentations: [
+    // Disable instrumentations to decrease span volume
     getNodeAutoInstrumentations({
-      // Spans with name `tcp.connect` and `tls.connect` from instrumentation-net package represent ~8% of all spans
       "@opentelemetry/instrumentation-net": {
         enabled: false,
       },
-      // Spans with name `dns.lookup`from instrumentation-dns package represent ~3% of all spans
       "@opentelemetry/instrumentation-dns": {
         enabled: false,
       },
@@ -70,6 +69,4 @@ const shutdownSdk = () => {
 process.on("SIGINT", shutdownSdk);
 process.on("SIGTERM", shutdownSdk);
 process.on("beforeExit", shutdownSdk);
-process.on("uncaughtException", () => {
-  shutdownSdk();
-});
+process.on("uncaughtException", shutdownSdk);
