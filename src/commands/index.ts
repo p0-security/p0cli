@@ -44,7 +44,7 @@ const commands = [
 ];
 
 const buildArgv = async () => {
-  const { version } = await p0VersionInfo;
+  const { version } = p0VersionInfo;
   const argv = yargs(hideBin(process.argv)).version(version);
 
   // Override the default yargs showHelp() function to include a custom help message at the end
