@@ -104,6 +104,7 @@ const sshProxyAction = async (
     authn,
     cmdArgs: args,
     request,
+    docId: request.docId,
     privateKey,
     debug: args.debug ?? false,
     sshProvider,

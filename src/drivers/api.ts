@@ -11,12 +11,15 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
+import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
 
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
+const sshAuditUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
@@ -66,6 +69,43 @@ export const submitPublicKey = async <T>(
       publicKey: args.publicKey,
     })
   );
+
+export const auditSshSessionActivity = async (args: {
+  authn: Authn;
+  docId: string;
+  sessionId: string;
+  action: `${"proxy" | "scp" | "ssh"}.session.${"end" | "start"}`;
+  debug: boolean | undefined;
+}) => {
+  const { authn, docId, action, sessionId, debug } = args;
+
+  if (debug) {
+    print2(`Submitting audit log for request: ${docId}`);
+    print2(`Action: ${action}`);
+    print2(`Session ID: ${sessionId}`);
+  }
+
+  try {
+    await baseFetch(
+      authn,
+      sshAuditUrl(authn.identity.org.slug),
+      "POST",
+      JSON.stringify({
+        docId,
+        action,
+        sessionId,
+      })
+    );
+    if (debug) {
+      print2(`Audit log submitted for request: ${docId}`);
+    }
+  } catch (error) {
+    if (debug) {
+      print2(`Failed to submit audit log for request: ${docId}`);
+      print2(`Error: ${JSON.stringify(error)}`);
+    }
+  }
+};
 
 export const baseFetch = async <T>(
   authn: Authn,
