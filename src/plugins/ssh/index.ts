@@ -179,7 +179,8 @@ async function spawnSshNode(
         } catch {
           // Ignore errors
         }
-        process.exit();
+        // Resolving the promise so that we don't hang the process forever.
+        resolve(0);
       });
     });
 
