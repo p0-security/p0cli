@@ -428,13 +428,13 @@ const preTestAccessPropagationIfNeeded = async <
 export const sshOrScp = async (args: {
   authn: Authn;
   request: SshRequest;
-  docId: string;
+  requestId: string;
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
 }) => {
-  const sessionId = randomUUID();
-  const { authn, request, docId, cmdArgs, privateKey, sshProvider } = args;
+  const sshSessionId = randomUUID();
+  const { authn, request, requestId, cmdArgs, privateKey, sshProvider } = args;
   const { debug } = cmdArgs;
 
   if (!privateKey) {
@@ -494,10 +494,10 @@ export const sshOrScp = async (args: {
       audit: (action) =>
         void auditSshSessionActivity({
           authn,
-          docId,
-          sessionId,
+          requestId,
+          sshSessionId,
           debug,
-          action: `${command}.session.${action}`,
+          action: `ssh.session.${action}`,
         }),
       credential,
       abortController,
@@ -516,14 +516,14 @@ export const sshOrScp = async (args: {
 export const sshProxy = async (args: {
   authn: Authn;
   request: SshRequest;
-  docId: string;
+  requestId: string;
   cmdArgs: SshProxyCommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
   debug: boolean;
   port: string;
 }) => {
-  const { authn, sshProvider, request, docId, debug } = args;
+  const { authn, sshProvider, request, requestId, debug } = args;
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
@@ -551,9 +551,9 @@ export const sshProxy = async (args: {
 
   const auditArgs = {
     authn,
-    docId,
+    requestId,
     debug,
-    sessionId: randomUUID(),
+    sshSessionId: randomUUID(),
   };
 
   try {
@@ -562,7 +562,7 @@ export const sshProxy = async (args: {
     // to check for stdout/stderr for session start/end messages.
     void auditSshSessionActivity({
       ...auditArgs,
-      action: `proxy.session.start`,
+      action: `ssh.session.start`,
     });
     return await spawnSshNode({
       credential,
@@ -577,7 +577,7 @@ export const sshProxy = async (args: {
   } finally {
     await auditSshSessionActivity({
       ...auditArgs,
-      action: `proxy.session.end`,
+      action: `ssh.session.end`,
     });
     await setupData?.teardown();
   }

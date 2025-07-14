@@ -72,17 +72,17 @@ export const submitPublicKey = async <T>(
 
 export const auditSshSessionActivity = async (args: {
   authn: Authn;
-  docId: string;
-  sessionId: string;
-  action: `${"proxy" | "scp" | "ssh"}.session.${"end" | "start"}`;
+  requestId: string;
+  sshSessionId: string;
+  action: `ssh.session.${"end" | "start"}`;
   debug: boolean | undefined;
 }) => {
-  const { authn, docId, action, sessionId, debug } = args;
+  const { authn, requestId, action, sshSessionId, debug } = args;
 
   if (debug) {
-    print2(`Submitting audit log for request: ${docId}`);
-    print2(`Action: ${action}`);
-    print2(`Session ID: ${sessionId}`);
+    print2(
+      `Submitting audit log for request: ${requestId}, action: ${action}, sshSessionId: ${sshSessionId}`
+    );
   }
 
   try {
@@ -91,17 +91,17 @@ export const auditSshSessionActivity = async (args: {
       sshAuditUrl(authn.identity.org.slug),
       "POST",
       JSON.stringify({
-        docId,
+        requestId,
         action,
-        sessionId,
+        sshSessionId,
       })
     );
     if (debug) {
-      print2(`Audit log submitted for request: ${docId}`);
+      print2(`Audit log submitted for request: ${requestId}`);
     }
   } catch (error) {
     if (debug) {
-      print2(`Failed to submit audit log for request: ${docId}`);
+      print2(`Failed to submit audit log for request: ${requestId}`);
       print2(`Error: ${JSON.stringify(error)}`);
     }
   }

@@ -174,7 +174,7 @@ export const provisionRequest = async (
     id
   );
 
-  return { docId: id, provisionedRequest, publicKey, privateKey };
+  return { requestId: id, provisionedRequest, publicKey, privateKey };
 };
 
 export const prepareRequest = async (
@@ -195,14 +195,14 @@ export const prepareRequest = async (
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
 
-  const { docId, publicKey, provisionedRequest } = result;
+  const { requestId, publicKey, provisionedRequest } = result;
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 
   await sshProvider.submitPublicKey?.(
     authn,
     provisionedRequest,
-    docId,
+    requestId,
     publicKey
   );
 
@@ -213,5 +213,5 @@ export const prepareRequest = async (
   });
   const request = sshProvider.requestToSsh(cliRequest);
 
-  return { ...result, docId, request, sshProvider, provisionedRequest };
+  return { ...result, request, sshProvider, provisionedRequest };
 };

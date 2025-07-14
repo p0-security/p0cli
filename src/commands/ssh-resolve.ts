@@ -106,7 +106,7 @@ const sshResolveAction = async (
     debug: args.debug,
   }).catch(silentlyExit);
 
-  const { request, docId, provisionedRequest } = await prepareRequest(
+  const { request, requestId, provisionedRequest } = await prepareRequest(
     authn,
     args,
     args.destination,
@@ -133,7 +133,7 @@ const sshResolveAction = async (
   }
   fs.writeFileSync(
     tmpFile.name,
-    JSON.stringify({ ...request, docId }, null, 2)
+    JSON.stringify({ ...request, requestId }, null, 2)
   );
 
   const identityFile = keys?.privateKeyPath ?? PRIVATE_KEY_PATH;
