@@ -9,9 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { fsShutdownGuard } from "../drivers/firestore";
 import { sshOrScp } from "../plugins/ssh";
-import { SshCommandArgs, prepareRequest } from "./shared/ssh";
+import { prepareRequest, SshCommandArgs } from "./shared/ssh";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -70,7 +69,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
   $ p0 ssh example-instance --provider gcloud -- -NR '*:8080:localhost:8088' -o 'GatewayPorts yes'`
         ),
 
-    fsShutdownGuard(sshAction)
+    sshAction
   );
 
 /** Connect to an SSH backend

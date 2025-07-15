@@ -9,17 +9,16 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { waitForProvisioning } from ".";
-import { fetchCommand } from "../../drivers/api";
+import { pollChanges } from "../../common/polling";
+import { fetchCommand, fetchPermissionRequest } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
-import { doc } from "../../drivers/firestore";
 import { print2, spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
-  PluginRequest,
   PermissionRequest,
+  PluginRequest,
   RequestResponse,
 } from "../../types/request";
-import { onSnapshot } from "firebase/firestore";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -66,7 +65,7 @@ export const requestArgs = <T>(yargs: yargs.Argv<T>) =>
     });
 
 const waitForRequest = async (
-  tenantId: string,
+  authn: Authn,
   requestId: string,
   logMessage: boolean
 ) =>
@@ -74,15 +73,18 @@ const waitForRequest = async (
     if (logMessage)
       print2("Will wait up to 5 minutes for this request to complete...");
     let cancel: NodeJS.Timeout | undefined = undefined;
-    const unsubscribe = onSnapshot<PermissionRequest<PluginRequest>, object>(
-      doc(`o/${tenantId}/permission-requests/${requestId}`),
-      (snap) => {
-        const data = snap.data();
-        if (!data) return;
+
+    const unsubscribe = pollChanges<PermissionRequest<PluginRequest>>({
+      fetcher: () =>
+        fetchPermissionRequest<PermissionRequest<PluginRequest>>(
+          authn,
+          requestId
+        ),
+      onChange: (data) => {
         const { status } = data;
         if (isCompletedStatus(status)) {
           if (cancel) clearTimeout(cancel);
-          unsubscribe?.();
+          clearInterval(unsubscribe);
           const { message, code } = COMPLETED_REQUEST_STATUSES[status];
           const errorMessage = data.error
             ? `${message}: ${data.error.message}`
@@ -90,10 +92,10 @@ const waitForRequest = async (
           if (code !== 0 || logMessage) print2(errorMessage);
           resolve(code);
         }
-      }
-    );
+      },
+    });
     cancel = setTimeout(() => {
-      unsubscribe?.();
+      clearInterval(unsubscribe);
       print2("Your request did not complete within 5 minutes.");
       resolve(4);
     }, WAIT_TIMEOUT);
@@ -144,11 +146,7 @@ export const request =
       if (logMessage) print2(data.message);
       const { id } = data;
       if (args.wait && id && userCredential.user.tenantId) {
-        const code = await waitForRequest(
-          userCredential.user.tenantId,
-          id,
-          logMessage
-        );
+        const code = await waitForRequest(resolvedAuthn, id, logMessage);
         if (code) {
           sys.exit(code);
           return undefined;

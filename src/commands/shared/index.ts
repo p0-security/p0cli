@@ -8,16 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { doc } from "../../drivers/firestore";
+import { pollChanges } from "../../common/polling";
+import { baseFetch, fetchPermissionRequest } from "../../drivers/api";
 import { Authn } from "../../types/identity";
 import {
   DENIED_STATUSES,
   DONE_STATUSES,
   ERROR_STATUSES,
-  PluginRequest,
   PermissionRequest,
+  PluginRequest,
 } from "../../types/request";
-import { onSnapshot } from "firebase/firestore";
 
 /** Maximum amount of time to wait after access is approved to wait for access
  *  to be configured
@@ -32,10 +32,11 @@ export const waitForProvisioning = async <P extends PluginRequest>(
   let cancel: NodeJS.Timeout | undefined = undefined;
   const result = await new Promise<PermissionRequest<P>>((resolve, reject) => {
     let isResolved = false;
-    const unsubscribe = onSnapshot<PermissionRequest<P>, object>(
-      doc(`o/${authn.identity.org.tenantId}/permission-requests/${requestId}`),
-      (snap) => {
-        const data = snap.data();
+
+    const unsubscribe = pollChanges<PermissionRequest<P>>({
+      fetcher: () =>
+        fetchPermissionRequest<PermissionRequest<P>>(authn, requestId),
+      onChange: (data) => {
         if (!data) return;
         if (DONE_STATUSES.includes(data.status as any)) {
           resolve(data);
@@ -49,14 +50,15 @@ export const waitForProvisioning = async <P extends PluginRequest>(
           return;
         }
         isResolved = true;
-        unsubscribe();
-      }
-    );
+        clearInterval(unsubscribe);
+      },
+    });
+
     // Skip timeout in test; it holds a ref longer than the test lasts
     if (process.env.NODE_ENV === "test") return;
     cancel = setTimeout(() => {
       if (!isResolved) {
-        unsubscribe();
+        clearInterval(unsubscribe);
         reject("Timeout awaiting access grant. Please try again.");
       }
     }, GRANT_TIMEOUT_MILLIS);

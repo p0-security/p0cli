@@ -13,10 +13,8 @@ import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { AwsSshGenerated, AwsSshPermission } from "../../plugins/aws/types";
 import { sshOrScp } from "../../plugins/ssh";
-import { mockGetDoc } from "../../testing/firestore";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
-import { onSnapshot } from "firebase/firestore";
 import { noop, omit } from "lodash";
 import yargs from "yargs";
 
@@ -61,13 +59,13 @@ const MOCK_REQUEST = {
   permission: MOCK_PERMISSION,
 };
 
-mockGetDoc({
+/*mockGetDoc({
   "iam-write": {
     ["aws:test-account"]: {
       state: "installed",
     },
   },
-});
+});*/
 
 describe("ssh", () => {
   describe.each([
@@ -117,9 +115,9 @@ describe("ssh", () => {
     it("should wait for provisioning", async () => {
       const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
+      /*   (onSnapshot as any).trigger({
         status: "APPROVED",
-      });
+      });*/
       const wait = sleep(100);
       await Promise.race([wait, promise]);
       await expect(wait).resolves.toBeUndefined();
@@ -130,11 +128,11 @@ describe("ssh", () => {
         .fail(noop)
         .parse(`ssh some-instance do something`);
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
+      /*   (onSnapshot as any).trigger({
         status: "APPROVED",
-      });
+      });*/
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger(MOCK_REQUEST);
+      //(onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
@@ -144,11 +142,11 @@ describe("ssh", () => {
     it("should call sshOrScp with interactive session", async () => {
       const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger({
+      /* (onSnapshot as any).trigger({
         status: "APPROVED",
-      });
+      });*/
       await sleep(100); // Need to wait for listen before trigger in tests
-      (onSnapshot as any).trigger(MOCK_REQUEST);
+      // (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();

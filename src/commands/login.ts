@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { fetchAccountInformation } from "../drivers/api";
 import {
   authenticate,
   deleteIdentity,
@@ -16,12 +17,12 @@ import {
   writeIdentity,
 } from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
-import { fsShutdownGuard, initializeFirebase } from "../drivers/firestore";
-import { doc } from "../drivers/firestore";
+import { initializeFirebase } from "../drivers/firestore";
+import { getOrgData } from "../drivers/org";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
-import { OrgData, RawOrgData } from "../types/org";
-import { getDoc } from "firebase/firestore";
+import { Authn } from "../types/identity";
+import { OrgData } from "../types/org";
 import yargs from "yargs";
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
@@ -103,8 +104,7 @@ export const login = async (
 
   await initializeFirebase();
 
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
-  const orgData = orgDoc.data();
+  const orgData = await getOrgData(org);
 
   if (!orgData) throw "Could not find organization";
 
@@ -115,8 +115,8 @@ export const login = async (
   }
 
   if (!options?.skipAuthenticate) {
-    await authenticate({ debug: options?.debug });
-    await validateTenantAccess(orgData);
+    const authn = await authenticate({ debug: options?.debug });
+    await validateTenantAccess(authn);
   }
 
   if (!loggedIn) {
@@ -145,20 +145,19 @@ export const loginCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Print debug information.",
         }),
-    fsShutdownGuard(
-      (
-        args: yargs.ArgumentsCamelCase<{
-          org: string;
-          refresh?: boolean;
-          debug?: boolean;
-        }>
-      ) => login(args, args)
-    )
+
+    (
+      args: yargs.ArgumentsCamelCase<{
+        org: string;
+        refresh?: boolean;
+        debug?: boolean;
+      }>
+    ) => login(args, args)
   );
 
-const validateTenantAccess = async (org: RawOrgData) => {
+const validateTenantAccess = async (authn: Authn) => {
   try {
-    await getDoc(doc(`o/${org.tenantId}/auth/valid`));
+    await fetchAccountInformation(authn);
     return true;
   } catch (e) {
     await deleteIdentity();

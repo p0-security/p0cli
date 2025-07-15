@@ -14,7 +14,6 @@ import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
 import { sleep } from "../../util";
 import { requestCommand } from "../request";
-import { onSnapshot } from "firebase/firestore";
 import yargs from "yargs";
 
 jest.mock("../../drivers/api");
@@ -63,9 +62,9 @@ describe("request", () => {
       const promise = requestCommand(yargs()).parse(`${command} --wait`);
       const wait = sleep(10);
       await expect(wait).resolves.toBeUndefined();
-      (onSnapshot as any).trigger({
+      /* (onSnapshot as any).trigger({
         status: "DONE",
-      });
+      });*/
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot();
       expect(mockPrint1).not.toHaveBeenCalled();

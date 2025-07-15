@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fsShutdownGuard } from "../../drivers/firestore";
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
 import { provisionRequest } from "../shared/request";
@@ -37,7 +36,7 @@ export const role = (
             describe: "An AWS role name",
           }),
         // TODO: select based on uidLocation
-        fsShutdownGuard((argv) => oktaAwsAssumeRole(argv, authn))
+        (argv) => oktaAwsAssumeRole(argv, authn)
       )
   );
 

@@ -10,10 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { sanitizeAsFileName } from "../common/destination";
 import { authenticate } from "../drivers/auth";
-import { fsShutdownGuard } from "../drivers/firestore";
 import { sshProxy } from "../plugins/ssh";
 import { P0_PATH } from "../util";
-import { SSH_PROVIDERS, SshProxyCommandArgs } from "./shared/ssh";
+import { SshProxyCommandArgs, SSH_PROVIDERS } from "./shared/ssh";
 import * as fs from "fs/promises";
 import path from "path";
 import yargs from "yargs";
@@ -59,7 +58,7 @@ export const sshProxyCommand = (yargs: yargs.Argv) =>
         })
         .usage("$0 ssh-proxy <destination>"),
 
-    fsShutdownGuard(sshProxyAction)
+    sshProxyAction
   );
 
 const sshProxyAction = async (

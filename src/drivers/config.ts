@@ -8,12 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { Config, RawOrgData } from "../types/org";
+import { Config } from "../types/org";
 import { P0_PATH } from "../util";
 import { bootstrapConfig } from "./env";
-import { bootstrapDoc } from "./firestore";
+import { getOrgData } from "./org";
 import { print2 } from "./stdio";
-import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
 import path from "path";
 import process from "process";
@@ -42,11 +41,7 @@ export const getGoogleTenantConfig = () => {
 };
 
 export const saveConfig = async (orgId: string) => {
-  const orgDoc = await getDoc<RawOrgData, object>(
-    bootstrapDoc(`orgs/${orgId}`)
-  );
-  const orgData = orgDoc.data();
-
+  const orgData = await getOrgData(orgId);
   if (!orgData) throw "Could not find organization";
 
   const config = orgData.config ?? bootstrapConfig;

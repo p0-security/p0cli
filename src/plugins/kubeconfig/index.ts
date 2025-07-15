@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { KubeconfigCommandArgs } from "../../commands/kubeconfig";
 import { waitForProvisioning } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
-import { doc } from "../../drivers/firestore";
+import { baseFetch, fetchIntegrationConfig } from "../../drivers/api";
 import { spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
@@ -22,7 +22,6 @@ import { AwsCredentials } from "../aws/types";
 import { parseArn } from "../aws/utils";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { K8sConfig, K8sPermissionSpec } from "./types";
-import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
 import yargs from "yargs";
 
@@ -39,12 +38,13 @@ export const getAndValidateK8sIntegration = async (
   };
   awsLoginType: "federated" | "idc";
 }> => {
-  const configDoc = await getDoc<K8sConfig, object>(
-    doc(`o/${authn.identity.org.tenantId}/integrations/k8s`)
+  const configDoc = await fetchIntegrationConfig<{ config: K8sConfig }>(
+    authn,
+    "k8s"
   );
 
   // Validation done here in lieu of the backend, since the backend doesn't validate until approval. TODO: ENG-2365.
-  const config = configDoc.data()?.["iam-write"]?.[clusterId];
+  const config = configDoc.config["iam-write"]?.[clusterId];
   if (!config) {
     throw `Cluster with ID ${clusterId} not found`;
   }

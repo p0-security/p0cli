@@ -21,6 +21,29 @@ const publicKeysUrl = (tenant: string) =>
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 
+export const fetchAccountInformation = async <T>(authn: Authn) =>
+  baseFetch<T>(authn, `${tenantUrl(authn.identity.org.slug)}/account`, "GET");
+
+export const fetchPermissionRequest = async <T>(
+  authn: Authn,
+  requestId: string
+) =>
+  baseFetch<T>(
+    authn,
+    `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
+    "GET"
+  );
+
+export const fetchIntegrationConfig = async <T>(
+  authn: Authn,
+  integration: string
+) =>
+  baseFetch<T>(
+    authn,
+    `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
+    "GET"
+  );
+
 export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase,
@@ -70,7 +93,7 @@ export const baseFetch = async <T>(
   authn: Authn,
   url: string,
   method: string,
-  body: string
+  body?: string
 ) => {
   const token = await authn.userCredential.user.getIdToken();
   const { version } = await p0VersionInfo;
@@ -83,6 +106,39 @@ export const baseFetch = async <T>(
         "Content-Type": "application/json",
         "User-Agent": `P0 CLI/${version}`,
       },
+      body,
+    });
+    const text = await response.text();
+    const data = JSON.parse(text);
+    if ("error" in data) {
+      throw data.error;
+    }
+    return data as T;
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "fetch failed") {
+      throw `Network error: Unable to reach the server at ${url}.`;
+    } else {
+      throw error;
+    }
+  }
+};
+
+export const apiFetch = async <T>(
+  url: string,
+  method: string,
+  body?: string
+) => {
+  const { version } = await p0VersionInfo;
+  try {
+    const fetchConfig = {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": `P0 CLI/${version}`,
+      },
+    };
+    const response = await fetch(url, {
+      ...fetchConfig,
       body,
     });
     const text = await response.text();

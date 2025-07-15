@@ -10,7 +10,6 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { awsCommand } from "..";
 import { print1, print2 } from "../../../drivers/stdio";
-import { mockGetDoc } from "../../../testing/firestore";
 import { failure } from "../../../testing/yargs";
 import { samlResponse } from "./__input__/saml-response";
 import { stsResponse } from "./__input__/sts-response";
@@ -55,7 +54,7 @@ describe("aws role", () => {
       state: "installed",
     };
     describe("without Okta SAML", () => {
-      mockGetDoc({ "iam-write": { "1": item } });
+      // mockGetDoc({ "iam-write": { "1": item } });
       describe.each([["assume", "aws role assume Role1"]])(
         "%s",
         (_, command) => {
@@ -70,7 +69,7 @@ describe("aws role", () => {
     });
     describe("with Okta SAML", () => {
       beforeEach(() => {
-        mockGetDoc({
+        /* mockGetDoc({
           "iam-write": {
             "1": {
               ...item,
@@ -84,7 +83,7 @@ describe("aws role", () => {
               },
             },
           },
-        });
+        });*/
       });
       describe("assume", () => {
         it("should assume a role", async () => {
