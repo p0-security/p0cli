@@ -44,6 +44,7 @@ const mockWriteFile = writeFile as jest.Mock;
 describe("login", () => {
   beforeEach(() => {
     jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
+    jest.spyOn(config, "getTenantConfig").mockReturnValue(bootstrapConfig);
     // do NOT spyOn getContactMessage — you want the real one
   });
 
@@ -115,6 +116,7 @@ describe("login", () => {
           Promise.resolve({
             user: {
               email: "user@p0.dev",
+              getIdToken: jest.fn().mockResolvedValue("mock-id-token"),
             },
           })
       );

@@ -20,6 +20,7 @@ const publicKeysUrl = (tenant: string) =>
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
+export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
 export const fetchAccountInformation = async <T>(authn: Authn) =>
   baseFetch<T>(authn, `${tenantUrl(authn.identity.org.slug)}/account`, "GET");
@@ -96,7 +97,7 @@ export const baseFetch = async <T>(
   body?: string
 ) => {
   const token = await authn.userCredential.user.getIdToken();
-  const { version } = await p0VersionInfo;
+  const { version } = p0VersionInfo;
 
   try {
     const response = await fetch(url, {

@@ -9,13 +9,16 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { login } from "../../commands/login";
+import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
 import { Authn, Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
+import { tracesUrl } from "../api";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
+import { UserCredential } from "firebase/auth";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -148,6 +151,16 @@ export const deleteIdentity = async () => {
   await clearIdentityFile();
 };
 
+/** Set up trace exporter to authenticated collector endpoint */
+const setOpentelemetryExporter = async (
+  identity: Identity,
+  userCredential: UserCredential
+) => {
+  const idToken = await userCredential.user.getIdToken();
+  const url = tracesUrl(identity.org.slug);
+  await setExporterAfterLogin(url, idToken);
+};
+
 export const authenticate = async (options?: {
   noRefresh?: boolean;
   debug?: boolean;
@@ -157,6 +170,8 @@ export const authenticate = async (options?: {
   // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
   // This following call to `authenticateToFirebase` could be omitted.
   const userCredential = await authenticateToFirebase(identity, options);
+
+  await setOpentelemetryExporter(identity, userCredential);
 
   return { userCredential, identity };
 };
