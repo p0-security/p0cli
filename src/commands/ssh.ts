@@ -97,7 +97,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     throw "Azure SSH does not currently support specifying a port. SSH on the target VM must be listening on the default port 22.";
   }
 
-  const { request, privateKey, sshProvider } = await prepareRequest(
+  const { request, requestId, privateKey, sshProvider } = await prepareRequest(
     authn,
     args,
     args.destination
@@ -106,6 +106,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   await sshOrScp({
     authn,
     request,
+    requestId,
     cmdArgs: args,
     privateKey,
     sshProvider,
