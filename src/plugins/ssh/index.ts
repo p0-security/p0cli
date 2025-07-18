@@ -357,7 +357,7 @@ const addScpArgs = (args: ScpCommandArgs) => {
   }
 
   const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
-  if (!recursiveOptionExists && args.recursive) {
+  if (!recursiveOptionExists) {
     sshOptions.push("-r");
   }
 };

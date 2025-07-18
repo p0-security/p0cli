@@ -32,11 +32,6 @@ export const scpCommand = (yargs: yargs.Argv) =>
           demandOption: true,
           description: "Format [hostname:]file",
         })
-        .option("r", {
-          alias: "recursive",
-          type: "boolean",
-          describe: "Recursively copy entire directories",
-        })
         .option("reason", {
           describe: "Reason access is needed",
           type: "string",
