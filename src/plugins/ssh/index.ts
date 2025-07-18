@@ -186,6 +186,7 @@ async function spawnSshNode(
         } catch {
           // Ignore errors
         }
+        // Resolving the promise so that we don't hang the process forever.
         resolve(0);
       });
     });
@@ -366,7 +367,7 @@ const addScpArgs = (args: ScpCommandArgs) => {
   }
 
   const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
-  if (!recursiveOptionExists && args.recursive) {
+  if (!recursiveOptionExists) {
     sshOptions.push("-r");
   }
 };
