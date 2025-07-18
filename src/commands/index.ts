@@ -21,7 +21,6 @@ import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
-import { sshKeyGenCommand } from "./ssh-keygen";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
 import { sys } from "typescript";
@@ -39,7 +38,6 @@ const commands = [
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
-  sshKeyGenCommand,
   kubeconfigCommand,
 ];
 
