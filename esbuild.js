@@ -16,6 +16,24 @@ esbuild
     // SEA does not support an ESM entrypoint script, so we need to output CommonJS
     format: "cjs",
     outfile: "build/sea/p0.js",
+    legalComments: "none",
+    footer: {
+      js: `
+// This is a workaround to suppress deprecation warnings in the SEA binary
+// without having to run NODE_OPTIONS='--no-deprecation' p0 [...args]
+// Without this, the SEA binary will emit deprecation warnings that may be
+// confusing to users
+(() => {
+  const originalEmit = process.emit;
+  process.emit = function (name, data, ...args) {
+    if (typeof data === 'object' && data.name === 'DeprecationWarning') {
+      return false;
+    }
+    return originalEmit.apply(process, arguments);
+  };
+})();
+      `,
+    },
   })
   .then(() => {
     console.log("Bundling succeeded.");
