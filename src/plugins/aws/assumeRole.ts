@@ -20,7 +20,12 @@ const roleArn = (args: { account: string; role: string }) =>
 const stsAssume = async (
   params: Record<string, string>
 ): Promise<AwsCredentials> => {
-  const url = `https://sts.amazonaws.com`;
+  // Regional endpoints issue version-2 tokens, which are valid in all AWS regions.
+  // The us-east-1 and eu-south-1 regional endpoints are the only ones that are always on.
+  // Use the us-east-1 as it should be closer to most users.
+  // Calling the global endpoints issues version-1 tokens, which are only valid in default regions.
+  // See https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
+  const url = `https://sts.us-east-1.amazonaws.com`;
   const response = await fetch(url, {
     method: "POST",
     body: new URLSearchParams(params),

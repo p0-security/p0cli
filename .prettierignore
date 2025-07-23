@@ -1,3 +1,4 @@
-tsconfig.json
 win
 mac
+tsconfig.json
+src/index.ts

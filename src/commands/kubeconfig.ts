@@ -34,6 +34,8 @@ export type KubeconfigCommandArgs = {
   requestedDuration?: string;
 };
 
+// The P0 backend must be updated if this CLI command changes!
+// This command is rendered to the user once a k8s request is approved.
 export const kubeconfigCommand = (yargs: yargs.Argv) =>
   yargs.command<KubeconfigCommandArgs>(
     "kubeconfig",

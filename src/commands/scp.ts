@@ -32,11 +32,6 @@ export const scpCommand = (yargs: yargs.Argv) =>
           demandOption: true,
           description: "Format [hostname:]file",
         })
-        .option("r", {
-          alias: "recursive",
-          type: "boolean",
-          describe: "Recursively copy entire directories",
-        })
         .option("reason", {
           describe: "Reason access is needed",
           type: "string",
@@ -98,7 +93,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Could not determine host identifier from source or destination";
   }
 
-  const { request, privateKey, sshProvider } = await prepareRequest(
+  const { request, requestId, privateKey, sshProvider } = await prepareRequest(
     authn,
     args,
     host
@@ -110,6 +105,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   await sshOrScp({
     authn,
     request,
+    requestId,
     cmdArgs: {
       ...args,
       source,

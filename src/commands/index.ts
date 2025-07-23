@@ -21,7 +21,6 @@ import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
-import { sshKeyGenCommand } from "./ssh-keygen";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
 import { sys } from "typescript";
@@ -39,12 +38,11 @@ const commands = [
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
-  sshKeyGenCommand,
   kubeconfigCommand,
 ];
 
 const buildArgv = async () => {
-  const { version } = await p0VersionInfo;
+  const { version } = p0VersionInfo;
   const argv = yargs(hideBin(process.argv)).version(version);
 
   // Override the default yargs showHelp() function to include a custom help message at the end

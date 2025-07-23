@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getContactMessage } from "../../drivers/config";
 import { doc } from "../../drivers/firestore";
 import { Authn } from "../../types/identity";
 import {
@@ -42,9 +43,10 @@ export const waitForProvisioning = async <P extends PluginRequest>(
         } else if (DENIED_STATUSES.includes(data.status as any)) {
           reject("Your access request was denied");
         } else if (ERROR_STATUSES.includes(data.status as any)) {
-          reject(
-            "Your access request encountered an error (see Slack for details)"
-          );
+          const message =
+            data.error?.message ??
+            `Your access request encountered an unknown error. ${getContactMessage()}`;
+          reject(message);
         } else {
           return;
         }
