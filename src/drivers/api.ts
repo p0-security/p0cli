@@ -14,6 +14,8 @@ import { getTenantConfig } from "./config";
 import * as path from "node:path";
 import yargs from "yargs";
 
+const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
+
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
@@ -23,42 +25,43 @@ const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
 export const fetchAccountInformation = async <T>(authn: Authn) =>
-  baseFetch<T>(authn, `${tenantUrl(authn.identity.org.slug)}/account`, "GET");
+  baseFetch<T>(authn, {
+    url: `${tenantUrl(authn.identity.org.slug)}/account`,
+    method: "GET",
+  });
 
 export const fetchPermissionRequest = async <T>(
   authn: Authn,
   requestId: string
 ) =>
-  baseFetch<T>(
-    authn,
-    `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
-    "GET"
-  );
+  baseFetch<T>(authn, {
+    url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}?waitForResolution=true`,
+    method: "GET",
+    maxTimeoutMs: DEFAULT_PERMISSION_REQUEST_TIMEOUT,
+  });
 
 export const fetchIntegrationConfig = async <T>(
   authn: Authn,
   integration: string
 ) =>
-  baseFetch<T>(
-    authn,
-    `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
-    "GET"
-  );
+  baseFetch<T>(authn, {
+    url: `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
+    method: "GET",
+  });
 
 export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase,
   argv: string[]
 ) =>
-  baseFetch<T>(
-    authn,
-    commandUrl(authn.identity.org.slug),
-    "POST",
-    JSON.stringify({
+  baseFetch<T>(authn, {
+    url: commandUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
       argv,
       scriptName: path.basename(args.$0),
-    })
-  );
+    }),
+  });
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
 export const fetchAdminLsCommand = async <T>(
@@ -66,49 +69,57 @@ export const fetchAdminLsCommand = async <T>(
   args: yargs.ArgumentsCamelCase,
   argv: string[]
 ) =>
-  baseFetch<T>(
-    authn,
-    adminLsCommandUrl(authn.identity.org.slug),
-    "POST",
-    JSON.stringify({
+  baseFetch<T>(authn, {
+    url: adminLsCommandUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
       argv,
       scriptName: path.basename(args.$0),
-    })
-  );
+    }),
+  });
 
 export const submitPublicKey = async <T>(
   authn: Authn,
   args: { publicKey: string; requestId: string }
 ) =>
-  baseFetch<T>(
-    authn,
-    publicKeysUrl(authn.identity.org.slug),
-    "POST",
-    JSON.stringify({
+  baseFetch<T>(authn, {
+    url: publicKeysUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
       requestId: args.requestId,
       publicKey: args.publicKey,
-    })
-  );
+    }),
+  });
 
 export const baseFetch = async <T>(
   authn: Authn,
-  url: string,
-  method: string,
-  body?: string
+  args: {
+    url: string;
+    method: string;
+    body?: string;
+    maxTimeoutMs?: number;
+  }
 ) => {
   const token = await authn.userCredential.user.getIdToken();
   const { version } = p0VersionInfo;
-
+  const { url, method, body, maxTimeoutMs } = args;
+  const fetchOptions = {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": `P0 CLI/${version}`,
+    },
+    body,
+    keepalive: true,
+  };
   try {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "User-Agent": `P0 CLI/${version}`,
-      },
-      body,
-    });
+    const response = await fetch(
+      url,
+      maxTimeoutMs
+        ? { ...fetchOptions, signal: AbortSignal.timeout(maxTimeoutMs) }
+        : fetchOptions
+    );
     const text = await response.text();
     const data = JSON.parse(text);
     if ("error" in data) {

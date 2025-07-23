@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { KubeconfigCommandArgs } from "../../commands/kubeconfig";
 import { waitForProvisioning } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
-import { baseFetch, fetchIntegrationConfig } from "../../drivers/api";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";

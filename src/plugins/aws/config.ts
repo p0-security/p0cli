@@ -8,17 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { baseFetch, fetchIntegrationConfig } from "../../drivers/api";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
 import { sortBy } from "lodash";
 
 export const getFirstAwsConfig = async (authn: Authn) => {
   const { identity } = authn;
-  const config = await baseFetch<AwsConfig>(
+  const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
     authn,
-    `o/${identity.org.tenantId}/integrations/aws`,
-    "GET"
+    "aws"
   );
 
   const item = Object.entries(config?.["iam-write"] ?? {}).find(

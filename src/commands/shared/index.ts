@@ -8,8 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { pollChanges } from "../../common/polling";
-import { baseFetch, fetchPermissionRequest } from "../../drivers/api";
+import { fetchPermissionRequest } from "../../drivers/api";
+import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
   DENIED_STATUSES,
@@ -19,50 +19,32 @@ import {
   PluginRequest,
 } from "../../types/request";
 
-/** Maximum amount of time to wait after access is approved to wait for access
- *  to be configured
- */
-const GRANT_TIMEOUT_MILLIS = 60e3;
-
 /** Waits until P0 grants access for a request */
 export const waitForProvisioning = async <P extends PluginRequest>(
   authn: Authn,
   requestId: string
 ) => {
-  let cancel: NodeJS.Timeout | undefined = undefined;
-  const result = await new Promise<PermissionRequest<P>>((resolve, reject) => {
-    let isResolved = false;
-
-    const unsubscribe = pollChanges<PermissionRequest<P>>({
-      fetcher: () =>
-        fetchPermissionRequest<PermissionRequest<P>>(authn, requestId),
-      onChange: (data) => {
-        if (!data) return;
-        if (DONE_STATUSES.includes(data.status as any)) {
-          resolve(data);
-        } else if (DENIED_STATUSES.includes(data.status as any)) {
-          reject("Your access request was denied");
-        } else if (ERROR_STATUSES.includes(data.status as any)) {
-          reject(
-            "Your access request encountered an error (see Slack for details)"
-          );
-        } else {
-          return;
-        }
-        isResolved = true;
-        clearInterval(unsubscribe);
-      },
-    });
-
-    // Skip timeout in test; it holds a ref longer than the test lasts
-    if (process.env.NODE_ENV === "test") return;
-    cancel = setTimeout(() => {
-      if (!isResolved) {
-        clearInterval(unsubscribe);
-        reject("Timeout awaiting access grant. Please try again.");
-      }
-    }, GRANT_TIMEOUT_MILLIS);
-  });
-  clearTimeout(cancel);
-  return result;
+  try {
+    const permission = await fetchPermissionRequest<PermissionRequest<P>>(
+      authn,
+      requestId
+    );
+    if (DONE_STATUSES.includes(permission.status as any)) {
+      return permission;
+    } else if (DENIED_STATUSES.includes(permission.status as any)) {
+      throw new Error("Your access request was denied");
+    } else if (ERROR_STATUSES.includes(permission.status as any)) {
+      throw new Error(
+        "Your access request encountered an error (see Slack for details)"
+      );
+    }
+  } catch (error: any) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      print2("Your request did not complete within 5 minutes.");
+    } else {
+      print2(error);
+      throw error;
+    }
+  }
+  throw new Error("Timeout awaiting access grant. Please try again.");
 };

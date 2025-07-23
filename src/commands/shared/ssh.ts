@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { waitForProvisioning } from ".";
 import { createKeyPair } from "../../common/keys";
-import { baseFetch, fetchIntegrationConfig } from "../../drivers/api";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";

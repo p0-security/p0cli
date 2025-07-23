@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
+import { bootstrapConfig } from "../../drivers/env";
 import { print2 } from "../../drivers/stdio";
 import { pluginLoginMap } from "../../plugins/login";
 import { Identity } from "../../types/identity";

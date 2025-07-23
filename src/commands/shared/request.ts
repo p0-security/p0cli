@@ -9,7 +9,6 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { waitForProvisioning } from ".";
-import { pollChanges } from "../../common/polling";
 import { fetchCommand, fetchPermissionRequest } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { print2, spinUntil } from "../../drivers/stdio";
@@ -21,8 +20,6 @@ import {
 } from "../../types/request";
 import { sys } from "typescript";
 import yargs from "yargs";
-
-const WAIT_TIMEOUT = 300e3;
 
 export const PROVISIONING_ACCESS_MESSAGE =
   "Waiting for access to be provisioned";
@@ -69,36 +66,34 @@ const waitForRequest = async (
   requestId: string,
   logMessage: boolean
 ) =>
-  await new Promise<number>((resolve) => {
+  await new Promise<number>(async (resolve) => {
     if (logMessage)
       print2("Will wait up to 5 minutes for this request to complete...");
-    let cancel: NodeJS.Timeout | undefined = undefined;
-
-    const unsubscribe = pollChanges<PermissionRequest<PluginRequest>>({
-      fetcher: () =>
-        fetchPermissionRequest<PermissionRequest<PluginRequest>>(
-          authn,
-          requestId
-        ),
-      onChange: (data) => {
-        const { status } = data;
-        if (isCompletedStatus(status)) {
-          if (cancel) clearTimeout(cancel);
-          clearInterval(unsubscribe);
-          const { message, code } = COMPLETED_REQUEST_STATUSES[status];
-          const errorMessage = data.error
-            ? `${message}: ${data.error.message}`
-            : message;
-          if (code !== 0 || logMessage) print2(errorMessage);
-          resolve(code);
-        }
-      },
-    });
-    cancel = setTimeout(() => {
-      clearInterval(unsubscribe);
-      print2("Your request did not complete within 5 minutes.");
-      resolve(4);
-    }, WAIT_TIMEOUT);
+    try {
+      const permission = await fetchPermissionRequest<
+        PermissionRequest<PluginRequest>
+      >(authn, requestId);
+      const { status } = permission;
+      if (isCompletedStatus(status)) {
+        const { message, code } = COMPLETED_REQUEST_STATUSES[status];
+        const errorMessage = permission.error
+          ? `${message}: ${permission.error.message}`
+          : message;
+        if (code !== 0 || logMessage) print2(errorMessage);
+        resolve(code);
+      } else {
+        print2("Your request did not complete within 5 minutes.");
+        resolve(4);
+      }
+    } catch (error: any) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        print2("Your request did not complete within 5 minutes.");
+        resolve(4);
+      } else {
+        print2(error);
+        resolve(1);
+      }
+    }
   });
 
 export const request =
