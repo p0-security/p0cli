@@ -90,6 +90,7 @@ jobs:
           cache: yarn
           cache-dependency-path: |
             yarn.lock
+      - uses: KamaranL/add-signtool-action@v1
       - name: Yarn install
         run: yarn install
       - name: Build
