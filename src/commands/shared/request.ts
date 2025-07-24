@@ -156,10 +156,6 @@ export const request =
           if (logMessage) print2(data.message);
           const finalData = await fetchValue();
 
-          if (!("request" in finalData)) {
-            print2("Your request did not complete within 5 minutes.");
-            return undefined;
-          }
           const code = resolveCode(
             finalData.request as PermissionRequest<PluginRequest>,
             logMessage

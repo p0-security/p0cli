@@ -41,7 +41,7 @@ export type RequestResponse<T> = {
   ok: true;
   message: string;
   id: string;
-  event: T;
+  request: T;
   isPreexisting: boolean;
   isPersistent: boolean;
 };

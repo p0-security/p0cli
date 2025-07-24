@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { KubeconfigCommandArgs } from "../../commands/kubeconfig";
-import { waitForProvisioning } from "../../commands/shared";
+import { decodeProvisionStatus } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { Authn } from "../../types/identity";
@@ -84,7 +84,9 @@ export const requestAccessToCluster = async (
   clusterId: string,
   role: string
 ): Promise<PermissionRequest<K8sPermissionSpec>> => {
-  const response = await request("request")(
+  const response = await request("request")<
+    PermissionRequest<K8sPermissionSpec>
+  >(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -109,17 +111,12 @@ export const requestAccessToCluster = async (
   if (!response) {
     throw "Did not receive access ID from server";
   }
-  const { id } = response;
-  if (!("request" in response)) {
-    throw new Error("Request not provisioned within 5 mins");
-  }
-  const code = await waitForProvisioning(
-    response.request as PermissionRequest<K8sPermissionSpec>
-  );
+
+  const code = await decodeProvisionStatus(response.request);
   if (!code) {
     sys.exit(1);
   }
-  return response.request as PermissionRequest<K8sPermissionSpec>;
+  return response.request;
 };
 
 export const profileName = (eksCluterName: string): string =>

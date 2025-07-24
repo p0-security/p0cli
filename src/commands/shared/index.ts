@@ -17,8 +17,7 @@ import {
   PluginRequest,
 } from "../../types/request";
 
-/** Waits until P0 grants access for a request */
-export const waitForProvisioning = async <P extends PluginRequest>(
+export const decodeProvisionStatus = async <P extends PluginRequest>(
   request: PermissionRequest<P>
 ) => {
   try {

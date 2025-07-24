@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { waitForProvisioning } from ".";
+import { decodeProvisionStatus } from ".";
 import { createKeyPair } from "../../common/keys";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
@@ -139,7 +139,9 @@ export const provisionRequest = async (
 
   const { publicKey, privateKey } = await createKeyPair();
 
-  const response = await request("request")<PluginSshRequest>(
+  const response = await request("request")<
+    PermissionRequest<PluginSshRequest>
+  >(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -169,18 +171,16 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   else print2("Existing access found.  Connecting to instance.");
-  if (!("request" in response)) {
-    throw new Error("Request not provisioned within 5 mins");
-  }
-  const code = await waitForProvisioning<PluginSshRequest>(
-    response.request as PermissionRequest<PluginSshRequest>
-  );
+  const code = await decodeProvisionStatus<PluginSshRequest>(response.request);
   if (!code) {
     sys.exit(1);
   }
-  const provisionedRequest =
-    response.request as PermissionRequest<PluginSshRequest>;
-  return { requestId: id, provisionedRequest, publicKey, privateKey };
+  return {
+    requestId: id,
+    provisionedRequest: response.request,
+    publicKey,
+    privateKey,
+  };
 };
 
 export const prepareRequest = async (

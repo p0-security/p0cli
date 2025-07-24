@@ -147,6 +147,9 @@ export const streamingApiFetch = async function* <T>(
       const value = read.value;
       const text = textDecoder.decode(value);
       const parsedResponse = JSON.parse(text);
+      if (parsedResponse.type === "error") {
+        throw new Error(parsedResponse.error);
+      }
       if (parsedResponse.type === "heartbeat") {
         continue;
       }
@@ -161,7 +164,7 @@ export const streamingApiFetch = async function* <T>(
     }
   } catch (error) {
     if (error instanceof TypeError && error.message === "fetch failed") {
-      throw `Network error: Unable to reach the server at ${url}.`;
+      throw `Network error: Unable to reach the server.`;
     } else {
       throw error;
     }
