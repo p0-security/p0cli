@@ -12,7 +12,6 @@ import { KubeconfigCommandArgs } from "../../commands/kubeconfig";
 import { waitForProvisioning } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
 import { fetchIntegrationConfig } from "../../drivers/api";
-import { spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { assertNever } from "../../util";
@@ -23,6 +22,7 @@ import { parseArn } from "../aws/utils";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { K8sConfig, K8sPermissionSpec } from "./types";
 import { pick } from "lodash";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 const KUBECONFIG_PREFIX = "p0";
@@ -110,11 +110,16 @@ export const requestAccessToCluster = async (
     throw "Did not receive access ID from server";
   }
   const { id } = response;
-
-  return await spinUntil(
-    "Waiting for access to be provisioned. This may take up to a minute.",
-    waitForProvisioning<K8sPermissionSpec>(authn, id)
+  if (!("request" in response)) {
+    throw new Error("Request not provisioned within 5 mins");
+  }
+  const code = await waitForProvisioning(
+    response.request as PermissionRequest<K8sPermissionSpec>
   );
+  if (!code) {
+    sys.exit(1);
+  }
+  return response.request as PermissionRequest<K8sPermissionSpec>;
 };
 
 export const profileName = (eksCluterName: string): string =>

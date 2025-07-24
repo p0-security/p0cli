@@ -8,10 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { waitForProvisioning } from ".";
-import { fetchCommand, fetchPermissionRequest } from "../../drivers/api";
+import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
-import { print2, spinUntil } from "../../drivers/stdio";
+import { generateSpinUntil, print2, spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
   PermissionRequest,
@@ -61,40 +60,23 @@ export const requestArgs = <T>(yargs: yargs.Argv<T>) =>
       default: [] as string[],
     });
 
-const waitForRequest = async (
-  authn: Authn,
-  requestId: string,
+const resolveCode = (
+  permission: PermissionRequest<PluginRequest>,
   logMessage: boolean
-) =>
-  await new Promise<number>(async (resolve) => {
-    if (logMessage)
-      print2("Will wait up to 5 minutes for this request to complete...");
-    try {
-      const permission = await fetchPermissionRequest<
-        PermissionRequest<PluginRequest>
-      >(authn, requestId);
-      const { status } = permission;
-      if (isCompletedStatus(status)) {
-        const { message, code } = COMPLETED_REQUEST_STATUSES[status];
-        const errorMessage = permission.error
-          ? `${message}: ${permission.error.message}`
-          : message;
-        if (code !== 0 || logMessage) print2(errorMessage);
-        resolve(code);
-      } else {
-        print2("Your request did not complete within 5 minutes.");
-        resolve(4);
-      }
-    } catch (error: any) {
-      if (error instanceof Error && error.name === "TimeoutError") {
-        print2("Your request did not complete within 5 minutes.");
-        resolve(4);
-      } else {
-        print2(error);
-        resolve(1);
-      }
-    }
-  });
+) => {
+  const { status } = permission;
+  if (isCompletedStatus(status)) {
+    const { message, code } = COMPLETED_REQUEST_STATUSES[status];
+    const errorMessage = permission.error
+      ? `${message}: ${permission.error.message}`
+      : message;
+    if (code !== 0 || logMessage) print2(errorMessage);
+    return code;
+  } else {
+    print2("Your request did not complete within 5 minutes.");
+    return 4;
+  }
+};
 
 export const request =
   (command: "grant" | "request") =>
@@ -110,7 +92,6 @@ export const request =
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
-    const { userCredential } = resolvedAuthn;
     const accessMessage = (message?: string) => {
       switch (message) {
         case "approval-required":
@@ -119,37 +100,88 @@ export const request =
           return "Requesting access";
       }
     };
+    try {
+      if (!args.wait) {
+        const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
+          resolvedAuthn,
+          args,
+          [command, ...args.arguments]
+        );
+        const data =
+          options?.message != "quiet"
+            ? await spinUntil(
+                accessMessage(options?.message),
+                fetchCommandPromise
+              )
+            : await fetchCommandPromise;
 
-    const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
-      resolvedAuthn,
-      args,
-      [command, ...args.arguments]
-    );
-
-    const data =
-      options?.message != "quiet"
-        ? await spinUntil(accessMessage(options?.message), fetchCommandPromise)
-        : await fetchCommandPromise;
-
-    if (data && "ok" in data && "message" in data && data.ok) {
-      const logMessage =
-        !options?.message ||
-        options?.message === "all" ||
-        (options?.message === "approval-required" &&
-          !data.isPreexisting &&
-          !data.isPersistent);
-      if (logMessage) print2(data.message);
-      const { id } = data;
-      if (args.wait && id && userCredential.user.tenantId) {
-        const code = await waitForRequest(resolvedAuthn, id, logMessage);
-        if (code) {
-          sys.exit(code);
-          return undefined;
+        if (data && "ok" in data && "message" in data && data.ok) {
+          const logMessage =
+            !options?.message ||
+            options?.message === "all" ||
+            (options?.message === "approval-required" &&
+              !data.isPreexisting &&
+              !data.isPersistent);
+          if (logMessage) print2(data.message);
+          return data;
+        } else {
+          throw data;
         }
-        return data;
-      } else return undefined;
-    } else {
-      throw data;
+      } else {
+        const fetchStreamingCommandPromise = fetchStreamingCommand<
+          RequestResponse<T>
+        >(resolvedAuthn, args, [command, ...args.arguments]);
+        const fetchValue = async () => {
+          const generatedValue = await fetchStreamingCommandPromise.next();
+          if (generatedValue.done) {
+            throw new Error("Could not get request id");
+          }
+
+          return generatedValue.value;
+        };
+        const data =
+          options?.message != "quiet"
+            ? await generateSpinUntil(
+                accessMessage(options?.message),
+                fetchStreamingCommandPromise
+              )
+            : await fetchValue();
+        if (data && "ok" in data && "message" in data && data.ok) {
+          const logMessage =
+            !options?.message ||
+            options?.message === "all" ||
+            (options?.message === "approval-required" &&
+              !data.isPreexisting &&
+              !data.isPersistent);
+          if (logMessage) print2(data.message);
+          const finalData = await fetchValue();
+
+          if (!("request" in finalData)) {
+            print2("Your request did not complete within 5 minutes.");
+            return undefined;
+          }
+          const code = resolveCode(
+            finalData.request as PermissionRequest<PluginRequest>,
+            logMessage
+          );
+          if (code) {
+            sys.exit(code);
+            return undefined;
+          }
+          return finalData;
+        } else {
+          throw data;
+        }
+      }
+    } catch (error: any) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        print2("Your request did not complete within 5 minutes.");
+        sys.exit(4);
+      } else {
+        print2(error);
+        sys.exit(1);
+      }
+      return undefined;
     }
   };
 
@@ -161,7 +193,7 @@ export const provisionRequest = async (
   authn: Authn
 ) => {
   try {
-    const response = await request("request")(argv, authn, {
+    const response = await request("request")({ ...argv, wait: true }, authn, {
       message: "approval-required",
     });
 
@@ -175,7 +207,6 @@ export const provisionRequest = async (
     print2(
       !isPreexisting ? PROVISIONING_ACCESS_MESSAGE : EXISTING_ACCESS_MESSAGE
     );
-    await waitForProvisioning<PluginRequest>(authn, id);
   } catch (error) {
     if (error === ACCESS_EXISTS_ERROR_MESSAGE) {
       print2(EXISTING_ACCESS_MESSAGE);

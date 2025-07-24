@@ -77,3 +77,44 @@ export const spinUntil = async <T>(message: string, promise: Promise<T>) => {
   clear2();
   return await promise;
 };
+
+export const generateSpinUntil = async <T>(
+  message: string,
+  generator: AsyncGenerator<T, void, unknown>
+) => {
+  let isDone = false;
+  let ix = 0;
+
+  // Start the generator and get the first result
+  const resultPromise = generator
+    .next()
+    .then((result) => {
+      isDone = true;
+      if (result.done) {
+        throw new Error("Generator completed without yielding a value");
+      }
+      return result.value;
+    })
+    .catch((error) => {
+      isDone = true;
+      throw error;
+    });
+
+  // Spin while waiting for first result
+  while (!isDone) {
+    await sleep(Spin.delayMs);
+    if (isDone) break;
+    clear2();
+    process.stderr.write(
+      AnsiSgr.Green +
+        Spin.items[ix % Spin.items.length] +
+        " " +
+        message +
+        AnsiSgr.Reset
+    );
+    ix++;
+  }
+  clear2();
+
+  return await resultPromise;
+};

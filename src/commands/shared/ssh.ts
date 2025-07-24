@@ -28,6 +28,7 @@ import {
 } from "../../types/ssh";
 import { request } from "./request";
 import { pick } from "lodash";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 export type BaseSshCommandArgs = {
@@ -168,12 +169,17 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   else print2("Existing access found.  Connecting to instance.");
-
-  const provisionedRequest = await waitForProvisioning<PluginSshRequest>(
-    authn,
-    id
+  if (!("request" in response)) {
+    throw new Error("Request not provisioned within 5 mins");
+  }
+  const code = await waitForProvisioning<PluginSshRequest>(
+    response.request as PermissionRequest<PluginSshRequest>
   );
-
+  if (!code) {
+    sys.exit(1);
+  }
+  const provisionedRequest =
+    response.request as PermissionRequest<PluginSshRequest>;
   return { requestId: id, provisionedRequest, publicKey, privateKey };
 };
 

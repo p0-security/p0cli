@@ -49,6 +49,22 @@ export const fetchIntegrationConfig = async <T>(
     method: "GET",
   });
 
+export const fetchStreamingCommand = async function* <T>(
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase,
+  argv: string[]
+) {
+  yield* streamingApiFetch<T>(authn, {
+    url: commandUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
+      argv,
+      scriptName: path.basename(args.$0),
+      wait: true,
+    }),
+  });
+};
+
 export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase,
@@ -90,6 +106,67 @@ export const submitPublicKey = async <T>(
       publicKey: args.publicKey,
     }),
   });
+
+export const streamingApiFetch = async function* <T>(
+  authn: Authn,
+  args: {
+    url: string;
+    method: string;
+    body?: string;
+    maxTimeoutMs?: number;
+  }
+) {
+  const token = await authn.userCredential.user.getIdToken();
+  const { version } = p0VersionInfo;
+  const { url, method, body, maxTimeoutMs } = args;
+  const fetchOptions = {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": `P0 CLI/${version}`,
+    },
+    body,
+    keepalive: true,
+  };
+  const textDecoder = new TextDecoder();
+  try {
+    const response = await fetch(
+      url,
+      maxTimeoutMs
+        ? { ...fetchOptions, signal: AbortSignal.timeout(maxTimeoutMs) }
+        : fetchOptions
+    );
+    const reader = response.body?.getReader();
+    if (!reader) throw `No reader available`;
+    while (true) {
+      const read = await reader.read();
+      if (read.done) {
+        break;
+      }
+      const value = read.value;
+      const text = textDecoder.decode(value);
+      const parsedResponse = JSON.parse(text);
+      if (parsedResponse.type === "heartbeat") {
+        continue;
+      }
+      if (parsedResponse.type !== "data" || !("data" in parsedResponse)) {
+        throw new Error("Invalid response from the server");
+      }
+      const { data } = parsedResponse;
+      if ("error" in data) {
+        throw data.error;
+      }
+      yield data as T;
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "fetch failed") {
+      throw `Network error: Unable to reach the server at ${url}.`;
+    } else {
+      throw error;
+    }
+  }
+};
 
 export const baseFetch = async <T>(
   authn: Authn,
