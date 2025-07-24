@@ -16,7 +16,6 @@ esbuild
     // SEA does not support an ESM entrypoint script, so we need to output CommonJS
     format: "cjs",
     outfile: "build/sea/p0.js",
-    legalComments: "none",
     footer: {
       js: `
 // This is a workaround to suppress deprecation warnings in the SEA binary
