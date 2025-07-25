@@ -134,18 +134,15 @@ export const request =
         const fetchValue = async () => {
           const generatedValue = await fetchStreamingCommandPromise.next();
           if (generatedValue.done) {
-            throw new Error("Could not get request id");
+            return undefined;
           }
-
           return generatedValue.value;
         };
         const data =
           options?.message != "quiet"
-            ? await generateSpinUntil(
-                accessMessage(options?.message),
-                fetchStreamingCommandPromise
-              )
+            ? await spinUntil(accessMessage(options?.message), fetchValue())
             : await fetchValue();
+
         if (data && "ok" in data && "message" in data && data.ok) {
           const logMessage =
             !options?.message ||
@@ -153,31 +150,38 @@ export const request =
             (options?.message === "approval-required" &&
               !data.isPreexisting &&
               !data.isPersistent);
-          if (logMessage) print2(data.message);
-          const finalData = await fetchValue();
-
-          const code = resolveCode(
-            finalData.request as PermissionRequest<PluginRequest>,
-            logMessage
-          );
-          if (code) {
-            sys.exit(code);
-            return undefined;
+          if (logMessage) {
+            print2(data.message);
+            print2("Will wait up to 5 minutes for this request to complete...");
           }
-          return finalData;
-        } else {
-          throw data;
+
+          for await (const finalData of fetchStreamingCommandPromise) {
+            if (!finalData)
+              throw new Error("Errored waiting to provision request");
+            if ("skip" in finalData) {
+              continue;
+            }
+            const code = resolveCode(
+              finalData.request as PermissionRequest<PluginRequest>,
+              logMessage
+            );
+            if (code) {
+              sys.exit(code);
+              return undefined;
+            }
+            return finalData;
+          }
         }
+        throw data;
       }
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
         print2("Your request did not complete within 5 minutes.");
-        sys.exit(4);
-      } else {
-        print2(error);
-        sys.exit(1);
       }
-      return undefined;
+      if (error instanceof Error && error.name === "disconnect") {
+        print2("Disconnected from server");
+      }
+      throw error;
     }
   };
 

@@ -22,7 +22,6 @@ export const decodeProvisionStatus = async <P extends PluginRequest>(
 ) => {
   try {
     if (DONE_STATUSES.includes(request.status as any)) {
-      print2("Access has been granted");
       return true;
     } else if (DENIED_STATUSES.includes(request.status as any)) {
       print2("Your access request was denied");
@@ -37,7 +36,6 @@ export const decodeProvisionStatus = async <P extends PluginRequest>(
       print2("Your request did not complete within 5 minutes.");
       throw new Error("Timeout waiting for access to be granted");
     } else {
-      print2(error);
       throw error;
     }
   }

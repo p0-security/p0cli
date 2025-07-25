@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { apiFetch } from "../../drivers/api";
 import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
 import { bootstrapConfig } from "../../drivers/env";
@@ -25,6 +26,7 @@ jest.mock("../../drivers/auth/path", () => ({
 }));
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
+jest.mock("../../drivers/api");
 
 const mockIdentity: Identity = {
   credential: {
@@ -40,35 +42,36 @@ const mockIdentity: Identity = {
 const mockSignInWithCredential = signInWithCredential as jest.Mock;
 const mockReadFile = readFile as jest.Mock;
 const mockWriteFile = writeFile as jest.Mock;
-// mock api orgs api
-
+const mockApiFetch = apiFetch as jest.Mock;
 describe("login", () => {
   beforeEach(() => {
+    jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
     jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
     jest.spyOn(config, "getTenantConfig").mockReturnValue(bootstrapConfig);
     // do NOT spyOn getContactMessage — you want the real one
   });
 
   it("prints a friendly error if the org is not provided", async () => {
-    //    mockGetDoc(undefined);
     await expect(login({} as any)).rejects.toMatchInlineSnapshot(
       `"The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."`
     );
   });
 
   it("prints a friendly error if the org is not found", async () => {
-    //  mockGetDoc(undefined);
+    mockApiFetch.mockImplementation(() => {
+      throw new Error("org not found");
+    });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
       `"Could not find organization"`
     );
   });
 
   it("prints a friendly error if unsupported login", async () => {
-    /*   mockGetDoc({
+    mockApiFetch.mockResolvedValue({
       slug: "test-org",
       tenantId: "test-tenant",
       ssoProvider: "microsoft",
-    });*/
+    });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
       `"Unsupported login for your organization"`
     );
@@ -84,12 +87,11 @@ describe("login", () => {
         (error as any).code = "ENOENT";
         return Promise.reject(error);
       });
-      /*
-      mockGetDoc({
+      mockApiFetch.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
-      });*/
+      });
     });
 
     it("it should ask user to log in", async () => {
@@ -105,7 +107,7 @@ describe("login", () => {
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
-
+      jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
       mockReadFile.mockImplementation(async () =>
         Buffer.from(credentialData, "utf-8")
       );
@@ -121,12 +123,11 @@ describe("login", () => {
             },
           })
       );
-      /*
-      mockGetDoc({
+      mockApiFetch.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
-      });*/
+      });
     });
 
     it("should call the provider's login function", async () => {
@@ -159,12 +160,11 @@ Please contact support@p0.dev for assistance."
         jest.clearAllMocks();
 
         jest.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
-        /*
-        mockGetDoc({
+        mockApiFetch.mockResolvedValue({
           slug: "test-org",
           tenantId: "test-tenant",
           ssoProvider: "google",
-        });*/
+        });
       });
 
       it("no org provided, prints current logged-in status", async () => {
@@ -200,12 +200,11 @@ Please contact support@p0.dev for assistance."
       });
 
       it("different org provided, need to re-login", async () => {
-        /*
-        mockGetDoc({
+        mockApiFetch.mockResolvedValue({
           slug: "other-org",
           tenantId: "other-tenant",
           ssoProvider: "google",
-        });*/
+        });
 
         await login({ org: "other-org" });
 

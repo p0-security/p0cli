@@ -163,7 +163,10 @@ export const streamingApiFetch = async function* <T>(
       yield data as T;
     }
   } catch (error) {
-    if (error instanceof TypeError && error.message === "fetch failed") {
+    if (
+      error instanceof TypeError &&
+      (error.message === "fetch failed" || error.message === "terminated")
+    ) {
       throw `Network error: Unable to reach the server.`;
     } else {
       throw error;
@@ -220,7 +223,7 @@ export const apiFetch = async <T>(
   method: string,
   body?: string
 ) => {
-  const { version } = await p0VersionInfo;
+  const { version } = p0VersionInfo;
   try {
     const fetchConfig = {
       method,

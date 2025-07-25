@@ -9,7 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
-import { fetchCommand } from "../../drivers/api";
+import {
+  fetchCommand,
+  fetchIntegrationConfig,
+  fetchStreamingCommand,
+} from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { AwsSshGenerated, AwsSshPermission } from "../../plugins/aws/types";
 import { sshOrScp } from "../../plugins/ssh";
@@ -20,14 +24,19 @@ import yargs from "yargs";
 
 jest.mock("../../drivers/api");
 jest.mock("../../drivers/auth");
-jest.mock("../../drivers/stdio");
+jest.mock("../../drivers/stdio", () => ({
+  ...jest.requireActual("../../drivers/stdio"),
+  print1: jest.fn(),
+  print2: jest.fn(),
+}));
 jest.mock("../../plugins/ssh");
 jest.mock("../../common/keys");
 
-const mockFetchCommand = fetchCommand as jest.Mock;
 const mockSshOrScp = sshOrScp as jest.Mock;
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
+const mockIntegrationConfig = fetchIntegrationConfig as jest.Mock;
+const mockFetchStreamingCommand = fetchStreamingCommand as jest.Mock;
 
 const MOCK_PERMISSION: AwsSshPermission = {
   provider: "aws",
@@ -59,80 +68,84 @@ const MOCK_REQUEST = {
   permission: MOCK_PERMISSION,
 };
 
-/*mockGetDoc({
-  "iam-write": {
-    ["aws:test-account"]: {
-      state: "installed",
+mockIntegrationConfig.mockResolvedValue({
+  config: {
+    "iam-write": {
+      ["aws:test-account"]: {
+        state: "installed",
+      },
     },
   },
-});*/
+});
 
 describe("ssh", () => {
+  const mockStreaming = (
+    isPersistent: boolean,
+    sleep?: () => Promise<void>
+  ) => {
+    mockFetchStreamingCommand.mockImplementationOnce(async function* () {
+      yield {
+        ok: true,
+        message: "a message",
+        id: "abcefg",
+        isPreexisting: false,
+        isPersistent,
+        request: { status: "NEW" },
+      };
+      await sleep?.();
+      yield {
+        ok: true,
+        message: "Request approved",
+        id: "abcefg",
+        isPreexisting: false,
+        isPersistent,
+        request: {
+          status: "DONE",
+          id: "abcefg",
+          generated: MOCK_GENERATED,
+          permission: MOCK_PERMISSION,
+        },
+      };
+    });
+  };
   describe.each([
     ["persistent", true],
     ["ephemeral", false],
   ])("%s access", (_, isPersistent) => {
     beforeEach(() => {
       jest.clearAllMocks();
-      mockFetchCommand.mockResolvedValue({
-        ok: true,
-        message: "a message",
-        id: "abcefg",
-        isPreexisting: false,
-        isPersistent,
-        event: {
-          permission: {
-            type: "session",
-            spec: {
-              resource: {
-                arn: "arn:aws:ec2:us-west-2:391052057035:instance/i-0b1b7b7b7b7b7b7b7",
-              },
-            },
-          },
-        },
-      });
     });
 
+    afterEach(() => {
+      mockFetchStreamingCommand.mockReset();
+    });
     it("should call p0 request with reason arg", async () => {
-      void sshCommand(yargs())
+      mockStreaming(isPersistent);
+      const promise = sshCommand(yargs())
         .fail(noop)
         .parse(`ssh some-instance --reason reason --provider aws`);
-      await sleep(100);
+      await sleep(10);
       const hiddenFilenameRequestArgs = omit(
-        mockFetchCommand.mock.calls[0][1],
+        mockFetchStreamingCommand.mock.calls[0][1],
         "$0"
       );
       expect(hiddenFilenameRequestArgs).toMatchSnapshot("args");
+      await expect(promise).resolves.toBeDefined();
     });
 
-    it("should wait for access grant", async () => {
+    it("should wait for access grant/provisioning", async () => {
+      mockStreaming(isPersistent, async () => await sleep(200));
       const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
       const wait = sleep(100);
       await Promise.race([wait, promise]);
       await expect(wait).resolves.toBeUndefined();
+      await expect(promise).resolves.toBeDefined();
     });
-
-    it("should wait for provisioning", async () => {
-      const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
-      await sleep(100); // Need to wait for listen before trigger in tests
-      /*   (onSnapshot as any).trigger({
-        status: "APPROVED",
-      });*/
-      const wait = sleep(100);
-      await Promise.race([wait, promise]);
-      await expect(wait).resolves.toBeUndefined();
-    });
-
     it("should call sshOrScp with non-interactive command", async () => {
+      mockStreaming(isPersistent);
       const promise = sshCommand(yargs())
         .fail(noop)
         .parse(`ssh some-instance do something`);
-      await sleep(100); // Need to wait for listen before trigger in tests
-      /*   (onSnapshot as any).trigger({
-        status: "APPROVED",
-      });*/
-      await sleep(100); // Need to wait for listen before trigger in tests
-      //(onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
@@ -140,13 +153,8 @@ describe("ssh", () => {
     });
 
     it("should call sshOrScp with interactive session", async () => {
+      mockStreaming(isPersistent);
       const promise = sshCommand(yargs()).fail(noop).parse(`ssh some-instance`);
-      await sleep(100); // Need to wait for listen before trigger in tests
-      /* (onSnapshot as any).trigger({
-        status: "APPROVED",
-      });*/
-      await sleep(100); // Need to wait for listen before trigger in tests
-      // (onSnapshot as any).trigger(MOCK_REQUEST);
       await expect(promise).resolves.toBeDefined();
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
       expect(mockPrint1).not.toHaveBeenCalled();
