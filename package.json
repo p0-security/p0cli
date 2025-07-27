@@ -24,7 +24,11 @@
   ],
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.60.1",
+    "@opentelemetry/instrumentation": "^0.202.0",
+    "@opentelemetry/instrumentation-dns": "^0.46.0",
+    "@opentelemetry/instrumentation-net": "^0.46.1",
+    "@opentelemetry/instrumentation-undici": "^0.13.1",
+    "@opentelemetry/resources": "^2.0.0",
     "@opentelemetry/sdk-node": "^0.202.0",
     "@opentelemetry/sdk-trace-node": "^2.0.1",
     "@rgrove/parse-xml": "^4.1.0",
