@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { apiFetch } from "../../drivers/api";
+import { fetchOrgData } from "../../drivers/api";
 import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
 import { bootstrapConfig } from "../../drivers/env";
@@ -42,7 +42,8 @@ const mockIdentity: Identity = {
 const mockSignInWithCredential = signInWithCredential as jest.Mock;
 const mockReadFile = readFile as jest.Mock;
 const mockWriteFile = writeFile as jest.Mock;
-const mockApiFetch = apiFetch as jest.Mock;
+const mockFetchOrgData = fetchOrgData as jest.Mock;
+
 describe("login", () => {
   beforeEach(() => {
     jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
@@ -58,7 +59,7 @@ describe("login", () => {
   });
 
   it("prints a friendly error if the org is not found", async () => {
-    mockApiFetch.mockImplementation(() => {
+    mockFetchOrgData.mockImplementation(() => {
       throw new Error("org not found");
     });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
@@ -67,7 +68,7 @@ describe("login", () => {
   });
 
   it("prints a friendly error if unsupported login", async () => {
-    mockApiFetch.mockResolvedValue({
+    mockFetchOrgData.mockResolvedValue({
       slug: "test-org",
       tenantId: "test-tenant",
       ssoProvider: "microsoft",
@@ -87,7 +88,7 @@ describe("login", () => {
         (error as any).code = "ENOENT";
         return Promise.reject(error);
       });
-      mockApiFetch.mockResolvedValue({
+      mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
@@ -123,7 +124,7 @@ describe("login", () => {
             },
           })
       );
-      mockApiFetch.mockResolvedValue({
+      mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
@@ -160,7 +161,7 @@ Please contact support@p0.dev for assistance."
         jest.clearAllMocks();
 
         jest.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
-        mockApiFetch.mockResolvedValue({
+        mockFetchOrgData.mockResolvedValue({
           slug: "test-org",
           tenantId: "test-tenant",
           ssoProvider: "google",
@@ -200,7 +201,7 @@ Please contact support@p0.dev for assistance."
       });
 
       it("different org provided, need to re-login", async () => {
-        mockApiFetch.mockResolvedValue({
+        mockFetchOrgData.mockResolvedValue({
           slug: "other-org",
           tenantId: "other-tenant",
           ssoProvider: "google",
