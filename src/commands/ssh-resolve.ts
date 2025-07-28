@@ -105,7 +105,7 @@ const sshResolveAction = async (
     debug: args.debug,
   }).catch(silentlyExit);
 
-  const { request, provisionedRequest } = await prepareRequest(
+  const { request, requestId, provisionedRequest } = await prepareRequest(
     authn,
     args,
     args.destination,
@@ -130,7 +130,10 @@ const sshResolveAction = async (
   if (args.debug) {
     print2("Writing request output to disk for use by ssh-proxy");
   }
-  fs.writeFileSync(tmpFile.name, JSON.stringify(request, null, 2));
+  fs.writeFileSync(
+    tmpFile.name,
+    JSON.stringify({ ...request, requestId }, null, 2)
+  );
 
   const identityFile = keys?.privateKeyPath ?? PRIVATE_KEY_PATH;
   const certificateInfo = keys?.certificatePath

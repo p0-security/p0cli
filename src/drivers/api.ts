@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
+import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
 
@@ -19,6 +20,8 @@ const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
+const sshAuditUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
@@ -170,6 +173,42 @@ export const streamingApiFetch = async function* <T>(
       throw `Network error: Unable to reach the server.`;
     } else {
       throw error;
+    }
+  }
+};
+
+export const auditSshSessionActivity = async (args: {
+  authn: Authn;
+  requestId: string;
+  sshSessionId: string;
+  action: `ssh.session.${"end" | "start"}`;
+  debug: boolean | undefined;
+}) => {
+  const { authn, requestId, action, sshSessionId, debug } = args;
+
+  if (debug) {
+    print2(
+      `Submitting audit log for request: ${requestId}, action: ${action}, sshSessionId: ${sshSessionId}`
+    );
+  }
+
+  try {
+    await baseFetch(authn, {
+      url: sshAuditUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        requestId,
+        action,
+        sshSessionId,
+      }),
+    });
+    if (debug) {
+      print2(`Audit log submitted for request: ${requestId}`);
+    }
+  } catch (error) {
+    if (debug) {
+      print2(`Failed to submit audit log for request: ${requestId}`);
+      print2(`Error: ${JSON.stringify(error)}`);
     }
   }
 };

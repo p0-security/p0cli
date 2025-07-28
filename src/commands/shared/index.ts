@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import {
   DENIED_STATUSES,
@@ -26,9 +27,10 @@ export const decodeProvisionStatus = async <P extends PluginRequest>(
     } else if (DENIED_STATUSES.includes(request.status as any)) {
       print2("Your access request was denied");
     } else if (ERROR_STATUSES.includes(request.status as any)) {
-      print2(
-        "Your access request encountered an error (see Slack for details)"
-      );
+      const message =
+        request.error?.message ??
+        `Your access request encountered an unknown error. ${getContactMessage()}`;
+      print2(message);
     }
     return false;
   } catch (error: any) {

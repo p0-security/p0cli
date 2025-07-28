@@ -5,7 +5,7 @@ on:
 name: Build Standalone CLI
 
 jobs:
-  build_cli:
+  build_macos:
     name: Build CLI on MacOS
     runs-on: macos-latest
     env:
@@ -43,11 +43,13 @@ jobs:
       - name: Yarn install
         run: yarn install
       - name: Build
-        run: yarn build:sea
+        run: |
+          yarn build:macos
+          ./mac/build-macOS.sh
       - name: Codesign binary
         run: |
           codesign --verbose=4 --remove-signature build/sea/p0
-          codesign --verbose=4 --timestamp --entitlements entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
+          codesign --verbose=4 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
@@ -71,3 +73,63 @@ jobs:
       - name: Cleanup keychain
         run: |
           security delete-keychain build.keychain
+  build_windows:
+    name: Build CLI on Windows
+    runs-on: windows-latest
+    env:
+      SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+      SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+      SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+      SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+      VERSION: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+      - uses: KamaranL/add-signtool-action@v1
+      - name: Yarn install
+        run: yarn install
+      - name: Build
+        run: |
+          yarn build:windows
+          .\win\build-windows.bat
+      - name: Sign binary
+        uses: sslcom/esigner-codesign@b7f8ff36fc0de8690fbbab8e5b4421d29802f747
+        with:
+          username: ${{ env.SSL_COM_USERNAME }}
+          password: ${{ env.SSL_COM_PASSWORD }}
+          totp_secret: ${{ env.SSL_COM_TOTP_SECRET }}
+          credential_id: ${{ env.SSL_COM_CREDENTIAL_ID }}
+          file_path: ${{ github.workspace }}\build\sea\p0.exe
+          override: true
+          command: sign
+      - name: Package application
+        run: |
+          node .\win\preprocess-wxs.cjs
+          candle .\win\p0.wxs -o build\sea\installer.wixobj
+          light build\sea\installer.wixobj -o build\sea\p0-windows-${{ env.VERSION }}.msi -ext WixUIExtension -ext WixUtilExtension -cultures:en-us
+      - name: Sign installer
+        uses: sslcom/esigner-codesign@b7f8ff36fc0de8690fbbab8e5b4421d29802f747
+        with:
+          username: ${{ env.SSL_COM_USERNAME }}
+          password: ${{ env.SSL_COM_PASSWORD }}
+          totp_secret: ${{ env.SSL_COM_TOTP_SECRET }}
+          credential_id: ${{ env.SSL_COM_CREDENTIAL_ID }}
+          file_path: ${{ github.workspace }}\build\sea\p0-windows-${{ env.VERSION }}.msi
+          override: true
+          command: sign
+      - name: Upload artifact to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-windows-${{ env.VERSION }}
+          path: build\sea\p0-windows-${{ env.VERSION }}.msi
+      - name: Upload artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/sea/p0-windows-${{ env.VERSION }}.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

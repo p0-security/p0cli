@@ -16,6 +16,7 @@ import {
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { auditSshSessionActivity } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
@@ -33,9 +34,13 @@ import {
   StdioPipe,
   spawn,
 } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 
 const RETRY_DELAY_MS = 5000;
+
+const AUTHENTICATION_SUCCESS_PATTERN =
+  /Authenticated to [^\s]+ \(via proxy\) using "publickey"/;
 
 /** Checks if access has propagated through AWS to the SSM agent
  *
@@ -121,9 +126,10 @@ const parseAndPrintSshOutputToStderr = (
     if (options.debug) {
       print2(line);
     } else {
-      if (!isPreTest && line.includes("Authenticated to")) {
+      if (!isPreTest && AUTHENTICATION_SUCCESS_PATTERN.test(line)) {
         // We want to let the user know that they successfully authenticated
         print2(line);
+        options.audit?.("start");
       } else if (!isPreTest && line.includes("port forwarding failed")) {
         // We also want to let the user know if port forwarding failed
         print2(line);
@@ -142,6 +148,7 @@ type SpawnSshNodeOptions = {
   provider: SupportedSshProvider;
   debug?: boolean;
   isAccessPropagationPreTest?: boolean;
+  audit?: (action: "end" | "start") => void;
 };
 
 async function spawnSshNode(
@@ -227,7 +234,10 @@ async function spawnSshNode(
         return;
       }
 
-      if (!options.isAccessPropagationPreTest) print2(`SSH session terminated`);
+      if (!options.isAccessPropagationPreTest) {
+        options.audit?.("end");
+        print2(`SSH session terminated`);
+      }
       if (options.isAccessPropagationPreTest && isAccessPropagated()) {
         // override the exit code to 0 if the expected error was found, this means access is ready.
         resolve(0);
@@ -255,7 +265,7 @@ const createCommand = (
     addScpArgs(args);
 
     return {
-      command: "scp",
+      command: "scp" as const,
       args: [
         ...(args.sshOptions ? args.sshOptions : []),
         ...argsOverride,
@@ -267,7 +277,7 @@ const createCommand = (
   }
 
   return {
-    command: "ssh",
+    command: "ssh" as const,
     args: [
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
@@ -357,7 +367,7 @@ const addScpArgs = (args: ScpCommandArgs) => {
   }
 
   const recursiveOptionExists = sshOptions.some((opt) => opt === "-r");
-  if (!recursiveOptionExists && args.recursive) {
+  if (!recursiveOptionExists) {
     sshOptions.push("-r");
   }
 };
@@ -419,11 +429,13 @@ const preTestAccessPropagationIfNeeded = async <
 export const sshOrScp = async (args: {
   authn: Authn;
   request: SshRequest;
+  requestId: string;
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
 }) => {
-  const { authn, request, cmdArgs, privateKey, sshProvider } = args;
+  const sshSessionId = randomUUID();
+  const { authn, request, requestId, cmdArgs, privateKey, sshProvider } = args;
   const { debug } = cmdArgs;
 
   if (!privateKey) {
@@ -480,6 +492,14 @@ export const sshOrScp = async (args: {
     }
 
     return await spawnSshNode({
+      audit: (action) =>
+        void auditSshSessionActivity({
+          authn,
+          requestId,
+          sshSessionId,
+          debug,
+          action: `ssh.session.${action}`,
+        }),
       credential,
       abortController,
       command,
@@ -497,13 +517,14 @@ export const sshOrScp = async (args: {
 export const sshProxy = async (args: {
   authn: Authn;
   request: SshRequest;
+  requestId: string;
   cmdArgs: SshProxyCommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
   debug: boolean;
   port: string;
 }) => {
-  const { authn, sshProvider, request, debug } = args;
+  const { authn, sshProvider, request, requestId, debug } = args;
 
   const credential: AwsCredentials | undefined =
     await sshProvider.cloudProviderLogin(authn, request);
@@ -529,7 +550,21 @@ export const sshProxy = async (args: {
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
+  const auditArgs = {
+    authn,
+    requestId,
+    debug,
+    sshSessionId: randomUUID(),
+  };
+
   try {
+    // ssh-proxy doesn't do any pre-test propagation and can't intercept
+    // messages from the parent ssh command making it impossible for us
+    // to check for stdout/stderr for session start/end messages.
+    void auditSshSessionActivity({
+      ...auditArgs,
+      action: `ssh.session.start`,
+    });
     return await spawnSshNode({
       credential,
       abortController,
@@ -541,6 +576,10 @@ export const sshProxy = async (args: {
       endTime: endTime,
     });
   } finally {
+    await auditSshSessionActivity({
+      ...auditArgs,
+      action: `ssh.session.end`,
+    });
     await setupData?.teardown();
   }
 };

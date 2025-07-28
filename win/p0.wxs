@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product 
+    Id="__PRODUCT_ID__" 
+    Name="P0 Security CLI" 
+    Language="1033" 
+    Version="__VERSION__" 
+    Manufacturer="P0 Security, Inc." 
+    UpgradeCode="621A79A1-A277-4B50-977A-045070AF5180">
+
+    <Package 
+      InstallerVersion="500" 
+      Compressed="yes" 
+      InstallScope="perMachine" />
+
+    <MajorUpgrade 
+      DowngradeErrorMessage="A newer version of the P0 Security CLI is already installed." />
+    
+    <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="p0">
+          <Component Id="AppComponent" Guid="96346EE4-FF78-4D40-A3E3-CC1906D649EE">
+            <File Id="AppExe" Source="build\sea\p0.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="AddToPathComponent" Guid="A4218C43-2705-4E55-8CEE-EB583313F616">
+            <CreateFolder />
+            <Environment
+              Id="AddToPath"
+              Name="PATH"
+              Action="set"
+              Part="last"
+              System="yes"
+              Permanent="no"
+              Value="[INSTALLFOLDER]" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="DefaultFeature" Level="1">
+      <ComponentRef Id="AppComponent" />
+      <ComponentRef Id="AddToPathComponent" />
+    </Feature>
+
+  </Product>
+</Wix>
