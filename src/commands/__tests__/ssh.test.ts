@@ -10,7 +10,6 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import {
-  fetchCommand,
   fetchIntegrationConfig,
   fetchStreamingCommand,
 } from "../../drivers/api";

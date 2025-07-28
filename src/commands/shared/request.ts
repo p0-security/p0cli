@@ -185,8 +185,11 @@ export const request =
       if (error instanceof Error && error.name === "TimeoutError") {
         print2("Your request did not complete within 5 minutes.");
       }
-      if (error instanceof Error && error.name === "disconnect") {
-        print2("Disconnected from server");
+      if (
+        error instanceof Error &&
+        (error.name === "disconnect" || error.name === "terminated")
+      ) {
+        print2("Disconnected from server. Retry after 5 minutes.");
       }
       throw error;
     }
@@ -209,7 +212,7 @@ export const provisionRequest = async (
       return;
     }
 
-    const { id, isPreexisting } = response;
+    const { isPreexisting } = response;
 
     print2(
       !isPreexisting ? PROVISIONING_ACCESS_MESSAGE : EXISTING_ACCESS_MESSAGE
