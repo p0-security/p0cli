@@ -17,6 +17,8 @@ import yargs from "yargs";
 
 const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
 
+const tenantOrgUrl = (tenant: string) =>
+  `${getTenantConfig().appUrl}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
@@ -26,6 +28,9 @@ const sshAuditUrl = (tenant: string) =>
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
+
+export const fetchOrgData = async <T>(orgId: string) =>
+  apiFetch<T>(tenantOrgUrl(orgId), "GET");
 
 export const fetchAccountInformation = async <T>(authn: Authn) =>
   baseFetch<T>(authn, {
