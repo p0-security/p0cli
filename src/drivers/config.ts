@@ -42,7 +42,6 @@ export const getGoogleTenantConfig = () => {
 
 export const saveConfig = async (orgId: string) => {
   const orgData = await getOrgData(orgId);
-  if (!orgData) throw "Could not find organization";
 
   const config = orgData.config ?? bootstrapConfig;
 

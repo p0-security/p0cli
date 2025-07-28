@@ -18,6 +18,11 @@ import {
   PluginRequest,
 } from "../../types/request";
 
+/**
+ * process request status to determine the success of the operation
+ * @param request
+ * @returns
+ */
 export const decodeProvisionStatus = async <P extends PluginRequest>(
   request: PermissionRequest<P>
 ) => {

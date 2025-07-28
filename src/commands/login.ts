@@ -106,8 +106,6 @@ export const login = async (
 
   const orgData = await getOrgData(org);
 
-  if (!orgData) throw "Could not find organization";
-
   const orgWithSlug: OrgData = { ...orgData, slug: org };
 
   if (!loggedIn) {

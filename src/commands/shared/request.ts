@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
-import { generateSpinUntil, print2, spinUntil } from "../../drivers/stdio";
+import { print2, spinUntil } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
   PermissionRequest,
@@ -100,80 +100,87 @@ export const request =
           return "Requesting access";
       }
     };
-    try {
-      if (!args.wait) {
-        const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
-          resolvedAuthn,
-          args,
-          [command, ...args.arguments]
-        );
-        const data =
-          options?.message != "quiet"
-            ? await spinUntil(
-                accessMessage(options?.message),
-                fetchCommandPromise
-              )
-            : await fetchCommandPromise;
-
-        if (data && "ok" in data && "message" in data && data.ok) {
-          const logMessage =
-            !options?.message ||
-            options?.message === "all" ||
-            (options?.message === "approval-required" &&
-              !data.isPreexisting &&
-              !data.isPersistent);
+    const requestForCommand = async (
+      fetcher: Promise<RequestResponse<T> | undefined>
+    ) => {
+      return options?.message != "quiet"
+        ? await spinUntil(accessMessage(options?.message), fetcher)
+        : await fetcher;
+    };
+    const logMessageAndProcessData = async (
+      data: RequestResponse<T> | undefined,
+      dataHandler: (
+        data: RequestResponse<T>,
+        logMessage: boolean
+      ) => Promise<RequestResponse<T> | undefined>
+    ) => {
+      if (data && "ok" in data && "message" in data && data.ok) {
+        const logMessage =
+          !options?.message ||
+          options?.message === "all" ||
+          (options?.message === "approval-required" &&
+            !data.isPreexisting &&
+            !data.isPersistent);
+        return await dataHandler(data, logMessage);
+      } else {
+        throw data;
+      }
+    };
+    const invokeRequest = async () => {
+      const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
+        resolvedAuthn,
+        args,
+        [command, ...args.arguments]
+      );
+      return logMessageAndProcessData(
+        await requestForCommand(fetchCommandPromise),
+        async (data, logMessage) => {
           if (logMessage) print2(data.message);
           return data;
-        } else {
-          throw data;
         }
-      } else {
-        const fetchStreamingCommandPromise = fetchStreamingCommand<
-          RequestResponse<T>
-        >(resolvedAuthn, args, [command, ...args.arguments]);
-        const fetchValue = async () => {
-          const generatedValue = await fetchStreamingCommandPromise.next();
-          if (generatedValue.done) {
-            return undefined;
-          }
-          return generatedValue.value;
-        };
-        const data =
-          options?.message != "quiet"
-            ? await spinUntil(accessMessage(options?.message), fetchValue())
-            : await fetchValue();
-
-        if (data && "ok" in data && "message" in data && data.ok) {
-          const logMessage =
-            !options?.message ||
-            options?.message === "all" ||
-            (options?.message === "approval-required" &&
-              !data.isPreexisting &&
-              !data.isPersistent);
+      );
+    };
+    const streamRequest = async () => {
+      const fetchStreamingCommandGenerator = fetchStreamingCommand<
+        RequestResponse<T>
+      >(resolvedAuthn, args, [command, ...args.arguments]);
+      const fetchValue = async () => {
+        const generatedValue = await fetchStreamingCommandGenerator.next();
+        if (generatedValue.done) {
+          return undefined;
+        }
+        return generatedValue.value;
+      };
+      return await logMessageAndProcessData(
+        await requestForCommand(fetchValue()),
+        async (data, logMessage) => {
           if (logMessage) {
             print2(data.message);
             print2("Will wait up to 5 minutes for this request to complete...");
           }
 
-          for await (const finalData of fetchStreamingCommandPromise) {
-            if (!finalData)
+          for await (const chunkData of fetchStreamingCommandGenerator) {
+            if (!chunkData)
               throw new Error("Errored waiting to provision request");
-            if ("skip" in finalData) {
+            if ("skip" in chunkData) {
               continue;
             }
             const code = resolveCode(
-              finalData.request as PermissionRequest<PluginRequest>,
+              chunkData.request as PermissionRequest<PluginRequest>,
               logMessage
             );
             if (code) {
               sys.exit(code);
               return undefined;
             }
-            return finalData;
+            return chunkData;
           }
+          throw data;
         }
-        throw data;
-      }
+      );
+    };
+    try {
+      return await (!args.wait ? invokeRequest() : streamRequest());
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
         print2("Your request did not complete within 5 minutes.");

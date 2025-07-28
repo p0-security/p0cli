@@ -14,6 +14,6 @@ export const getOrgData = async (orgId: string) => {
     print2(
       "Could not find organization. Please check the organization ID and try again."
     );
-    return undefined;
+    throw "Could not find organization";
   }
 };
