@@ -15,8 +15,10 @@ import { print2 } from "./stdio";
 export const getOrgData = async (orgId: string) => {
   try {
     return await fetchOrgData<RawOrgData>(orgId);
-  } catch (e) {
-    print2(e);
+  } catch (e: any) {
+    if (typeof e === "string" && e.startsWith("Network error:")) {
+      throw e;
+    }
     print2(
       "Could not find organization. Please check the organization ID and try again."
     );
