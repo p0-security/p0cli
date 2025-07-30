@@ -46,6 +46,7 @@ type BaseOrgData = {
   usePassword?: boolean;
   tenantId: string;
   config: Config;
+  authPassthrough?: boolean;
 };
 
 /** Publicly readable organization data */

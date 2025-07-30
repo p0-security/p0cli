@@ -113,14 +113,13 @@ export const baseFetch = async <T>(
   method: string,
   body: string
 ) => {
-  const token = await authn.userCredential.user.getIdToken();
   const { version } = p0VersionInfo;
 
   try {
     const response = await fetch(url, {
       method,
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${await authn.getToken()}`,
         "Content-Type": "application/json",
         "User-Agent": `P0 CLI/${version}`,
       },

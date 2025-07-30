@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { flow } from "lodash";
 import { login } from "../../commands/login";
 import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
 import { Authn, Identity } from "../../types/identity";
@@ -153,25 +154,29 @@ export const deleteIdentity = async () => {
 
 /** Set up trace exporter to authenticated collector endpoint */
 const setOpentelemetryExporter = async (
-  identity: Identity,
-  userCredential: UserCredential
-) => {
-  const idToken = await userCredential.user.getIdToken();
-  const url = tracesUrl(identity.org.slug);
-  await setExporterAfterLogin(url, idToken);
+  authn: Authn
+): Promise<Authn> => {
+  const url = tracesUrl(authn.identity.org.slug);
+  await setExporterAfterLogin(url, await authn.getToken());
+  return authn;
 };
 
-export const authenticate = async (options?: {
+export const authenticate = flow(async (options?: {
   noRefresh?: boolean;
   debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
+  if (identity.org.authPassthrough) {
+    return {identity, getToken: () => Promise.resolve(identity.credential.access_token)};
+  }
+
   // Note: if the `providerId` is "password", we already actually already
   // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
   // This following call to `authenticateToFirebase` could be omitted.
   const userCredential = await authenticateToFirebase(identity, options);
-
-  await setOpentelemetryExporter(identity, userCredential);
-
-  return { userCredential, identity };
-};
+  return {
+    identity,
+    userCredential,
+    getToken: userCredential.user.getIdToken,
+  };
+}, setOpentelemetryExporter);
