@@ -16,6 +16,7 @@ export const getOrgData = async (orgId: string) => {
   try {
     return await fetchOrgData<RawOrgData>(orgId);
   } catch (e) {
+    print2(e);
     print2(
       "Could not find organization. Please check the organization ID and try again."
     );

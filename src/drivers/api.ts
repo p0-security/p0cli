@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
+import { bootstrapConfig } from "./env";
 import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -18,7 +19,7 @@ import yargs from "yargs";
 const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
 
 const tenantOrgUrl = (tenant: string) =>
-  `${getTenantConfig().appUrl}/orgs/${tenant}`;
+  `${getTenantConfig()?.appUrl ?? bootstrapConfig.appUrl}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
@@ -30,7 +31,7 @@ const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
 export const fetchOrgData = async <T>(orgId: string) =>
-  apiFetch<T>(tenantOrgUrl(orgId), "GET");
+  unauthenticatedApiFetch<T>(tenantOrgUrl(orgId), "GET");
 
 export const fetchAccountInfo = async <T>(authn: Authn) =>
   baseFetch<T>(authn, {
@@ -262,7 +263,7 @@ export const baseFetch = async <T>(
   }
 };
 
-export const apiFetch = async <T>(
+const unauthenticatedApiFetch = async <T>(
   url: string,
   method: string,
   body?: string
