@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { flow } from "lodash";
 import { login } from "../../commands/login";
 import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
 import { Authn, Identity } from "../../types/identity";
@@ -21,6 +20,7 @@ import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import { UserCredential } from "firebase/auth";
 import * as fs from "fs/promises";
+import { flow } from "lodash";
 import * as path from "path";
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 60;
@@ -153,30 +153,34 @@ export const deleteIdentity = async () => {
 };
 
 /** Set up trace exporter to authenticated collector endpoint */
-const setOpentelemetryExporter = async (
-  authn: Authn
-): Promise<Authn> => {
+const setOpentelemetryExporter = async (authn: Authn): Promise<Authn> => {
   const url = tracesUrl(authn.identity.org.slug);
   await setExporterAfterLogin(url, await authn.getToken());
   return authn;
 };
 
-export const authenticate = flow(async (options?: {
-  noRefresh?: boolean;
-  debug?: boolean;
-}): Promise<Authn> => {
-  const identity = await loadCredentialsWithAutoLogin(options);
-  if (identity.org.authPassthrough) {
-    return {identity, getToken: () => Promise.resolve(identity.credential.access_token)};
-  }
+export const authenticate = flow(
+  async (options?: {
+    noRefresh?: boolean;
+    debug?: boolean;
+  }): Promise<Authn> => {
+    const identity = await loadCredentialsWithAutoLogin(options);
+    if (identity.org.authPassthrough) {
+      return {
+        identity,
+        getToken: () => Promise.resolve(identity.credential.access_token),
+      };
+    }
 
-  // Note: if the `providerId` is "password", we already actually already
-  // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
-  // This following call to `authenticateToFirebase` could be omitted.
-  const userCredential = await authenticateToFirebase(identity, options);
-  return {
-    identity,
-    userCredential,
-    getToken: userCredential.user.getIdToken,
-  };
-}, setOpentelemetryExporter);
+    // Note: if the `providerId` is "password", we already actually already
+    // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
+    // This following call to `authenticateToFirebase` could be omitted.
+    const userCredential = await authenticateToFirebase(identity, options);
+    return {
+      identity,
+      userCredential,
+      getToken: userCredential.user.getIdToken,
+    };
+  },
+  setOpentelemetryExporter
+);
