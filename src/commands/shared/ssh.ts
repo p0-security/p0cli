@@ -16,6 +16,7 @@ import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
+import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
@@ -88,6 +89,7 @@ export const SSH_PROVIDERS: Record<
   aws: awsSshProvider,
   azure: azureSshProvider,
   gcloud: gcpSshProvider,
+  "self-hosted": selfHostedSshProvider,
 };
 
 const validateSshInstall = async (
