@@ -70,6 +70,10 @@ describe("request", () => {
     );
 
     it("should wait for access", async () => {
+      /**
+       * This test checks that the request command waits for access to be granted
+       * before resolving the promise.
+       */
       mockFetchStreamingCommand.mockImplementation(async function* () {
         yield {
           ok: true,
@@ -90,6 +94,7 @@ describe("request", () => {
         };
       });
       const promise = requestCommand(yargs()).parse(`${command} --wait`);
+      // await for the first response to yield
       const wait = sleep(100);
       await expect(wait).resolves.toBeUndefined();
       await expect(promise).resolves.toBeDefined();

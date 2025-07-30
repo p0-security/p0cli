@@ -100,14 +100,14 @@ export const request =
           return "Requesting access";
       }
     };
-    const requestForCommand = async (
+    const executeApiRequest = async (
       fetcher: Promise<RequestResponse<T> | undefined>
     ) => {
       return options?.message != "quiet"
         ? await spinUntil(accessMessage(options?.message), fetcher)
         : await fetcher;
     };
-    const logMessageAndProcessData = async (
+    const processResponse = async (
       data: RequestResponse<T> | undefined,
       dataHandler: (
         data: RequestResponse<T>,
@@ -132,27 +132,27 @@ export const request =
         args,
         [command, ...args.arguments]
       );
-      return logMessageAndProcessData(
-        await requestForCommand(fetchCommandPromise),
+      return processResponse(
+        await executeApiRequest(fetchCommandPromise),
         async (data, logMessage) => {
           if (logMessage) print2(data.message);
           return data;
         }
       );
     };
-    const streamRequest = async () => {
+    const executeStreamingRequest = async () => {
       const fetchStreamingCommandGenerator = fetchStreamingCommand<
         RequestResponse<T>
       >(resolvedAuthn, args, [command, ...args.arguments]);
-      const fetchValue = async () => {
+      const getNextPermissionRequestChunk = async () => {
         const generatedValue = await fetchStreamingCommandGenerator.next();
         if (generatedValue.done) {
           return undefined;
         }
         return generatedValue.value;
       };
-      return await logMessageAndProcessData(
-        await requestForCommand(fetchValue()),
+      return await processResponse(
+        await executeApiRequest(getNextPermissionRequestChunk()),
         async (data, logMessage) => {
           if (logMessage) {
             print2(data.message);
@@ -180,7 +180,7 @@ export const request =
       );
     };
     try {
-      return await (!args.wait ? invokeRequest() : streamRequest());
+      return await (!args.wait ? invokeRequest() : executeStreamingRequest());
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
         print2("Your request did not complete within 5 minutes.");

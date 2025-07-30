@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchAccountInformation } from "../drivers/api";
+import { fetchAccountInfo } from "../drivers/api";
 import {
   authenticate,
   deleteIdentity,
@@ -155,7 +155,7 @@ export const loginCommand = (yargs: yargs.Argv) =>
 
 const validateTenantAccess = async (authn: Authn) => {
   try {
-    await fetchAccountInformation(authn);
+    await fetchAccountInfo(authn);
     return true;
   } catch (e) {
     await deleteIdentity();

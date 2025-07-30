@@ -32,13 +32,13 @@ export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 export const fetchOrgData = async <T>(orgId: string) =>
   apiFetch<T>(tenantOrgUrl(orgId), "GET");
 
-export const fetchAccountInformation = async <T>(authn: Authn) =>
+export const fetchAccountInfo = async <T>(authn: Authn) =>
   baseFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/account`,
     method: "GET",
   });
 
-export const fetchPermissionRequest = async <T>(
+export const fetchPermissionRequestDetails = async <T>(
   authn: Authn,
   requestId: string
 ) =>
@@ -62,7 +62,7 @@ export const fetchStreamingCommand = async function* <T>(
   args: yargs.ArgumentsCamelCase,
   argv: string[]
 ) {
-  yield* streamingApiFetch<T>(authn, {
+  yield* fetchWithStreaming<T>(authn, {
     url: commandUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
@@ -115,7 +115,7 @@ export const submitPublicKey = async <T>(
     }),
   });
 
-export const streamingApiFetch = async function* <T>(
+export const fetchWithStreaming = async function* <T>(
   authn: Authn,
   args: {
     url: string;

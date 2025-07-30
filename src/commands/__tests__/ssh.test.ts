@@ -78,6 +78,11 @@ mockIntegrationConfig.mockResolvedValue({
 });
 
 describe("ssh", () => {
+  /**
+   * mockStreaming simulates a streaming response from the API.
+   * It yields an initial response and then a final response after a delay.
+   * @param sleep sleep function to simulate delay in streaming response
+   */
   const mockStreaming = (
     isPersistent: boolean,
     sleep?: () => Promise<void>
@@ -123,6 +128,7 @@ describe("ssh", () => {
       const promise = sshCommand(yargs())
         .fail(noop)
         .parse(`ssh some-instance --reason reason --provider aws`);
+      // await for the first response to yield
       await sleep(10);
       const hiddenFilenameRequestArgs = omit(
         mockFetchStreamingCommand.mock.calls[0][1],
@@ -140,6 +146,13 @@ describe("ssh", () => {
       await expect(wait).resolves.toBeUndefined();
       await expect(promise).resolves.toBeDefined();
     });
+    /**
+     * This test checks that the sshOrScp function is called with the correct parameters
+     * when the command is parsed with a non-interactive command.
+     * It mocks the sshOrScp function and verifies that it is called with the expected
+     * arguments, including the generated resource and permission.
+     * It also checks that the output is printed correctly.
+     */
     it("should call sshOrScp with non-interactive command", async () => {
       mockStreaming(isPersistent);
       const promise = sshCommand(yargs())
