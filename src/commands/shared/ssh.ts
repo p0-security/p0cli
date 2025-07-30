@@ -17,6 +17,7 @@ import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
+import { warpPortalSshProvider } from "../../plugins/warp-portal/ssh";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import {
@@ -88,6 +89,7 @@ export const SSH_PROVIDERS: Record<
   aws: awsSshProvider,
   azure: azureSshProvider,
   gcloud: gcpSshProvider,
+  "warp-portal": warpPortalSshProvider,
 };
 
 const validateSshInstall = async (

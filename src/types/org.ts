@@ -52,6 +52,9 @@ type BaseOrgData = {
 export type RawOrgData = BaseOrgData &
   (
     | {
+        providerType?: "azure";
+      }
+    | {
         providerType?: "okta";
       }
     | {

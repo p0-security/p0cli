@@ -24,14 +24,20 @@ import {
   GcpSshPermissionSpec,
   GcpSshRequest,
 } from "../plugins/google/types";
+import {
+  WarpPortalSsh,
+  WarpPortalSshPermissionSpec,
+  WarpPortalSshRequest,
+} from "../plugins/warp-portal/types";
 import { Authn } from "./identity";
 import { PermissionRequest } from "./request";
 
-export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh;
+export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh | WarpPortalSsh;
 export type PluginSshRequest =
   | AwsSshPermissionSpec
   | AzureSshPermissionSpec
-  | GcpSshPermissionSpec;
+  | GcpSshPermissionSpec
+  | WarpPortalSshPermissionSpec;
 
 export type CliPermissionSpec<
   P extends PluginSshRequest,
@@ -41,7 +47,12 @@ export type CliPermissionSpec<
 };
 
 // The prefix of installed SSH accounts in P0 is the provider name
-export const SupportedSshProviders = ["aws", "azure", "gcloud"] as const;
+export const SupportedSshProviders = [
+  "aws",
+  "azure",
+  "gcloud",
+  "warp-portal",
+] as const;
 export type SupportedSshProvider = (typeof SupportedSshProviders)[number];
 
 export type AccessPattern = {
@@ -146,4 +157,8 @@ export type SshProvider<
   ) => Promise<PermissionRequest<CliSshRequest>>;
 };
 
-export type SshRequest = AwsSshRequest | AzureSshRequest | GcpSshRequest;
+export type SshRequest =
+  | AwsSshRequest
+  | AzureSshRequest
+  | GcpSshRequest
+  | WarpPortalSshRequest;
