@@ -177,7 +177,7 @@ export const authenticate = async (options?: {
     return {
       identity,
       userCredential,
-      getToken: userCredential.user.getIdToken,
+      getToken: () => userCredential.user.getIdToken(),
     };
   };
 
