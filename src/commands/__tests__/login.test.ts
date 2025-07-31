@@ -28,15 +28,18 @@ jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
 
 const mockIdentity: Identity = {
+  // @ts-expect-error credential has more fields, this is enough for tests
   credential: {
     expires_at: Date.now() * 1e-3 + 60 * 1000,
   },
+  // @ts-expect-error org has more fields, this is enough for tests
   org: {
     tenantId: "test-tenant",
     slug: "test-org",
     ssoProvider: "google",
   },
-} as Identity;
+  token: "test",
+};
 
 const mockSignInWithCredential = signInWithCredential as jest.Mock;
 const mockReadFile = readFile as jest.Mock;

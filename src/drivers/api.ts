@@ -113,8 +113,8 @@ export const baseFetch = async <T>(
   method: string,
   body: string
 ) => {
-  const token = await authn.userCredential.user.getIdToken();
   const { version } = p0VersionInfo;
+  const token = await authn.getToken();
 
   try {
     const response = await fetch(url, {

@@ -113,7 +113,8 @@ export const request =
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
-    const { userCredential } = resolvedAuthn;
+    const { identity } = resolvedAuthn;
+    const { tenantId } = identity.org;
     const accessMessage = (message?: string) => {
       switch (message) {
         case "approval-required":
@@ -143,12 +144,8 @@ export const request =
           !data.isPersistent);
       if (logMessage) print2(data.message);
       const { id } = data;
-      if (args.wait && id && userCredential.user.tenantId) {
-        const code = await waitForRequest(
-          userCredential.user.tenantId,
-          id,
-          logMessage
-        );
+      if (args.wait && id && tenantId) {
+        const code = await waitForRequest(tenantId, id, logMessage);
         if (code) {
           sys.exit(code);
           return undefined;

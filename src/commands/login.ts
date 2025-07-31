@@ -48,6 +48,16 @@ const formatTimeLeft = (seconds: number) => {
   return `${h}h${m}m${s}s`;
 };
 
+// TODO ENG-5627: Org discovery needs to be decoupled from Firestore
+const fetchOrg = async (orgSlug: string): Promise<OrgData> => {
+  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${orgSlug}`));
+  const orgData = orgDoc.data();
+
+  if (!orgData) throw "Could not find organization";
+
+  return { ...orgData, slug: orgSlug };
+};
+
 /** Logs in the user.
  *
  * If the P0_ORG environment variable is set, it is used as the organization name,
@@ -59,24 +69,20 @@ export const login = async (
   args: { org?: string; refresh?: boolean },
   options?: { debug?: boolean; skipAuthenticate?: boolean }
 ) => {
-  let identity;
-  try {
-    identity = await loadCredentials();
-  } catch {
-    // Ignore error, as no credentials may yet be present
-  }
+  // Ignore error, as no credentials may yet be present
+  const identity = await loadCredentials().catch(() => undefined);
 
   const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
 
   let loggedIn = tokenTimeRemaining > MIN_REMAINING_TOKEN_TIME_SECONDS;
-  let org = args.org || process.env.P0_ORG;
+  let orgSlug = args.org || process.env.P0_ORG;
 
-  if (!org) {
+  if (!orgSlug) {
     if (identity && loggedIn) {
       // If no org is provided, and the user is logged in, use the one from the identity
-      org = identity.org.slug;
+      orgSlug = identity.org.slug;
 
-      print2(`You are currently logged in to the ${org} organization.`);
+      print2(`You are currently logged in to the ${orgSlug} organization.`);
       print2(
         `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
       );
@@ -85,11 +91,11 @@ export const login = async (
     }
   } else {
     if (identity && loggedIn) {
-      if (org !== identity.org.slug || args.refresh) {
+      if (orgSlug !== identity.org.slug || args.refresh) {
         // Force login if user is switching organizations or if --refresh argument is provided
         loggedIn = false;
       } else {
-        print2(`You are already logged in to the ${org} organization.`);
+        print2(`You are already logged in to the ${orgSlug} organization.`);
         print2(
           `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
         );
@@ -98,20 +104,14 @@ export const login = async (
   }
 
   if (!loggedIn) {
-    await saveConfig(org);
+    await saveConfig(orgSlug);
   }
 
   await initializeFirebase();
-
-  const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${org}`));
-  const orgData = orgDoc.data();
-
-  if (!orgData) throw "Could not find organization";
-
-  const orgWithSlug: OrgData = { ...orgData, slug: org };
+  const orgData = await fetchOrg(orgSlug);
 
   if (!loggedIn) {
-    await doActualLogin(orgWithSlug);
+    await doActualLogin(orgData);
   }
 
   if (!options?.skipAuthenticate) {
@@ -121,7 +121,7 @@ export const login = async (
 
   if (!loggedIn) {
     print2(
-      `You are now logged in to the ${org} organization, and can use the p0 CLI.`
+      `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
     );
   }
 };
