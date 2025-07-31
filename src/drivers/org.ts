@@ -20,9 +20,6 @@ export const getOrgData = async (orgId: string) => {
       throw e;
     }
     if (typeof e === "string" && e.startsWith("Not found")) {
-      print2(
-        "Could not find organization. Please check the organization ID and try again."
-      );
       throw "Could not find organization";
     }
     throw e;
