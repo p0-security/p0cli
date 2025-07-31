@@ -48,6 +48,7 @@ const formatTimeLeft = (seconds: number) => {
   return `${h}h${m}m${s}s`;
 };
 
+// TODO ENG-5627: Org discovery needs to be decoupled from Firestore
 const discoverOrg = async (orgSlug: string): Promise<OrgData> => {
   const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${orgSlug}`));
   const orgData = orgDoc.data();
