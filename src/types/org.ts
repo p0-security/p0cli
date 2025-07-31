@@ -46,7 +46,8 @@ type BaseOrgData = {
   usePassword?: boolean;
   tenantId: string;
   config: Config;
-  authPassthrough?: boolean;
+  /** Swaps API auth to tokens from the ssoProvider, rather than firebase */
+  useProviderToken?: boolean;
 };
 
 /** Publicly readable organization data */

@@ -49,7 +49,7 @@ const formatTimeLeft = (seconds: number) => {
 };
 
 // TODO ENG-5627: Org discovery needs to be decoupled from Firestore
-const discoverOrg = async (orgSlug: string): Promise<OrgData> => {
+const fetchOrg = async (orgSlug: string): Promise<OrgData> => {
   const orgDoc = await getDoc<RawOrgData, object>(doc(`orgs/${orgSlug}`));
   const orgData = orgDoc.data();
 
@@ -108,15 +108,15 @@ export const login = async (
   }
 
   await initializeFirebase();
-  const org = await discoverOrg(orgSlug);
+  const orgData = await fetchOrg(orgSlug);
 
   if (!loggedIn) {
-    await doActualLogin(org);
+    await doActualLogin(orgData);
   }
 
   if (!options?.skipAuthenticate) {
     await authenticate({ debug: options?.debug });
-    await validateTenantAccess(org);
+    await validateTenantAccess(orgData);
   }
 
   if (!loggedIn) {
