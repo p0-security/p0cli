@@ -18,9 +18,7 @@ import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
-import { UserCredential } from "firebase/auth";
 import * as fs from "fs/promises";
-import { flow } from "lodash";
 import * as path from "path";
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 60;
@@ -159,11 +157,11 @@ const setOpentelemetryExporter = async (authn: Authn): Promise<Authn> => {
   return authn;
 };
 
-export const authenticate = flow(
-  async (options?: {
-    noRefresh?: boolean;
-    debug?: boolean;
-  }): Promise<Authn> => {
+export const authenticate = async (options?: {
+  noRefresh?: boolean;
+  debug?: boolean;
+}): Promise<Authn> => {
+  const getAuthn = async () => {
     const identity = await loadCredentialsWithAutoLogin(options);
     if (identity.org.authPassthrough) {
       return {
@@ -181,6 +179,7 @@ export const authenticate = flow(
       userCredential,
       getToken: userCredential.user.getIdToken,
     };
-  },
-  setOpentelemetryExporter
-);
+  };
+
+  return await getAuthn().then(setOpentelemetryExporter);
+};
