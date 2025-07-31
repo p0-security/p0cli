@@ -60,7 +60,7 @@ describe("login", () => {
 
   it("prints a friendly error if the org is not found", async () => {
     mockFetchOrgData.mockImplementation(() => {
-      throw new Error("org not found");
+      throw "Not found";
     });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
       `"Could not find organization"`
