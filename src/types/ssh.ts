@@ -25,19 +25,19 @@ import {
   GcpSshRequest,
 } from "../plugins/google/types";
 import {
-  WarpPortalSsh,
-  WarpPortalSshPermissionSpec,
-  WarpPortalSshRequest,
-} from "../plugins/warp-portal/types";
+  SelfHostedSsh,
+  SelfHostedSshPermissionSpec,
+  SelfHostedSshRequest,
+} from "../plugins/self-hosted/types";
 import { Authn } from "./identity";
 import { PermissionRequest } from "./request";
 
-export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh | WarpPortalSsh;
+export type CliSshRequest = AwsSsh | AzureSsh | GcpSsh | SelfHostedSsh;
 export type PluginSshRequest =
   | AwsSshPermissionSpec
   | AzureSshPermissionSpec
   | GcpSshPermissionSpec
-  | WarpPortalSshPermissionSpec;
+  | SelfHostedSshPermissionSpec;
 
 export type CliPermissionSpec<
   P extends PluginSshRequest,
@@ -51,7 +51,7 @@ export const SupportedSshProviders = [
   "aws",
   "azure",
   "gcloud",
-  "warp-portal",
+  "self-hosted",
 ] as const;
 export type SupportedSshProvider = (typeof SupportedSshProviders)[number];
 
@@ -161,4 +161,4 @@ export type SshRequest =
   | AwsSshRequest
   | AzureSshRequest
   | GcpSshRequest
-  | WarpPortalSshRequest;
+  | SelfHostedSshRequest;

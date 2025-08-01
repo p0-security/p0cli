@@ -36,7 +36,7 @@ export const sshProxyCommand = (yargs: yargs.Argv) =>
           requiresArg: true,
           type: "string",
           describe: "The cloud provider where the instance is hosted",
-          choices: ["aws", "azure", "gcloud", "warp-portal"],
+          choices: ["aws", "azure", "gcloud", "self-hosted"],
 
           demandOption: true,
         })

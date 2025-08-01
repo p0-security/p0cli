@@ -12,32 +12,32 @@ import { PermissionSpec } from "../../types/request";
 import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
-export type WarpPortalSshPermission = CommonSshPermissionSpec & {
-  provider: "warp-portal";
+export type SelfHostedSshPermission = CommonSshPermissionSpec & {
+  provider: "self-hosted";
   resource: {
     hostname: string;
     publicIp: string;
   };
 };
 
-export type WarpPortalSshGenerated = {
+export type SelfHostedSshGenerated = {
   linuxUserName: string;
   publicKey: string;
 };
 
-export type WarpPortalSshPermissionSpec = PermissionSpec<
+export type SelfHostedSshPermissionSpec = PermissionSpec<
   "ssh",
-  WarpPortalSshPermission,
-  WarpPortalSshGenerated
+  SelfHostedSshPermission,
+  SelfHostedSshGenerated
 >;
 
-export type WarpPortalSsh = CliPermissionSpec<
-  WarpPortalSshPermissionSpec,
+export type SelfHostedSsh = CliPermissionSpec<
+  SelfHostedSshPermissionSpec,
   undefined
 >;
 
-export type WarpPortalSshRequest = {
-  type: "warp-portal";
+export type SelfHostedSshRequest = {
+  type: "self-hosted";
   linuxUserName: string;
   id: string;
 };

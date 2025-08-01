@@ -12,7 +12,7 @@ import { isSudoCommand } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
-import { WarpPortalSshPermissionSpec, WarpPortalSshRequest } from "./types";
+import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
@@ -30,10 +30,10 @@ const unprovisionedAccessPatterns = [
   { pattern: /Error while connecting \[4010: 'destination read failed'\]/ },
 ] as const;
 
-export const warpPortalSshProvider: SshProvider<
-  WarpPortalSshPermissionSpec,
+export const selfHostedSshProvider: SshProvider<
+  SelfHostedSshPermissionSpec,
   undefined,
-  WarpPortalSshRequest
+  SelfHostedSshRequest
 > = {
   cloudProviderLogin: async () => undefined,
   ensureInstall: async () => {},
@@ -73,7 +73,7 @@ export const warpPortalSshProvider: SshProvider<
     return {
       id: request.permission.resource.publicIp,
       linuxUserName: request.generated.linuxUserName,
-      type: "warp-portal",
+      type: "self-hosted",
     };
   },
 
