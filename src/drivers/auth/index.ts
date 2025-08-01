@@ -18,7 +18,6 @@ import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
-import { UserCredential } from "firebase/auth";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -152,13 +151,9 @@ export const deleteIdentity = async () => {
 };
 
 /** Set up trace exporter to authenticated collector endpoint */
-const setOpentelemetryExporter = async (
-  identity: Identity,
-  userCredential: UserCredential
-) => {
-  const idToken = await userCredential.user.getIdToken();
-  const url = tracesUrl(identity.org.slug);
-  await setExporterAfterLogin(url, idToken);
+const setOpentelemetryExporter = async (authn: Authn): Promise<void> => {
+  const url = tracesUrl(authn.identity.org.slug);
+  await setExporterAfterLogin(url, await authn.getToken());
 };
 
 export const authenticate = async (options?: {
@@ -166,12 +161,25 @@ export const authenticate = async (options?: {
   debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
-  // Note: if the `providerId` is "password", we already actually already
-  // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
-  // This following call to `authenticateToFirebase` could be omitted.
-  const userCredential = await authenticateToFirebase(identity, options);
+  let authn: Authn;
 
-  await setOpentelemetryExporter(identity, userCredential);
+  if (identity.org.useProviderToken) {
+    authn = {
+      identity,
+      getToken: () => Promise.resolve(identity.credential.access_token),
+    };
+  } else {
+    // Note: if the `providerId` is "password", we already actually already
+    // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
+    // This following call to `authenticateToFirebase` could be omitted.
+    const userCredential = await authenticateToFirebase(identity, options);
+    authn = {
+      identity,
+      userCredential,
+      getToken: () => userCredential.user.getIdToken(),
+    };
+  }
 
-  return { userCredential, identity };
+  await setOpentelemetryExporter(authn);
+  return authn;
 };

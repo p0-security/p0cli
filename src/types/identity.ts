@@ -19,5 +19,6 @@ export type Identity = {
 
 export type Authn = {
   identity: Identity;
-  userCredential: UserCredential;
+  userCredential?: UserCredential;
+  getToken(): Promise<string>;
 };

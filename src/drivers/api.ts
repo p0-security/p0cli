@@ -125,7 +125,7 @@ export const fetchWithStreaming = async function* <T>(
     maxTimeoutMs?: number;
   }
 ) {
-  const token = await authn.userCredential.user.getIdToken();
+  const token = await authn.getToken();
   const { version } = p0VersionInfo;
   const { url, method, body, maxTimeoutMs } = args;
   const fetchOptions = {
@@ -228,9 +228,9 @@ export const baseFetch = async <T>(
     maxTimeoutMs?: number;
   }
 ) => {
-  const token = await authn.userCredential.user.getIdToken();
   const { version } = p0VersionInfo;
   const { url, method, body, maxTimeoutMs } = args;
+  const token = await authn.getToken();
   const fetchOptions = {
     method,
     headers: {
@@ -241,6 +241,7 @@ export const baseFetch = async <T>(
     body,
     keepalive: true,
   };
+
   try {
     const response = await fetch(
       url,

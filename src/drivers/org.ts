@@ -10,7 +10,6 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { RawOrgData } from "../types/org";
 import { fetchOrgData } from "./api";
-import { print2 } from "./stdio";
 
 export const getOrgData = async (orgId: string) => {
   try {

@@ -60,24 +60,20 @@ export const login = async (
   args: { org?: string; refresh?: boolean },
   options?: { debug?: boolean; skipAuthenticate?: boolean }
 ) => {
-  let identity;
-  try {
-    identity = await loadCredentials();
-  } catch {
-    // Ignore error, as no credentials may yet be present
-  }
+  // Ignore error, as no credentials may yet be present
+  const identity = await loadCredentials().catch(() => undefined);
 
   const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
 
   let loggedIn = tokenTimeRemaining > MIN_REMAINING_TOKEN_TIME_SECONDS;
-  let org = args.org || process.env.P0_ORG;
+  let orgSlug = args.org || process.env.P0_ORG;
 
-  if (!org) {
+  if (!orgSlug) {
     if (identity && loggedIn) {
       // If no org is provided, and the user is logged in, use the one from the identity
-      org = identity.org.slug;
+      orgSlug = identity.org.slug;
 
-      print2(`You are currently logged in to the ${org} organization.`);
+      print2(`You are currently logged in to the ${orgSlug} organization.`);
       print2(
         `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
       );
@@ -86,11 +82,11 @@ export const login = async (
     }
   } else {
     if (identity && loggedIn) {
-      if (org !== identity.org.slug || args.refresh) {
+      if (orgSlug !== identity.org.slug || args.refresh) {
         // Force login if user is switching organizations or if --refresh argument is provided
         loggedIn = false;
       } else {
-        print2(`You are already logged in to the ${org} organization.`);
+        print2(`You are already logged in to the ${orgSlug} organization.`);
         print2(
           `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
         );
@@ -99,14 +95,14 @@ export const login = async (
   }
 
   if (!loggedIn) {
-    await saveConfig(org);
+    await saveConfig(orgSlug);
   }
 
   await initializeFirebase();
 
-  const orgData = await getOrgData(org);
+  const orgData = await getOrgData(orgSlug);
 
-  const orgWithSlug: OrgData = { ...orgData, slug: org };
+  const orgWithSlug: OrgData = { ...orgData, slug: orgSlug };
 
   if (!loggedIn) {
     await doActualLogin(orgWithSlug);
@@ -119,7 +115,7 @@ export const login = async (
 
   if (!loggedIn) {
     print2(
-      `You are now logged in to the ${org} organization, and can use the p0 CLI.`
+      `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
     );
   }
 };
