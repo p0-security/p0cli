@@ -8,12 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { fetchOrgData } from "../../drivers/api";
 import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
 import { bootstrapConfig } from "../../drivers/env";
 import { print2 } from "../../drivers/stdio";
 import { pluginLoginMap } from "../../plugins/login";
-import { mockGetDoc } from "../../testing/firestore";
 import { Identity } from "../../types/identity";
 import { login } from "../login";
 import { signInWithCredential } from "firebase/auth";
@@ -26,6 +26,7 @@ jest.mock("../../drivers/auth/path", () => ({
 }));
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
+jest.mock("../../drivers/api");
 
 const mockIdentity: Identity = {
   // @ts-expect-error credential has more fields, this is enough for tests
@@ -44,6 +45,7 @@ const mockIdentity: Identity = {
 const mockSignInWithCredential = signInWithCredential as jest.Mock;
 const mockReadFile = readFile as jest.Mock;
 const mockWriteFile = writeFile as jest.Mock;
+const mockFetchOrgData = fetchOrgData as jest.Mock;
 
 describe("login", () => {
   beforeEach(() => {
@@ -54,21 +56,22 @@ describe("login", () => {
   });
 
   it("prints a friendly error if the org is not provided", async () => {
-    mockGetDoc(undefined);
     await expect(login({} as any)).rejects.toMatchInlineSnapshot(
       `"The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."`
     );
   });
 
   it("prints a friendly error if the org is not found", async () => {
-    mockGetDoc(undefined);
+    mockFetchOrgData.mockImplementation(() => {
+      throw "Not found";
+    });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
       `"Could not find organization"`
     );
   });
 
   it("prints a friendly error if unsupported login", async () => {
-    mockGetDoc({
+    mockFetchOrgData.mockResolvedValue({
       slug: "test-org",
       tenantId: "test-tenant",
       ssoProvider: "microsoft",
@@ -88,8 +91,7 @@ describe("login", () => {
         (error as any).code = "ENOENT";
         return Promise.reject(error);
       });
-
-      mockGetDoc({
+      mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
@@ -109,7 +111,7 @@ describe("login", () => {
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
-
+      jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
       mockReadFile.mockImplementation(async () =>
         Buffer.from(credentialData, "utf-8")
       );
@@ -125,8 +127,7 @@ describe("login", () => {
             },
           })
       );
-
-      mockGetDoc({
+      mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
         ssoProvider: "google",
@@ -163,8 +164,7 @@ Please contact support@p0.dev for assistance."
         jest.clearAllMocks();
 
         jest.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
-
-        mockGetDoc({
+        mockFetchOrgData.mockResolvedValue({
           slug: "test-org",
           tenantId: "test-tenant",
           ssoProvider: "google",
@@ -204,7 +204,7 @@ Please contact support@p0.dev for assistance."
       });
 
       it("different org provided, need to re-login", async () => {
-        mockGetDoc({
+        mockFetchOrgData.mockResolvedValue({
           slug: "other-org",
           tenantId: "other-tenant",
           ssoProvider: "google",

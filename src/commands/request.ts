@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fsShutdownGuard } from "../drivers/firestore";
 import { request, requestArgs } from "./shared/request";
 import yargs from "yargs";
 
@@ -17,5 +16,7 @@ export const requestCommand = (yargs: yargs.Argv) =>
     "request [arguments..]",
     "Manually request permissions on a resource",
     requestArgs,
-    fsShutdownGuard(request("request"))
+    async (args) => {
+      await request("request")(args);
+    }
   );

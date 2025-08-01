@@ -12,7 +12,6 @@ import { getPasswordCredential } from "../plugins/email/login";
 import { Identity } from "../types/identity";
 import { OrgData } from "../types/org";
 import { getContactMessage, loadConfig } from "./config";
-import { bootstrapConfig } from "./env";
 import { print2 } from "./stdio";
 import { EXPIRED_CREDENTIALS_MESSAGE } from "./util";
 import { FirebaseApp, FirebaseError, initializeApp } from "firebase/app";
@@ -25,28 +24,12 @@ import {
   signInWithCredential,
   UserCredential,
 } from "firebase/auth";
-import {
-  collection as fsCollection,
-  CollectionReference,
-  doc as fsDoc,
-  DocumentReference,
-  getFirestore,
-  terminate,
-  Firestore,
-} from "firebase/firestore";
-
-const bootstrapApp = initializeApp(bootstrapConfig.fs, "bootstrapApp");
-const bootstrapFirestore = getFirestore(bootstrapApp);
 
 let app: FirebaseApp;
-let firestore: Firestore;
 
 export async function initializeFirebase() {
-  if (!firestore) {
-    const tenantConfig = await loadConfig();
-    app = initializeApp(tenantConfig.fs, "authFirebase");
-    firestore = getFirestore(app);
-  }
+  const tenantConfig = await loadConfig();
+  app = initializeApp(tenantConfig.fs, "authFirebase");
 }
 
 const findProviderId = (org: OrgData) => {
@@ -125,39 +108,4 @@ export const authenticateToFirebase = async (
         });
 
   return await signInToTenant(org, firebaseCredential, options);
-};
-
-export const collection = <T>(path: string, ...pathSegments: string[]) => {
-  return fsCollection(
-    firestore,
-    path,
-    ...pathSegments
-  ) as CollectionReference<T>;
-};
-
-export const doc = <T>(path: string) => {
-  return fsDoc(firestore, path) as DocumentReference<T>;
-};
-
-export const bootstrapDoc = <T>(path: string) => {
-  return fsDoc(bootstrapFirestore, path) as DocumentReference<T>;
-};
-
-/** Ensures that Firestore is shutdown at command termination
- *
- * This prevents Firestore from holding the command on execution completion or failure.
- */
-export const fsShutdownGuard =
-  <P, T>(cb: (args: P) => Promise<T>) =>
-  async (args: P) => {
-    try {
-      await cb(args);
-    } finally {
-      shutdownFirebase();
-    }
-  };
-
-export const shutdownFirebase = () => {
-  if (bootstrapFirestore) void terminate(bootstrapFirestore);
-  if (firestore) void terminate(firestore);
 };

@@ -11,15 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../common/retry";
 import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
-import { fsShutdownGuard } from "../drivers/firestore";
 import { print2, spinUntil } from "../drivers/stdio";
 import { parseArn } from "../plugins/aws/utils";
 import {
+  aliasedArn,
   awsCloudAuth,
+  getAndValidateK8sIntegration,
   profileName,
   requestAccessToCluster,
-  getAndValidateK8sIntegration,
-  aliasedArn,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
 import { ciEquals, exec } from "../util";
@@ -68,7 +67,7 @@ export const kubeconfigCommand = (yargs: yargs.Argv) =>
           describe:
             "Requested duration for access (format like '10 minutes', '2 hours', '5 days', or '1 week')",
         }),
-    fsShutdownGuard(kubeconfigAction)
+    kubeconfigAction
   );
 
 const kubeconfigAction = async (

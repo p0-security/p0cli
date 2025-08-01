@@ -8,18 +8,17 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { doc } from "../../drivers/firestore";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
-import { getDoc } from "firebase/firestore";
 import { sortBy } from "lodash";
 
 export const getFirstAwsConfig = async (authn: Authn) => {
   const { identity } = authn;
-  const snapshot = await getDoc<AwsConfig, object>(
-    doc(`o/${identity.org.tenantId}/integrations/aws`)
+  const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
+    authn,
+    "aws"
   );
-  const config = snapshot.data();
 
   const item = Object.entries(config?.["iam-write"] ?? {}).find(
     ([_id, { state }]) => state === "installed"
@@ -35,10 +34,10 @@ export const getAwsConfig = async (
   account: string | undefined
 ) => {
   const { identity } = authn;
-  const snapshot = await getDoc<AwsConfig, object>(
-    doc(`o/${identity.org.tenantId}/integrations/aws`)
+  const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
+    authn,
+    "aws"
   );
-  const config = snapshot.data();
   // TODO: Support alias lookup
   const allItems = sortBy(
     Object.entries(config?.["iam-write"] ?? {}).filter(

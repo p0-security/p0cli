@@ -10,7 +10,6 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
-import { fsShutdownGuard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { AllowResponse } from "../types/allow";
 import { Authn } from "../types/identity";
@@ -37,7 +36,9 @@ export const allowCommand = (yargs: yargs.Argv) =>
     "allow [arguments..]",
     "Create standing access for a resource",
     allowArgs,
-    fsShutdownGuard(allow)
+    async (args) => {
+      await allow(args);
+    }
   );
 
 export const allow = async (

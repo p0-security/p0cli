@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fsShutdownGuard } from "../../drivers/firestore";
 import { getAwsConfig } from "../../plugins/aws/config";
 import { assumeRoleWithIdc } from "../../plugins/aws/idc";
 import { Authn } from "../../types/identity";
@@ -35,7 +34,7 @@ export const permissionSet = (
             demandOption: true,
             describe: "An AWS permission set name",
           }),
-        fsShutdownGuard((argv) => oktaAwsAssumePermissionSet(argv, authn))
+        (argv) => oktaAwsAssumePermissionSet(argv, authn)
       )
   );
 
