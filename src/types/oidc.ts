@@ -25,7 +25,7 @@ export type AuthorizeResponse = {
   device_code: string;
   user_code: string;
   verification_uri: string;
-  verification_uri_complete: string;
+  verification_uri_complete?: string;
   // Intervals in seconds
   expires_in: number;
   interval: number;
