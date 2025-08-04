@@ -155,7 +155,7 @@ export const oidcLoginSteps = (
     }),
     processAuthzResponse: (authorize) => ({
       user_code: authorize.user_code,
-      verification_uri_complete: authorize.verification_uri_complete,
+      verification_uri_complete: authorize.verification_uri_complete || authorize.verification_uri,
     }),
   } as OidcLoginSteps<AuthorizeResponse>;
 };
