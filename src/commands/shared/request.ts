@@ -107,21 +107,17 @@ export const request =
         ? await spinUntil(accessMessage(options?.message), fetcher)
         : await fetcher;
     };
-    const processResponse = async (
-      data: RequestResponse<T> | undefined,
-      dataHandler: (
-        data: RequestResponse<T>,
-        logMessage: boolean
-      ) => Promise<RequestResponse<T> | undefined>
-    ) => {
+    const processResponse = (
+      data: RequestResponse<T> | undefined
+    ): { shouldLogMessage: boolean; data: RequestResponse<T> } => {
       if (data && "ok" in data && "message" in data && data.ok) {
-        const logMessage =
+        const shouldLogMessage =
           !options?.message ||
           options?.message === "all" ||
           (options?.message === "approval-required" &&
             !data.isPreexisting &&
             !data.isPersistent);
-        return await dataHandler(data, logMessage);
+        return { shouldLogMessage, data };
       } else {
         throw data;
       }
@@ -132,13 +128,10 @@ export const request =
         args,
         [command, ...args.arguments]
       );
-      return processResponse(
-        await executeApiRequest(fetchCommandPromise),
-        async (data, logMessage) => {
-          if (logMessage) print2(data.message);
-          return data;
-        }
-      );
+      const response = await executeApiRequest(fetchCommandPromise);
+      const { data, shouldLogMessage } = await processResponse(response);
+      if (shouldLogMessage) print2(data.message);
+      return data;
     };
     const executeStreamingRequest = async () => {
       const fetchStreamingCommandGenerator = fetchStreamingCommand<
@@ -151,34 +144,32 @@ export const request =
         }
         return generatedValue.value;
       };
-      return await processResponse(
-        await executeApiRequest(getNextPermissionRequestChunk()),
-        async (data, logMessage) => {
-          if (logMessage) {
-            print2(data.message);
-            print2("Will wait up to 5 minutes for this request to complete...");
-          }
-
-          for await (const chunkData of fetchStreamingCommandGenerator) {
-            if (!chunkData) {
-              throw new Error("Errored waiting to provision request");
-            }
-            if ("skip" in chunkData) {
-              continue;
-            }
-            const code = resolveCode(
-              chunkData.request as PermissionRequest<PluginRequest>,
-              logMessage
-            );
-            if (code) {
-              sys.exit(code);
-              return undefined;
-            }
-            return chunkData;
-          }
-          throw data;
-        }
+      const firstChunk = await executeApiRequest(
+        getNextPermissionRequestChunk()
       );
+      const { data, shouldLogMessage } = await processResponse(firstChunk);
+      if (shouldLogMessage) {
+        print2(data.message);
+        print2("Will wait up to 5 minutes for this request to complete...");
+      }
+      for await (const chunkData of fetchStreamingCommandGenerator) {
+        if (!chunkData) {
+          throw new Error("Errored waiting for request to complete");
+        }
+        if ("skip" in chunkData) {
+          continue;
+        }
+        const code = resolveCode(
+          chunkData.request as PermissionRequest<PluginRequest>,
+          shouldLogMessage
+        );
+        if (code) {
+          sys.exit(code);
+          return undefined;
+        }
+        return chunkData;
+      }
+      throw data;
     };
     try {
       return await (!args.wait ? invokeRequest() : executeStreamingRequest());
