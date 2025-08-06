@@ -44,7 +44,7 @@ export const fetchPermissionRequestDetails = async <T>(
   requestId: string
 ) =>
   baseFetch<T>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}?waitForResolution=true`,
+    url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
     method: "GET",
     maxTimeoutMs: DEFAULT_PERMISSION_REQUEST_TIMEOUT,
   });
