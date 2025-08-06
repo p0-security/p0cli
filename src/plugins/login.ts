@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
+import { azureLogin } from "./azure/login";
 import { emailPasswordLogin } from "./email/login";
 import { googleLogin } from "./google/login";
 import { oktaLogin } from "./okta/login";
@@ -38,4 +39,5 @@ export const pluginLoginMap: Record<
   "google-oidc": googleLogin,
   "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
   password: emailPasswordLogin,
+  "azure-oidc": azureLogin,
 };
