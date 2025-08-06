@@ -26,24 +26,15 @@ import {
 export const decodeProvisionStatus = async <P extends PluginRequest>(
   request: PermissionRequest<P>
 ) => {
-  try {
-    if (DONE_STATUSES.includes(request.status as any)) {
-      return true;
-    } else if (DENIED_STATUSES.includes(request.status as any)) {
-      print2("Your access request was denied");
-    } else if (ERROR_STATUSES.includes(request.status as any)) {
-      const message =
-        request.error?.message ??
-        `Your access request encountered an unknown error. ${getContactMessage()}`;
-      print2(message);
-    }
-    return false;
-  } catch (error: any) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      print2("Your request did not complete within 5 minutes.");
-      throw new Error("Timeout waiting for access to be granted");
-    } else {
-      throw error;
-    }
+  if (DONE_STATUSES.includes(request.status as any)) {
+    return true;
+  } else if (DENIED_STATUSES.includes(request.status as any)) {
+    print2("Your access request was denied");
+  } else if (ERROR_STATUSES.includes(request.status as any)) {
+    const message =
+      request.error?.message ??
+      `Your access request encountered an unknown error. ${getContactMessage()}`;
+    print2(message);
   }
+  return false;
 };

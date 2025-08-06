@@ -160,8 +160,9 @@ export const request =
           }
 
           for await (const chunkData of fetchStreamingCommandGenerator) {
-            if (!chunkData)
+            if (!chunkData) {
               throw new Error("Errored waiting to provision request");
+            }
             if ("skip" in chunkData) {
               continue;
             }
@@ -189,7 +190,7 @@ export const request =
         error instanceof Error &&
         (error.name === "disconnect" || error.name === "terminated")
       ) {
-        print2("Disconnected from server. Retry after 5 minutes.");
+        print2("Disconnected from server. Retry after 1 minutes.");
       }
       throw error;
     }
