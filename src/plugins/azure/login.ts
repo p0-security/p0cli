@@ -49,7 +49,7 @@ const requestAuth = async (org: OrgData) => {
 
   print2(`Your browser has been opened to visit:
 
-    ${url}`);
+    ${url}\n`);
 
   open(url).catch(() => {
     print2(`Please visit the following URL to continue login:
