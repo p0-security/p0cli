@@ -17,6 +17,7 @@ import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
 import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
+import { logoutCommand } from "./logout";
 import { lsCommand } from "./ls";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
@@ -31,6 +32,7 @@ const commands = [
   awsCommand,
   grantCommand,
   loginCommand,
+  logoutCommand,
   lsCommand,
   requestCommand,
   allowCommand,
