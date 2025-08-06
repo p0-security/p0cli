@@ -9,19 +9,13 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Config, RawOrgData } from "../types/org";
-import { P0_PATH } from "../util";
+import { getConfigFilePath } from "./auth/path";
 import { bootstrapConfig } from "./env";
 import { bootstrapDoc } from "./firestore";
 import { print2 } from "./stdio";
 import { getDoc } from "firebase/firestore";
 import fs from "fs/promises";
 import path from "path";
-import process from "process";
-
-const getConfigFilePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
-    : path.join(P0_PATH, "config.json");
 
 let tenantConfig: Config;
 

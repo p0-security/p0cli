@@ -20,3 +20,8 @@ export const getIdentityCachePath = () =>
   process.env.P0_ORG
     ? path.join(P0_PATH, `cache-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "cache");
+
+export const getConfigFilePath = () =>
+  process.env.P0_ORG
+    ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
+    : path.join(P0_PATH, "config.json");
