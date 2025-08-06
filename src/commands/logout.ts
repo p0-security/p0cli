@@ -17,7 +17,11 @@ import { print2 } from "../drivers/stdio";
 import fs from "fs/promises";
 import yargs from "yargs";
 
-const safeDelete = async (filePath: string, description: string, debug: boolean) => {
+const safeDelete = async (
+  filePath: string,
+  description: string,
+  debug: boolean
+) => {
   try {
     await fs.rm(filePath, { recursive: true, force: true });
     if (debug) {
