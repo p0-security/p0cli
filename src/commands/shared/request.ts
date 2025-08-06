@@ -129,7 +129,7 @@ export const request =
         [command, ...args.arguments]
       );
       const response = await executeApiRequest(fetchCommandPromise);
-      const { data, shouldLogMessage } = await processResponse(response);
+      const { data, shouldLogMessage } = processResponse(response);
       if (shouldLogMessage) print2(data.message);
       return data;
     };
@@ -147,7 +147,7 @@ export const request =
       const firstChunk = await executeApiRequest(
         getNextPermissionRequestChunk()
       );
-      const { data, shouldLogMessage } = await processResponse(firstChunk);
+      const { data, shouldLogMessage } = processResponse(firstChunk);
       if (shouldLogMessage) {
         print2(data.message);
         print2("Will wait up to 5 minutes for this request to complete...");
