@@ -9,60 +9,32 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { getContactMessage } from "../../drivers/config";
-import { doc } from "../../drivers/firestore";
-import { Authn } from "../../types/identity";
+import { print2 } from "../../drivers/stdio";
 import {
   DENIED_STATUSES,
   DONE_STATUSES,
   ERROR_STATUSES,
-  PluginRequest,
   PermissionRequest,
+  PluginRequest,
 } from "../../types/request";
-import { onSnapshot } from "firebase/firestore";
 
-/** Maximum amount of time to wait after access is approved to wait for access
- *  to be configured
+/**
+ * process request status to determine the success of the operation
+ * @param request
+ * @returns
  */
-const GRANT_TIMEOUT_MILLIS = 60e3;
-
-/** Waits until P0 grants access for a request */
-export const waitForProvisioning = async <P extends PluginRequest>(
-  authn: Authn,
-  requestId: string
+export const decodeProvisionStatus = async <P extends PluginRequest>(
+  request: PermissionRequest<P>
 ) => {
-  let cancel: NodeJS.Timeout | undefined = undefined;
-  const result = await new Promise<PermissionRequest<P>>((resolve, reject) => {
-    let isResolved = false;
-    const unsubscribe = onSnapshot<PermissionRequest<P>, object>(
-      doc(`o/${authn.identity.org.tenantId}/permission-requests/${requestId}`),
-      (snap) => {
-        const data = snap.data();
-        if (!data) return;
-        if (DONE_STATUSES.includes(data.status as any)) {
-          resolve(data);
-        } else if (DENIED_STATUSES.includes(data.status as any)) {
-          reject("Your access request was denied");
-        } else if (ERROR_STATUSES.includes(data.status as any)) {
-          const message =
-            data.error?.message ??
-            `Your access request encountered an unknown error. ${getContactMessage()}`;
-          reject(message);
-        } else {
-          return;
-        }
-        isResolved = true;
-        unsubscribe();
-      }
-    );
-    // Skip timeout in test; it holds a ref longer than the test lasts
-    if (process.env.NODE_ENV === "test") return;
-    cancel = setTimeout(() => {
-      if (!isResolved) {
-        unsubscribe();
-        reject("Timeout awaiting access grant. Please try again.");
-      }
-    }, GRANT_TIMEOUT_MILLIS);
-  });
-  clearTimeout(cancel);
-  return result;
+  if (DONE_STATUSES.includes(request.status as any)) {
+    return true;
+  } else if (DENIED_STATUSES.includes(request.status as any)) {
+    print2("Your access request was denied");
+  } else if (ERROR_STATUSES.includes(request.status as any)) {
+    const message =
+      request.error?.message ??
+      `Your access request encountered an unknown error. ${getContactMessage()}`;
+    print2(message);
+  }
+  return false;
 };

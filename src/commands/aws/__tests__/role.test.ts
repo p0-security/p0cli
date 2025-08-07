@@ -9,8 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { awsCommand } from "..";
+import { fetchIntegrationConfig } from "../../../drivers/api";
 import { print1, print2 } from "../../../drivers/stdio";
-import { mockGetDoc } from "../../../testing/firestore";
 import { failure } from "../../../testing/yargs";
 import { samlResponse } from "./__input__/saml-response";
 import { stsResponse } from "./__input__/sts-response";
@@ -19,6 +19,7 @@ import yargs from "yargs";
 jest.mock("fs/promises");
 jest.mock("../../../drivers/auth");
 jest.mock("../../../drivers/stdio");
+jest.mock("../../../drivers/api");
 jest.mock("typescript", () => ({
   ...jest.requireActual("typescript"),
   sys: {
@@ -32,6 +33,7 @@ jest.mock("../../shared/request", () => ({
 const mockFetch = jest.spyOn(global, "fetch");
 const mockPrint1 = print1 as jest.Mock;
 const mockPrint2 = print2 as jest.Mock;
+const mockIntegrationConfigFetch = fetchIntegrationConfig as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -55,7 +57,9 @@ describe("aws role", () => {
       state: "installed",
     };
     describe("without Okta SAML", () => {
-      mockGetDoc({ "iam-write": { "1": item } });
+      mockIntegrationConfigFetch.mockResolvedValue({
+        config: { "iam-write": { "1": item } },
+      });
       describe.each([["assume", "aws role assume Role1"]])(
         "%s",
         (_, command) => {
@@ -70,16 +74,18 @@ describe("aws role", () => {
     });
     describe("with Okta SAML", () => {
       beforeEach(() => {
-        mockGetDoc({
-          "iam-write": {
-            "1": {
-              ...item,
-              login: {
-                type: "federated",
-                provider: {
-                  type: "okta",
-                  appId: "0oabcdefgh",
-                  identityProvider: "okta",
+        mockIntegrationConfigFetch.mockResolvedValue({
+          config: {
+            "iam-write": {
+              "1": {
+                ...item,
+                login: {
+                  type: "federated",
+                  provider: {
+                    type: "okta",
+                    appId: "0oabcdefgh",
+                    identityProvider: "okta",
+                  },
                 },
               },
             },

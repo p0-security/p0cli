@@ -8,10 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { waitForProvisioning } from ".";
+import { decodeProvisionStatus } from ".";
 import { createKeyPair } from "../../common/keys";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
-import { doc } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh";
@@ -27,8 +27,8 @@ import {
   SupportedSshProviders,
 } from "../../types/ssh";
 import { request } from "./request";
-import { getDoc } from "firebase/firestore";
 import { pick } from "lodash";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 export type BaseSshCommandArgs = {
@@ -94,10 +94,11 @@ const validateSshInstall = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>
 ) => {
-  const configDoc = await getDoc<SshConfig, object>(
-    doc(`o/${authn.identity.org.tenantId}/integrations/ssh`)
+  const configDoc = await fetchIntegrationConfig<{ config: SshConfig }>(
+    authn,
+    "ssh"
   );
-  const configItems = configDoc.data()?.["iam-write"];
+  const configItems = configDoc?.config["iam-write"];
 
   const providersToCheck = args.provider
     ? [args.provider]
@@ -137,7 +138,9 @@ export const provisionRequest = async (
 
   const { publicKey, privateKey } = await createKeyPair();
 
-  const response = await request("request")<PluginSshRequest>(
+  const response = await request("request")<
+    PermissionRequest<PluginSshRequest>
+  >(
     {
       ...pick(args, "$0", "_"),
       arguments: [
@@ -167,13 +170,18 @@ export const provisionRequest = async (
   const { id, isPreexisting } = response;
   if (!isPreexisting) print2("Waiting for access to be provisioned");
   else print2("Existing access found.  Connecting to instance.");
-
-  const provisionedRequest = await waitForProvisioning<PluginSshRequest>(
-    authn,
-    id
+  const result = await decodeProvisionStatus<PluginSshRequest>(
+    response.request
   );
-
-  return { requestId: id, provisionedRequest, publicKey, privateKey };
+  if (!result) {
+    sys.exit(1);
+  }
+  return {
+    requestId: id,
+    provisionedRequest: response.request,
+    publicKey,
+    privateKey,
+  };
 };
 
 export const prepareRequest = async (

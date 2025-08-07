@@ -8,7 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { getDoc } from "firebase/firestore";
+import { RawOrgData } from "../types/org";
+import { fetchOrgData } from "./api";
 
-export const mockGetDoc = (data: any) =>
-  (getDoc as jest.Mock).mockResolvedValue({ data: () => data });
+export const getOrgData = async (orgId: string) => {
+  try {
+    return await fetchOrgData<RawOrgData>(orgId);
+  } catch (e: any) {
+    if (typeof e === "string" && e.startsWith("Network error:")) {
+      throw e;
+    }
+    if (typeof e === "string" && e.startsWith("Not found")) {
+      throw "Could not find organization";
+    }
+    throw e;
+  }
+};

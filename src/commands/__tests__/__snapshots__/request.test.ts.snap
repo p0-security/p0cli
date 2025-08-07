@@ -1,5 +1,7 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`request when error should handle stream errors 1`] = `[TypeError: terminated]`;
+
 exports[`request when error should print error message 1`] = `
 {
   "error": "p0 request

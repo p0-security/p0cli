@@ -11,13 +11,12 @@ You should have received a copy of the GNU General Public License along with @p0
 import { sanitizeAsFileName } from "../common/destination";
 import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
-import { fsShutdownGuard } from "../drivers/firestore";
 import { print2 } from "../drivers/stdio";
 import { conditionalAbortBeforeThrow, getAppPath, P0_PATH } from "../util";
 import {
-  SSH_PROVIDERS,
-  SshResolveCommandArgs,
   prepareRequest,
+  SshResolveCommandArgs,
+  SSH_PROVIDERS,
 } from "./shared/ssh";
 import fs from "fs";
 import path from "path";
@@ -62,7 +61,7 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
         })
         .env(ENV_PREFIX),
 
-    fsShutdownGuard(sshResolveAction)
+    sshResolveAction
   );
 
 /** Determine if an SSH backend is accessible to the user and prepares local files for access

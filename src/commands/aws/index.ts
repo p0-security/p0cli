@@ -9,7 +9,6 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../../drivers/auth";
-import { shutdownFirebase } from "../../drivers/firestore";
 import { print2 } from "../../drivers/stdio";
 import { getFirstAwsConfig } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
@@ -45,10 +44,6 @@ const awsArgs = async (yargs: yargs.Argv) => {
   } catch (error) {
     // Handle authentication errors here, since
     // this occurs during command building
-
-    // Handle Firestore shutdown here, since Firebase is
-    // initialized as part of authentication
-    shutdownFirebase();
 
     print2(error);
     sys.exit(1);
