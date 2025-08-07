@@ -1,67 +1,32 @@
-/** Copyright © 2024-present P0 Security
+### logout
 
-This file is part of @p0security/cli
+#### Command
 
-@p0security/cli is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+```sh
+p0 logout [--debug]
+```
 
-@p0security/cli is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#### Description
 
-You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
-**/
-import {
-  getIdentityFilePath,
-  getIdentityCachePath,
-  getConfigFilePath,
-} from "../drivers/auth/path";
-import { print2 } from "../drivers/stdio";
-import fs from "fs/promises";
-import yargs from "yargs";
+Logs out the current user by deleting all authentication data, including identity files, configuration files, and authentication caches.
 
-const safeDelete = async (
-  filePath: string,
-  description: string,
-  debug: boolean
-) => {
-  try {
-    await fs.rm(filePath, { recursive: true, force: true });
-    if (debug) {
-      print2(`Deleted ${description}: ${filePath}`);
-    }
-  } catch (error: any) {
-    if (error.code !== "ENOENT") {
-      print2(
-        `Warning: Could not delete ${description} at ${filePath}: ${error.message}`
-      );
-    }
-  }
-};
+#### Options
 
-const logout = async (debug: boolean): Promise<void> => {
-  print2("Logging out...");
+| Option    | Description                                             |
+|-----------|--------------------------------------------------------|
+| `--debug` | (Optional) Prints debug information about deleted files |
 
-  const identityPath = getIdentityFilePath();
-  await safeDelete(identityPath, "identity file", debug);
+#### Example Usage
 
-  const configPath = getConfigFilePath();
-  await safeDelete(configPath, "config file", debug);
+```sh
+$ p0 logout
+Logging out...
+Successfully logged out. All authentication data has been cleared.
 
-  const cachePath = getIdentityCachePath();
-  await safeDelete(cachePath, "cache", debug);
-
-  print2("Successfully logged out. All authentication data has been cleared.");
-};
-
-export const logoutCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ debug?: boolean }>(
-    "logout",
-    "Log out and clear all authentication data",
-    (yargs) =>
-      yargs.option("debug", {
-        type: "boolean",
-        describe: "Print debug information about deleted files",
-        default: false,
-      }),
-    async (argv) => {
-      await logout(argv.debug ?? false);
-    }
-  );
+$ p0 logout --debug
+Logging out...
+Deleted identity file: /path/to/identity
+Deleted config file: /path/to/config
+Deleted cache: /path/to/cache
+Successfully logged out. All authentication data has been cleared.
+```
