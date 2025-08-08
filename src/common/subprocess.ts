@@ -30,7 +30,7 @@ export const asyncSpawn = async (
   writeStdin?: string
 ) =>
   new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, options);
+    const child = spawn(command, args, { ...options, shell: true });
 
     child.on("error", (error: Error) => {
       if (debug) {
