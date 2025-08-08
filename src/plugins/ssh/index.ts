@@ -175,7 +175,7 @@ async function spawnSshNode(
         ...options.credential,
       },
       stdio: options.stdio,
-      shell: false,
+      shell: true,
     });
 
     // Make sure if the parent process is killed, we kill the child process too
@@ -319,7 +319,7 @@ const addCommonArgs = (
   // Explicitly specify which private key to use to avoid "Too many authentication failures"
   // error caused by SSH trying every available key
   if (!identityFileOptionExists) {
-    sshOptions.push("-i", setupData?.identityFile ?? PRIVATE_KEY_PATH);
+    sshOptions.push("-i", `"${setupData?.identityFile ?? PRIVATE_KEY_PATH}"`);
 
     // Only use the authentication identity specified by -i above
     if (!identitiesOnlyOptionExists) {
@@ -333,7 +333,10 @@ const addCommonArgs = (
   );
 
   if (!userSpecifiedProxyCommand && sshProviderProxyCommand.length > 0) {
-    sshOptions.push("-o", `ProxyCommand=${sshProviderProxyCommand.join(" ")}`);
+    sshOptions.push(
+      "-o",
+      `ProxyCommand="${sshProviderProxyCommand.join(" ")}"`
+    );
   }
 
   // Force verbose output from SSH so we can parse the output
