@@ -11,6 +11,9 @@ You should have received a copy of the GNU General Public License along with @p0
 import { P0_PATH } from "../../util";
 import * as path from "path";
 
+const BASE_DIR = path.resolve(P0_PATH);
+const ORG_ID_FORMAT = /^[A-Za-z0-9_-]{1,32}$/;
+
 export const getIdentityFilePath = () =>
   process.env.P0_ORG
     ? path.join(P0_PATH, `identity-${process.env.P0_ORG}.json`)
@@ -26,5 +29,17 @@ export const getConfigFilePath = () =>
     ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "config.json");
 
-export const getBootstrapOrgDataPath = (orgId: string) =>
-  path.join(P0_PATH, `bootstrap-${orgId}.json`);
+export const getBootstrapOrgDataPath = (orgId: string): string => {
+  if (!ORG_ID_FORMAT.test(orgId)) {
+    throw new Error("Invalid organization");
+  }
+
+  const filename = `bootstrap-${orgId}.json`;
+  const resolvedFilename = path.resolve(BASE_DIR, filename);
+
+  if (!resolvedFilename.startsWith(BASE_DIR)) {
+    throw new Error("Invalid organization");
+  }
+
+  return resolvedFilename;
+};
