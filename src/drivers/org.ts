@@ -10,17 +10,27 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { RawOrgData } from "../types/org";
 import { fetchOrgData } from "./api";
+import { getBootstrapOrgDataPath } from "./auth/path";
+import fs from "fs/promises";
 
 export const getOrgData = async (orgId: string) => {
   try {
-    return await fetchOrgData<RawOrgData>(orgId);
-  } catch (e: any) {
-    if (typeof e === "string" && e.startsWith("Network error:")) {
+    // Try to read the org data from the bootstrap file first
+    const bootstrapOrgDataPath = getBootstrapOrgDataPath(orgId);
+    const buffer = await fs.readFile(bootstrapOrgDataPath);
+    return JSON.parse(buffer.toString());
+  } catch (err) {
+    // ... if that fails, fetch it via API
+    try {
+      return await fetchOrgData<RawOrgData>(orgId);
+    } catch (e: any) {
+      if (typeof e === "string" && e.startsWith("Network error:")) {
+        throw e;
+      }
+      if (typeof e === "string" && e.startsWith("Not found")) {
+        throw "Could not find organization";
+      }
       throw e;
     }
-    if (typeof e === "string" && e.startsWith("Not found")) {
-      throw "Could not find organization";
-    }
-    throw e;
   }
 };

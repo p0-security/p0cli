@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { bootstrapConfig } from "./drivers/env";
+import { defaultConfig } from "./drivers/env";
 import child_process from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -19,9 +19,9 @@ export const getAppPath = () => env.P0_APP_PATH ?? "p0";
 
 export const P0_PATH = path.join(
   os.homedir(),
-  bootstrapConfig.environment === "production"
+  defaultConfig.environment === "production"
     ? ".p0"
-    : `.p0-${bootstrapConfig.environment}`
+    : `.p0-${defaultConfig.environment}`
 );
 
 /** Waits the specified delay (in ms)

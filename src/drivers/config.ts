@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { Config } from "../types/org";
 import { getConfigFilePath } from "./auth/path";
-import { bootstrapConfig } from "./env";
+import { defaultConfig } from "./env";
 import { getOrgData } from "./org";
 import { print2 } from "./stdio";
 import fs from "fs/promises";
@@ -21,10 +21,10 @@ let tenantConfig: Config;
 export const getTenantConfig = () => tenantConfig;
 
 export const getContactMessage = () =>
-  tenantConfig?.contactMessage ?? bootstrapConfig.contactMessage;
+  tenantConfig?.contactMessage ?? defaultConfig.contactMessage;
 
 export const getHelpMessage = () =>
-  tenantConfig?.helpMessage ?? bootstrapConfig.helpMessage;
+  tenantConfig?.helpMessage ?? defaultConfig.helpMessage;
 
 /** Use only if the organization is configured with Google login to P0 */
 export const getGoogleTenantConfig = () => {
@@ -37,7 +37,7 @@ export const getGoogleTenantConfig = () => {
 export const saveConfig = async (orgId: string) => {
   const orgData = await getOrgData(orgId);
 
-  const config = orgData.config ?? bootstrapConfig;
+  const config = orgData.config ?? defaultConfig;
 
   const configFilePath = getConfigFilePath();
 

@@ -25,3 +25,6 @@ export const getConfigFilePath = () =>
   process.env.P0_ORG
     ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "config.json");
+
+export const getBootstrapOrgDataPath = (orgId: string) =>
+  path.join(P0_PATH, `bootstrap-${orgId}.json`);
