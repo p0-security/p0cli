@@ -155,22 +155,24 @@ export const fetchWithStreaming = async function* <T>(
       }
       const value = read.value;
       const text = textDecoder.decode(value);
-      print2(text);
-      const parsedResponse = JSON.parse(text);
-      if (parsedResponse.type === "error") {
-        throw new Error(parsedResponse.error);
+      const jsonlSegments = text.split("\n").filter(Boolean);
+      for (const segment of jsonlSegments) {
+        const parsedResponse = JSON.parse(segment);
+        if (parsedResponse.type === "error") {
+          throw parsedResponse.error;
+        }
+        if (parsedResponse.type === "heartbeat") {
+          continue;
+        }
+        if (parsedResponse.type !== "data" || !("data" in parsedResponse)) {
+          throw "Invalid response from the server";
+        }
+        const { data } = parsedResponse;
+        if ("error" in data) {
+          throw data.error;
+        }
+        yield data as T;
       }
-      if (parsedResponse.type === "heartbeat") {
-        continue;
-      }
-      if (parsedResponse.type !== "data" || !("data" in parsedResponse)) {
-        throw new Error("Invalid response from the server");
-      }
-      const { data } = parsedResponse;
-      if ("error" in data) {
-        throw data.error;
-      }
-      yield data as T;
     }
   } catch (error) {
     if (
