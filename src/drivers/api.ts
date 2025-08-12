@@ -139,7 +139,6 @@ export const fetchWithStreaming = async function* <T>(
     body,
     keepalive: true,
   };
-  const textDecoder = new TextDecoder();
   try {
     const response = await fetch(
       url,

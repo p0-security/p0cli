@@ -194,7 +194,7 @@ describe("fetchWithStreaming", () => {
     });
 
     await expect(async () => {
-      for await (const chunk of generator) {
+      for await (const _chunk of generator) {
         // Should throw before yielding
       }
     }).rejects.toBe("Invalid response from the server");
@@ -234,7 +234,7 @@ describe("fetchWithStreaming", () => {
     });
 
     await expect(async () => {
-      for await (const chunk of generator) {
+      for await (const _chunk of generator) {
         // Should throw before yielding
       }
     }).rejects.toBe("Network error: Unable to reach the server.");
@@ -249,7 +249,7 @@ describe("fetchWithStreaming", () => {
     });
 
     await expect(async () => {
-      for await (const chunk of generator) {
+      for await (const _chunk of generator) {
         // Should throw before yielding
       }
     }).rejects.toBe("Network error: Unable to reach the server.");
@@ -265,7 +265,7 @@ describe("fetchWithStreaming", () => {
     });
 
     await expect(async () => {
-      for await (const chunk of generator) {
+      for await (const _chunk of generator) {
         // Should throw before yielding
       }
     }).rejects.toBe(customError);
@@ -282,7 +282,7 @@ describe("fetchWithStreaming", () => {
     });
 
     await expect(async () => {
-      for await (const chunk of generator) {
+      for await (const _chunk of generator) {
         // Should throw before yielding
       }
     }).rejects.toBe("No reader available");
