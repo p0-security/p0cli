@@ -25,3 +25,20 @@ export const getConfigFilePath = () =>
   process.env.P0_ORG
     ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
     : path.join(P0_PATH, "config.json");
+
+export const getBootstrapOrgDataPath = (orgId: string): string => {
+  const safeOrgId = path.basename(orgId);
+  if (safeOrgId !== orgId) {
+    throw new Error("Invalid organization");
+  }
+
+  const filename = `bootstrap-${safeOrgId}.json`;
+  // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const resolvedFilename = path.resolve(P0_PATH, filename);
+
+  if (!resolvedFilename.startsWith(P0_PATH)) {
+    throw new Error("Invalid organization");
+  }
+
+  return resolvedFilename;
+};

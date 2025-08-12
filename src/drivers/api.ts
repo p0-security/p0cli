@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
-import { bootstrapConfig } from "./env";
+import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -19,7 +19,7 @@ import yargs from "yargs";
 const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
 
 const tenantOrgUrl = (tenant: string) =>
-  `${getTenantConfig()?.appUrl ?? bootstrapConfig.appUrl}/orgs/${tenant}`;
+  `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
@@ -155,6 +155,7 @@ export const fetchWithStreaming = async function* <T>(
       }
       const value = read.value;
       const text = textDecoder.decode(value);
+      print2(text);
       const parsedResponse = JSON.parse(text);
       if (parsedResponse.type === "error") {
         throw new Error(parsedResponse.error);

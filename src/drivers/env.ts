@@ -15,7 +15,7 @@ dotenv.config();
 
 const { env } = process;
 
-export const bootstrapConfig: GoogleApplicationConfig = {
+export const defaultConfig: GoogleApplicationConfig = {
   fs: {
     // Falls back to public production Firestore credentials
     apiKey: env.P0_FS_API_KEY ?? "AIzaSyCaL-Ik_l_5tdmgNUNZ4Nv6NuR4o5_PPfs",

@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchOrgData } from "../../drivers/api";
 import * as auth from "../../drivers/auth";
 import * as config from "../../drivers/config";
-import { bootstrapConfig } from "../../drivers/env";
+import { defaultConfig } from "../../drivers/env";
 import { print2 } from "../../drivers/stdio";
 import { pluginLoginMap } from "../../plugins/login";
 import { Identity } from "../../types/identity";
@@ -49,9 +49,9 @@ const mockFetchOrgData = fetchOrgData as jest.Mock;
 
 describe("login", () => {
   beforeEach(() => {
-    jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
+    jest.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
     jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
-    jest.spyOn(config, "getTenantConfig").mockReturnValue(bootstrapConfig);
+    jest.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
     // do NOT spyOn getContactMessage — you want the real one
   });
 
@@ -111,7 +111,7 @@ describe("login", () => {
     beforeEach(() => {
       credentialData = "";
       jest.clearAllMocks();
-      jest.spyOn(config, "loadConfig").mockResolvedValueOnce(bootstrapConfig);
+      jest.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
       mockReadFile.mockImplementation(async () =>
         Buffer.from(credentialData, "utf-8")
       );
