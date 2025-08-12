@@ -202,7 +202,7 @@ describe("fetchWithStreaming", () => {
 
   it("should handle multiple JSON objects in single chunk", async () => {
     const chunks = [
-      JSON.stringify({ type: "data", data: { id: "1" } }) +
+      JSON.stringify({ type: "data", data: { id: "1\ntest" } }) +
         "\n" +
         JSON.stringify({ type: "data", data: { id: "2" } }),
     ];
@@ -220,7 +220,7 @@ describe("fetchWithStreaming", () => {
       results.push(chunk);
     }
 
-    expect(results).toEqual([{ id: "1" }, { id: "2" }]);
+    expect(results).toEqual([{ id: "1\ntest" }, { id: "2" }]);
   });
 
   it("should throw network error for fetch failed", async () => {
