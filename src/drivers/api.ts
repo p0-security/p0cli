@@ -155,7 +155,6 @@ export const fetchWithStreaming = async function* <T>(
       }
       const value = read.value;
       const text = textDecoder.decode(value);
-      print2(text);
       const parsedResponse = JSON.parse(text);
       if (parsedResponse.type === "error") {
         throw new Error(parsedResponse.error);
