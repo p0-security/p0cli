@@ -13,6 +13,7 @@ import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
+import { convertJsonlToArray } from "./util";
 import * as path from "node:path";
 import yargs from "yargs";
 
@@ -154,20 +155,22 @@ export const fetchWithStreaming = async function* <T>(
         break;
       }
       const value = read.value;
-      const text = textDecoder.decode(value);
-      const jsonlSegments = text.split("\n").filter(Boolean);
+      const jsonlSegments = convertJsonlToArray<{
+        type: string;
+        error?: string;
+        data?: any;
+      }>(value);
       for (const segment of jsonlSegments) {
-        const parsedResponse = JSON.parse(segment);
-        if (parsedResponse.type === "error") {
-          throw parsedResponse.error;
+        if (segment.type === "error") {
+          throw segment.error;
         }
-        if (parsedResponse.type === "heartbeat") {
+        if (segment.type === "heartbeat") {
           continue;
         }
-        if (parsedResponse.type !== "data" || !("data" in parsedResponse)) {
+        if (segment.type !== "data" || !("data" in segment)) {
           throw "Invalid response from the server";
         }
-        const { data } = parsedResponse;
+        const { data } = segment;
         if ("error" in data) {
           throw data.error;
         }

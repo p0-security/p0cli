@@ -1,3 +1,5 @@
+import { print2 } from "./stdio";
+
 /** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
@@ -10,3 +12,37 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 export const EXPIRED_CREDENTIALS_MESSAGE =
   "Your credentials have expired. Please run `p0 login <organization>` to refresh your credentials.";
+
+// 0x0A is utf-8 character code of line feed
+const LINE_FEED = 10;
+/**
+ * Converts a string that contains newline-delimited JSON
+ * to an array of parsed json objects
+ */
+export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
+  const out: T[] = [];
+  const decoder = new TextDecoder();
+  let offset = 0;
+  let numErrors = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const ix = array.indexOf(LINE_FEED, offset);
+    const slice = ix >= 0 ? array.slice(offset, ix) : array.slice(offset);
+    const json = decoder.decode(slice);
+    try {
+      if (json) out.push(JSON.parse(json));
+    } catch (error) {
+      numErrors += 1;
+      print2("Failed to parse JSON line");
+      if (numErrors >= maxErrors) {
+        throw "Can not read data";
+      }
+    }
+    if (ix >= 0) {
+      offset = ix + 1;
+    } else {
+      break;
+    }
+  }
+  return out;
+};
