@@ -18,6 +18,7 @@ const LINE_FEED = 10;
 /**
  * Converts a string that contains newline-delimited JSON
  * to an array of parsed json objects
+ * If the input is not valid JSON, it will be skipped and returned as part of remaining segments
  */
 export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
   const out: T[] = [];

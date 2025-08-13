@@ -146,21 +146,34 @@ export const fetchWithStreaming = async function* <T>(
         ? { ...fetchOptions, signal: AbortSignal.timeout(maxTimeoutMs) }
         : fetchOptions
     );
+    // we need get the reader from the body as the backend will be streaming chunks of stringified json
+    // response data delimited using new lines.
     const reader = response.body?.getReader();
     if (!reader) throw `No reader available`;
+    // given the reader.read() can return partial data due to buffering at network level
+    // there is chance we may get the data from reader.read() that might be incomplete json
+    // or json chunk without the new line delimiter
+    // old segments is use to track partial json chunks without the new line delimiter
+    // initially this would be empty
     let oldSegments = new Uint8Array();
     while (true) {
       const read = await reader.read();
+      // the reader is marked done if the server has completed sending all the json chunks
       if (read.done) {
         break;
       }
+      // the value at this point can be either a complete json chunk or a partial one or multiple
+      // json chunks delimited using new-line
       const value = read.value;
-      const { segments, remainingSegments: remainingSegments } =
-        convertJsonlToArray<{
-          type: string;
-          error?: string;
-          data?: any;
-        }>(new Uint8Array([...oldSegments, ...value]));
+      // the convertJsonlToArray function is used to parse the json chunks
+      // return the parsed json chunks(these are chunks that json objects delimited with \n)
+      // remaining segments contains partial json chunks in uint8array
+      const { segments, remainingSegments } = convertJsonlToArray<{
+        type: string;
+        error?: string;
+        data?: any;
+      }>(new Uint8Array([...oldSegments, ...value]));
+      // we use the old segments to complete the json when we read the next chunk from reader.
       oldSegments = remainingSegments;
       for (const segment of segments) {
         if (segment.type === "error") {

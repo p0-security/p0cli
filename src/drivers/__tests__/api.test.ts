@@ -224,7 +224,7 @@ describe("fetchWithStreaming", () => {
     expect(results).toEqual([{ id: "1\ntest" }, { id: "2" }]);
   });
 
-  it("should handle chunks with partial newlines", async () => {
+  it("should handle chunks with partial data", async () => {
     const chunks = [
       '{"type":"data","data":{"id":"1"}}\n{"type":"heartbeat"}\n{"type":"da', // Ends mid-JSON
       'ta","data":{"id":"2"}}\n', // Completes the JSON
