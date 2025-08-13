@@ -1,5 +1,3 @@
-import { print2 } from "./stdio";
-
 /** Copyright © 2024-present P0 Security
 
 This file is part of @p0security/cli
