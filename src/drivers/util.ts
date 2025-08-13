@@ -24,7 +24,7 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
   const decoder = new TextDecoder();
   let offset = 0;
   let numErrors = 0;
-  let totalLength = array.length;
+  const totalLength = array.length;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const ix = array.indexOf(LINE_FEED, offset);
