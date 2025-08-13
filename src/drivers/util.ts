@@ -39,7 +39,7 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
       numErrors += 1;
       print2("Failed to parse JSON line: " + json);
       if (numErrors >= maxErrors) {
-        throw "Can not read data";
+        throw "Can not read streaming data";
       }
     }
     if (ix >= 0) {
