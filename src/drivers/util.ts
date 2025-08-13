@@ -28,6 +28,7 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const ix = array.indexOf(LINE_FEED, offset);
+    // break if no more line feeds are found, happens when the chunk is incomplete
     if (ix < 0) {
       break;
     }
@@ -44,6 +45,8 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
     }
     offset = ix + 1;
   }
+  // if the offset is zero, it means we do not have a complete JSON object
+  // as we assume the backend always delimits the chunk with \n
   const remainingSegments =
     offset >= 0 && offset < totalLength
       ? array.slice(offset)
