@@ -42,11 +42,7 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
         throw "Can not read streaming data";
       }
     }
-    if (ix >= 0) {
-      offset = ix + 1;
-    } else {
-      break;
-    }
+    offset = ix + 1;
   }
   const remainingSegments =
     offset >= 0 && offset < totalLength
