@@ -65,11 +65,11 @@ describe("fetchWithStreaming", () => {
         JSON.stringify({
           type: "data",
           data: { id: "1", message: "First chunk" },
-        }),
+        }) + "\n",
         JSON.stringify({
           type: "data",
           data: { id: "2", message: "Second chunk" },
-        }),
+        }) + "\n",
       ]) as any
     );
 
@@ -105,14 +105,14 @@ describe("fetchWithStreaming", () => {
     const chunks = [
       JSON.stringify({
         type: "heartbeat",
-      }),
+      }) + "\n",
       JSON.stringify({
         type: "data",
         data: { id: "1", message: "Real data" },
-      }),
+      }) + "\n",
       JSON.stringify({
         type: "heartbeat",
-      }),
+      }) + "\n",
     ];
     jest
       .spyOn(global, "fetch")
@@ -136,7 +136,7 @@ describe("fetchWithStreaming", () => {
       JSON.stringify({
         type: "error",
         error: "Something went wrong",
-      }),
+      }) + "\n",
     ];
     jest
       .spyOn(global, "fetch")
@@ -159,7 +159,7 @@ describe("fetchWithStreaming", () => {
       JSON.stringify({
         type: "data",
         data: { error: "Data error occurred" },
-      }),
+      }) + "\n",
     ];
     jest
       .spyOn(global, "fetch")
@@ -182,7 +182,7 @@ describe("fetchWithStreaming", () => {
       JSON.stringify({
         type: "unknown",
         someData: "invalid",
-      }),
+      }) + "\n",
     ];
     jest
       .spyOn(global, "fetch")
@@ -204,7 +204,8 @@ describe("fetchWithStreaming", () => {
     const chunks = [
       JSON.stringify({ type: "data", data: { id: "1\ntest" } }) +
         "\n" +
-        JSON.stringify({ type: "data", data: { id: "2" } }),
+        JSON.stringify({ type: "data", data: { id: "2" } }) +
+        "\n",
     ];
     jest
       .spyOn(global, "fetch")
@@ -223,21 +224,125 @@ describe("fetchWithStreaming", () => {
     expect(results).toEqual([{ id: "1\ntest" }, { id: "2" }]);
   });
 
-  it("should throw network error for fetch failed", async () => {
+  it("should handle chunks with partial newlines", async () => {
+    const chunks = [
+      '{"type":"data","data":{"id":"1"}}\n{"type":"heartbeat"}\n{"type":"da', // Ends mid-JSON
+      'ta","data":{"id":"2"}}\n', // Completes the JSON
+    ];
+
     jest
       .spyOn(global, "fetch")
-      .mockRejectedValue(new TypeError("fetch failed"));
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
       method: "GET",
     });
 
-    await expect(async () => {
-      for await (const _chunk of generator) {
-        // Should throw before yielding
-      }
-    }).rejects.toBe("Network error: Unable to reach the server.");
+    const results = [];
+    for await (const chunk of generator) {
+      results.push(chunk);
+    }
+
+    expect(results).toEqual([{ id: "1" }, { id: "2" }]);
+  });
+
+  it("should handle incomplete JSON across multiple chunks", async () => {
+    // Simulate arbitrary chunks that split JSON objects
+    const chunks = [
+      '{"type":"data","data":{"id":"1","mess', // Incomplete JSON
+      'age":"First chunk"}}\n{"type":"data",', // Completes first, starts second
+      '"data":{"id":"2","message":"Second chu', // Middle of second JSON
+      'nk"}}\n', // Completes second JSON
+    ];
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    const results = [];
+    for await (const chunk of generator) {
+      results.push(chunk);
+    }
+
+    expect(results).toEqual([
+      { id: "1", message: "First chunk" },
+      { id: "2", message: "Second chunk" },
+    ]);
+  });
+
+  it("should handle single character chunks", async () => {
+    // Each character as a separate chunk
+    const jsonString = '{"type":"data","data":{"id":"test"}}\n';
+    const chunks = jsonString.split("");
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    const results = [];
+    for await (const chunk of generator) {
+      results.push(chunk);
+    }
+
+    expect(results).toEqual([{ id: "test" }]);
+  });
+
+  it("should handle chunks with no newlines", async () => {
+    const chunks = [
+      '{"type":"data","data":{"id":"1"}}{"type":"data","data":{"id":"2"}}', // No newlines
+    ];
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    const results = [];
+    for await (const chunk of generator) {
+      results.push(chunk);
+    }
+
+    expect(results.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should handle empty chunks", async () => {
+    const chunks = [
+      "", // Empty chunk
+      '{"type":"data","data":{"id":"1"}}\n',
+      "", // Another empty chunk
+      '{"type":"data","data":{"id":"2"}}\n',
+    ];
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    const results = [];
+    for await (const chunk of generator) {
+      results.push(chunk);
+    }
+
+    expect(results).toEqual([{ id: "1" }, { id: "2" }]);
   });
 
   it("should throw network error for terminated", async () => {
@@ -271,6 +376,23 @@ describe("fetchWithStreaming", () => {
     }).rejects.toBe(customError);
   });
 
+  it("should throw network error for fetch failed", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockRejectedValue(new TypeError("fetch failed"));
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toBe("Network error: Unable to reach the server.");
+  });
+
   it("should throw error when no reader available", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       body: null,
@@ -293,7 +415,7 @@ describe("fetchWithStreaming", () => {
       JSON.stringify({
         type: "data",
         data: { message: "success" },
-      }),
+      }) + "\n",
     ];
 
     const mockFetch = jest

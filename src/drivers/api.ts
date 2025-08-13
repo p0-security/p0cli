@@ -148,18 +148,21 @@ export const fetchWithStreaming = async function* <T>(
     );
     const reader = response.body?.getReader();
     if (!reader) throw `No reader available`;
+    let oldSegments = new Uint8Array();
     while (true) {
       const read = await reader.read();
       if (read.done) {
         break;
       }
       const value = read.value;
-      const jsonlSegments = convertJsonlToArray<{
-        type: string;
-        error?: string;
-        data?: any;
-      }>(value);
-      for (const segment of jsonlSegments) {
+      const { segments, remainingSegments: remainingSegments } =
+        convertJsonlToArray<{
+          type: string;
+          error?: string;
+          data?: any;
+        }>(new Uint8Array([...oldSegments, ...value]));
+      oldSegments = remainingSegments;
+      for (const segment of segments) {
         if (segment.type === "error") {
           throw segment.error;
         }

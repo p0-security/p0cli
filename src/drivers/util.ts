@@ -24,16 +24,20 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
   const decoder = new TextDecoder();
   let offset = 0;
   let numErrors = 0;
+  let totalLength = array.length;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const ix = array.indexOf(LINE_FEED, offset);
+    if (ix < 0) {
+      break;
+    }
     const slice = ix >= 0 ? array.slice(offset, ix) : array.slice(offset);
     const json = decoder.decode(slice);
     try {
       if (json) out.push(JSON.parse(json));
     } catch (error) {
       numErrors += 1;
-      print2("Failed to parse JSON line");
+      print2("Failed to parse JSON line: " + json);
       if (numErrors >= maxErrors) {
         throw "Can not read data";
       }
@@ -44,5 +48,12 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
       break;
     }
   }
-  return out;
+  const remainingSegments =
+    offset >= 0 && offset < totalLength
+      ? array.slice(offset)
+      : new Uint8Array();
+  return {
+    segments: out,
+    remainingSegments,
+  };
 };
