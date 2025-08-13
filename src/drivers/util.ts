@@ -31,7 +31,7 @@ export const convertJsonlToArray = <T>(array: Uint8Array, maxErrors = 5) => {
     if (ix < 0) {
       break;
     }
-    const slice = ix >= 0 ? array.slice(offset, ix) : array.slice(offset);
+    const slice = array.slice(offset, ix);
     const json = decoder.decode(slice);
     try {
       if (json) out.push(JSON.parse(json));
