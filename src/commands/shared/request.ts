@@ -156,9 +156,6 @@ export const request =
         if (!chunkData) {
           throw new Error("Errored waiting for request to complete");
         }
-        if ("skip" in chunkData) {
-          continue;
-        }
         const code = resolveCode(
           chunkData.request as PermissionRequest<PluginRequest>,
           shouldLogMessage

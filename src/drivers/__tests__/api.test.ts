@@ -317,7 +317,7 @@ describe("fetchWithStreaming", () => {
       results.push(chunk);
     }
 
-    expect(results.length).toBeGreaterThanOrEqual(0);
+    expect(results.length).toEqual(0);
   });
 
   it("should handle empty chunks", async () => {

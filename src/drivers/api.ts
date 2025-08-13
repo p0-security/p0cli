@@ -147,7 +147,7 @@ export const fetchWithStreaming = async function* <T>(
     );
 
     if (!response.body) throw "No reader available";
-    const onLine = async function* (line: string) {
+    const onLine = (line: string) => {
       const segment = JSON.parse(line);
       if (segment.type === "error") {
         throw segment.error;
@@ -160,8 +160,9 @@ export const fetchWithStreaming = async function* <T>(
         if ("error" in data) {
           throw data.error;
         }
-        yield data as T;
+        return data as T;
       }
+      return undefined; // Ignore heartbeat messages
     };
     // we need get the reader from the body as the backend will be streaming chunks of stringified json
     // response data delimited using new lines.
@@ -187,7 +188,10 @@ export const fetchWithStreaming = async function* <T>(
       buffer = parts.pop() ?? "";
 
       for (const line of parts) {
-        yield* onLine(line);
+        const response = onLine(line);
+        if (response) {
+          yield response;
+        }
       }
     }
     // do not handle the left over buffer as it may contain partial json and the backend is always expected to send complete json objects
