@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
+import { getOperatingSystem } from "../../util";
 import { ImportSshPublicKeyResponse } from "./types";
 
 /**
@@ -28,17 +29,25 @@ export const importSshKey = async (
   options?: { debug?: boolean }
 ) => {
   const debug = options?.debug ?? false;
-  // Force debug=false otherwise it prints the access token
-  const accessToken = await asyncSpawn({ debug: false }, "gcloud", [
-    "auth",
-    "print-access-token",
-  ]);
+  const isWindows = getOperatingSystem() === "win";
+  const cmd = isWindows ? "cmd.exe" : "gcloud";
 
-  const account = await asyncSpawn({ debug }, "gcloud", [
-    "config",
-    "get-value",
-    "account",
-  ]);
+  // Force debug=false otherwise it prints the access token
+  const accessToken = await asyncSpawn(
+    { debug: false },
+    cmd,
+    isWindows
+      ? ["/d", "/s", "/c", "gcloud", "auth", "print-access-token"]
+      : ["auth", "print-access-token"]
+  );
+
+  const account = await asyncSpawn(
+    { debug },
+    cmd,
+    isWindows
+      ? ["/d", "/s", "/c", "gcloud", "config", "get-value", "account"]
+      : ["config", "get-value", "account"]
+  );
 
   if (debug) {
     print2(

@@ -131,3 +131,17 @@ export const ciEquals = (a: string, b: string) =>
 
 export const delay = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+type OperatingSystem = "linux" | "mac" | "unknown" | "win";
+export const getOperatingSystem = (): OperatingSystem => {
+  const platform = process.platform;
+  if (platform === "win32") {
+    return "win";
+  } else if (platform === "darwin") {
+    return "mac";
+  } else if (platform === "linux") {
+    return "linux";
+  } else {
+    return "unknown";
+  }
+};
