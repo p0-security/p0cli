@@ -138,7 +138,6 @@ export const fetchWithStreaming = async function* <T>(
     body,
     keepalive: true,
   };
-  const textDecoder = new TextDecoder();
   try {
     const response = await fetch(
       url,
@@ -146,30 +145,60 @@ export const fetchWithStreaming = async function* <T>(
         ? { ...fetchOptions, signal: AbortSignal.timeout(maxTimeoutMs) }
         : fetchOptions
     );
-    const reader = response.body?.getReader();
-    if (!reader) throw `No reader available`;
+
+    if (!response.body) throw "No reader available";
+    const onLine = (line: string) => {
+      const segment = JSON.parse(line);
+      if (segment.type === "error") {
+        throw segment.error;
+      }
+      if (segment.type !== "heartbeat") {
+        if (segment.type !== "data" || !("data" in segment)) {
+          throw "Invalid response from the server";
+        }
+        const { data } = segment;
+        if ("error" in data) {
+          throw data.error;
+        }
+        return data as T;
+      }
+      return undefined; // Ignore heartbeat messages
+    };
+    // we need get the reader from the body as the backend will be streaming chunks of stringified json
+    // response data delimited using new lines.
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder(); // utf-8 by default
+
+    // given the reader.read() can return partial data due to buffering at network level
+    // there is chance we may get the data from reader.read() that might be incomplete json
+    // or json chunk without the new line delimiter
+    // we initialize an empty buffer to keep track of
+    let buffer = "";
+
     while (true) {
-      const read = await reader.read();
-      if (read.done) {
-        break;
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Decode this chunk and append to buffer. {stream:true} preserves
+      // multi-byte code points that might be split across chunks.
+      buffer += decoder.decode(value, { stream: true });
+
+      // Split on both Unix and Windows newlines; keep the last (possibly partial) piece in buffer.
+      const parts = buffer.split(/\r?\n/);
+      buffer = parts.pop() ?? "";
+
+      for (const line of parts) {
+        const response = onLine(line);
+        if (response) {
+          yield response;
+        }
       }
-      const value = read.value;
-      const text = textDecoder.decode(value);
-      const parsedResponse = JSON.parse(text);
-      if (parsedResponse.type === "error") {
-        throw new Error(parsedResponse.error);
-      }
-      if (parsedResponse.type === "heartbeat") {
-        continue;
-      }
-      if (parsedResponse.type !== "data" || !("data" in parsedResponse)) {
-        throw new Error("Invalid response from the server");
-      }
-      const { data } = parsedResponse;
-      if ("error" in data) {
-        throw data.error;
-      }
-      yield data as T;
+    }
+    // do not handle the left over buffer as it may contain partial json and the backend is always expected to send complete json objects
+    if (buffer.length > 0) {
+      // log the error for reference
+      // this should not happen in most scenarios
+      print2("Incomplete data received from the server" + buffer);
     }
   } catch (error) {
     if (
