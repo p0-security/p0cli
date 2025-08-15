@@ -22,12 +22,6 @@ const unprovisionedAccessPatterns = [
     // The output of `sudo -v` when the user is not allowed to run sudo
     pattern: /Sorry, user .+ may not run sudo on .+/,
   },
-  { pattern: /Error while connecting \[4033: 'not authorized'\]/ },
-  {
-    pattern: /Required 'compute\.instances\.get' permission/,
-    validationWindowMs: 30e3,
-  },
-  { pattern: /Error while connecting \[4010: 'destination read failed'\]/ },
 ] as const;
 
 export const selfHostedSshProvider: SshProvider<
@@ -38,7 +32,7 @@ export const selfHostedSshProvider: SshProvider<
   cloudProviderLogin: async () => undefined,
   ensureInstall: async () => {},
 
-  friendlyName: "Warp Portal",
+  friendlyName: "Self-hosted",
 
   loginRequiredMessage: "Please login to P0 CLI with 'p0 login'",
 
