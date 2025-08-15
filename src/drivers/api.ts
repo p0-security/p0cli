@@ -61,17 +61,22 @@ export const fetchIntegrationConfig = async <T>(
 export const fetchStreamingCommand = async function* <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase,
-  argv: string[]
+  argv: string[],
+  debug?: boolean
 ) {
-  yield* fetchWithStreaming<T>(authn, {
-    url: commandUrl(authn.identity.org.slug),
-    method: "POST",
-    body: JSON.stringify({
-      argv,
-      scriptName: path.basename(args.$0),
-      wait: true,
-    }),
-  });
+  yield* fetchWithStreaming<T>(
+    authn,
+    {
+      url: commandUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        argv,
+        scriptName: path.basename(args.$0),
+        wait: true,
+      }),
+    },
+    debug
+  );
 };
 
 export const fetchCommand = async <T>(
@@ -123,7 +128,8 @@ export const fetchWithStreaming = async function* <T>(
     method: string;
     body?: string;
     maxTimeoutMs?: number;
-  }
+  },
+  debug?: boolean
 ) {
   const token = await authn.getToken();
   const { version } = p0VersionInfo;
@@ -182,7 +188,7 @@ export const fetchWithStreaming = async function* <T>(
       // Decode this chunk and append to buffer. {stream:true} preserves
       // multi-byte code points that might be split across chunks.
       buffer += decoder.decode(value, { stream: true });
-
+      if (debug) print2(`\n[API:stream]Processing buffer: ${buffer}`);
       // Split on both Unix and Windows newlines; keep the last (possibly partial) piece in buffer.
       const parts = buffer.split(/\r?\n/);
       buffer = parts.pop() ?? "";
@@ -198,7 +204,35 @@ export const fetchWithStreaming = async function* <T>(
     if (buffer.length > 0) {
       // log the error for reference
       // this should not happen in most scenarios
-      print2("Incomplete data received from the server" + buffer);
+      if (debug)
+        print2(
+          "[API:stream]Incomplete data received from the server: " + buffer
+        );
+      // try handle non streaming api chunks - error boundary messages
+      try {
+        if (debug)
+          print2(
+            "[API:stream]Trying to parse to validate json completeness: " +
+              buffer
+          );
+        const response = JSON.parse(buffer);
+        if ("error" in response) {
+          throw response.error;
+        }
+      } catch (err) {
+        // if this is json parse error consume it
+        // else rethrow the error
+        if (err instanceof SyntaxError) {
+          // log the error for reference
+          if (debug)
+            print2(
+              "[API:stream]Failed to parse JSON from server response: " +
+                String(err)
+            );
+        } else {
+          throw err;
+        }
+      }
     }
   } catch (error) {
     if (

@@ -345,6 +345,25 @@ describe("fetchWithStreaming", () => {
     expect(results).toEqual([{ id: "1" }, { id: "2" }]);
   });
 
+  it("should throw errors if there is leftover error chunk without new-line and a type", async () => {
+    const chunks = ['{"error":"Something went wrong"}'];
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toBe("Something went wrong");
+  });
+
   it("should throw network error for terminated", async () => {
     jest.spyOn(global, "fetch").mockRejectedValue(new TypeError("terminated"));
 

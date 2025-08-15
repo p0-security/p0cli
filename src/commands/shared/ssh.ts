@@ -137,7 +137,6 @@ export const provisionRequest = async (
   await validateSshInstall(authn, args);
 
   const { publicKey, privateKey } = await createKeyPair();
-
   const response = await request("request")<
     PermissionRequest<PluginSshRequest>
   >(
@@ -156,6 +155,7 @@ export const provisionRequest = async (
         ...(args.parent ? ["--parent", args.parent] : []),
       ],
       wait: true,
+      debug: args.debug,
     },
     authn,
     { message: quiet ? "quiet" : "approval-required" }
