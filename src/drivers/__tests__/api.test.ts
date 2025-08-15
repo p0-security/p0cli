@@ -298,9 +298,9 @@ describe("fetchWithStreaming", () => {
     expect(results).toEqual([{ id: "test" }]);
   });
 
-  it("should handle chunks with no newlines", async () => {
+  it("should handle chunks with no invalid json and no new lines", async () => {
     const chunks = [
-      '{"type":"data","data":{"id":"1"}}{"type":"data","data":{"id":"2"}}', // No newlines
+      '{"type":"data","data":{"id":"1"}', // No newlines
     ];
 
     jest
@@ -312,12 +312,11 @@ describe("fetchWithStreaming", () => {
       method: "GET",
     });
 
-    const results = [];
-    for await (const chunk of generator) {
-      results.push(chunk);
-    }
-
-    expect(results.length).toEqual(0);
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toBe("Invalid response from the server");
   });
 
   it("should handle empty chunks", async () => {
@@ -343,6 +342,25 @@ describe("fetchWithStreaming", () => {
     }
 
     expect(results).toEqual([{ id: "1" }, { id: "2" }]);
+  });
+
+  it("should throw errors if there is leftover error chunk without new-line and a type", async () => {
+    const chunks = ['{"error":"Something went wrong"}'];
+
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+
+    const generator = fetchWithStreaming(mockAuthn, {
+      url: "/stream",
+      method: "GET",
+    });
+
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toBe("Something went wrong");
   });
 
   it("should throw network error for terminated", async () => {

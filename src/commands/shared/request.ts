@@ -54,6 +54,7 @@ export const requestArgs = <T>(yargs: yargs.Argv<T>) =>
       default: false,
       describe: "Block until the command is completed",
     })
+    .option("debug", { type: "boolean", describe: "Print debug information." })
     .option("arguments", {
       array: true,
       string: true,
@@ -84,6 +85,7 @@ export const request =
     args: yargs.ArgumentsCamelCase<{
       arguments: string[];
       wait?: boolean;
+      debug?: boolean;
     }>,
     authn?: Authn,
     options?: {
@@ -136,7 +138,7 @@ export const request =
     const executeStreamingRequest = async () => {
       const fetchStreamingCommandGenerator = fetchStreamingCommand<
         RequestResponse<T>
-      >(resolvedAuthn, args, [command, ...args.arguments]);
+      >(resolvedAuthn, args, [command, ...args.arguments], args.debug);
       const getNextPermissionRequestChunk = async () => {
         const generatedValue = await fetchStreamingCommandGenerator.next();
         if (generatedValue.done) {
