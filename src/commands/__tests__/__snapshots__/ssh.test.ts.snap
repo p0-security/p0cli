@@ -16,6 +16,7 @@ exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] =
     "--reason",
     "reason",
   ],
+  "debug": undefined,
   "wait": true,
 }
 `;
@@ -70,6 +71,7 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
     "--reason",
     "reason",
   ],
+  "debug": undefined,
   "wait": true,
 }
 `;
