@@ -202,33 +202,39 @@ export const fetchWithStreaming = async function* <T>(
     }
     // do not handle the left over buffer as it may contain partial json and the backend is always expected to send complete json objects
     if (buffer.length > 0) {
-      // log the error for reference
-      // this should not happen in most scenarios
-      if (debug)
+      // this should not happen in most scenarios except errors
+      if (debug) {
         print2(
-          "[API:stream]Incomplete data received from the server: " + buffer
+          "[API:stream]Remaining data received from the server but not processed due to the lack of new-line: " +
+            buffer
         );
-      // try handle non streaming api chunks - error boundary messages
+      }
+      // there is a chance that the server could have errored with a non-streaming response
+      // we hit a errorBoundary in the backend and we received a valid json without a new-line delimiter at the end
       try {
-        if (debug)
+        if (debug) {
           print2(
             "[API:stream]Trying to parse to validate json completeness: " +
               buffer
           );
+        }
         const response = JSON.parse(buffer);
         if ("error" in response) {
           throw response.error;
         }
       } catch (err) {
-        // if this is json parse error consume it
+        // If this is a json parse error then we have received a partial response
+        // we could throw an error saying incomplete response from the server
         // else rethrow the error
         if (err instanceof SyntaxError) {
-          // log the error for reference
-          if (debug)
+          // log the error in debug logs
+          if (debug) {
             print2(
               "[API:stream]Failed to parse JSON from server response: " +
                 String(err)
             );
+          }
+          throw "Invalid response from the server";
         } else {
           throw err;
         }

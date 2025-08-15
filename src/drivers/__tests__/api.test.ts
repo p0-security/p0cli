@@ -298,9 +298,9 @@ describe("fetchWithStreaming", () => {
     expect(results).toEqual([{ id: "test" }]);
   });
 
-  it("should handle chunks with no newlines", async () => {
+  it("should handle chunks with no invalid json and no new lines", async () => {
     const chunks = [
-      '{"type":"data","data":{"id":"1"}}{"type":"data","data":{"id":"2"}}', // No newlines
+      '{"type":"data","data":{"id":"1"}', // No newlines
     ];
 
     jest
@@ -312,12 +312,11 @@ describe("fetchWithStreaming", () => {
       method: "GET",
     });
 
-    const results = [];
-    for await (const chunk of generator) {
-      results.push(chunk);
-    }
-
-    expect(results.length).toEqual(0);
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toBe("Invalid response from the server");
   });
 
   it("should handle empty chunks", async () => {
