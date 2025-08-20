@@ -9,9 +9,10 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { P0_PATH } from "../util";
+import * as crypto from "crypto";
 import * as fs from "fs/promises";
-import forge from "node-forge";
 import * as path from "path";
+import * as sshpk from "sshpk";
 
 export const P0_KEY_FOLDER = path.join(P0_PATH, "ssh");
 export const PUBLIC_KEY_PATH = path.join(P0_KEY_FOLDER, "id_rsa.pub");
@@ -33,9 +34,20 @@ export const createKeyPair = async (): Promise<{
 
     return { publicKey, privateKey };
   } else {
-    const rsaKeyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
-    const privateKey = forge.pki.privateKeyToPem(rsaKeyPair.privateKey);
-    const publicKey = forge.ssh.publicKeyToOpenSSH(rsaKeyPair.publicKey);
+    const keyPair = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: {
+        type: "spki",
+        format: "pem",
+      },
+      privateKeyEncoding: {
+        type: "pkcs8",
+        format: "pem",
+      },
+    });
+
+    const privateKey = keyPair.privateKey;
+    const publicKey = toOpenSshKey(keyPair.publicKey);
 
     await fs.mkdir(path.dirname(PUBLIC_KEY_PATH), { recursive: true });
     await fs.writeFile(PUBLIC_KEY_PATH, publicKey, { mode: 0o600 });
@@ -51,4 +63,12 @@ const fileExists = async (path: string) => {
   } catch (error) {
     return false;
   }
+};
+
+/**
+ * Convert a PEM-formatted RSA public key to OpenSSH format
+ */
+const toOpenSshKey = (pemKey: string): string => {
+  const parsedKey = sshpk.parseKey(pemKey, "pem");
+  return parsedKey.toString("ssh");
 };
