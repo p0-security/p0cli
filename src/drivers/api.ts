@@ -23,6 +23,8 @@ const tenantOrgUrl = (tenant: string) =>
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
+const certSignRequestUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/ssh/certificates`;
 const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
@@ -114,6 +116,19 @@ export const submitPublicKey = async <T>(
 ) =>
   authFetch<T>(authn, {
     url: publicKeysUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
+      requestId: args.requestId,
+      publicKey: args.publicKey,
+    }),
+  });
+
+export const certificateSigningRequest = async (
+  authn: Authn,
+  args: { publicKey: string; requestId: string }
+) =>
+  baseFetch<{ signedCertificate: string }>(authn, {
+    url: certSignRequestUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
       requestId: args.requestId,

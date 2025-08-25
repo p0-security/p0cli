@@ -122,7 +122,7 @@ export const awsSshProvider: SshProvider<
     return undefined;
   },
 
-  generateKeys: async (_) => {
+  generateKeys: async () => {
     return {
       privateKeyPath: PRIVATE_KEY_PATH,
     };
