@@ -10,8 +10,10 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { p0VersionInfo } from "../version";
 import { BufferedSpanExporter } from "./buffered-exporter";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { DnsInstrumentation } from "@opentelemetry/instrumentation-dns";
+import { NetInstrumentation } from "@opentelemetry/instrumentation-net";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
@@ -28,19 +30,9 @@ const sdk = new NodeSDK({
   }),
   traceExporter: bufferedExporter,
   instrumentations: [
-    // Disable instrumentations to decrease span volume
-    getNodeAutoInstrumentations({
-      "@opentelemetry/instrumentation-net": {
-        enabled: false,
-      },
-      "@opentelemetry/instrumentation-dns": {
-        enabled: false,
-      },
-      // Spans such as `grpc.google.firestore.v1.Firestore/Listen` are part of long running background tasks
-      "@opentelemetry/instrumentation-grpc": {
-        ignoreGrpcMethods: ["Listen"],
-      },
-    }),
+    new DnsInstrumentation(),
+    new NetInstrumentation(),
+    new UndiciInstrumentation(),
   ],
 });
 
