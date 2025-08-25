@@ -52,11 +52,11 @@ jobs:
           # Install build dependencies
           brew install python@3.11
           export PATH="/opt/homebrew/bin:$PATH"
-          
+
           # Create build directory
           mkdir -p ~/fips-node-build
           cd ~/fips-node-build
-          
+
           # Build OpenSSL 3.0.9 with FIPS support
           curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
           cd openssl-3.0.9
@@ -64,14 +64,14 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
           make install
           cd ..
-          
+
           # Get Node.js version from .nvmrc
           NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc | tr -d 'v')
-          
+
           # Download and extract Node.js source
           curl -L https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.gz | tar -xz
           cd node-v${NODE_VERSION}
-          
+
           # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
           ./configure \
             --shared-openssl \
@@ -80,7 +80,7 @@ jobs:
             --shared-openssl-libname=crypto,ssl \
             --openssl-is-fips \
             --prefix=$HOME/fips-node
-          
+
           # Build Node.js (this takes a while)
           make -j$(sysctl -n hw.ncpu)
           make install
@@ -91,7 +91,7 @@ jobs:
         run: |
           # Verify the custom Node.js build
           $HOME/fips-node/bin/node --version
-          
+
           # Test FIPS capability
           $HOME/fips-node/bin/node -e "console.log('FIPS available:', process.versions.openssl, require('crypto').getFips ? require('crypto').getFips() : 'N/A')"
       - name: Yarn install
