@@ -1,5 +1,5 @@
 # See https://nodejs.org/docs/latest-v20.x/api/single-executable-applications.html for more information.
-node --experimental-sea-config sea-config.json 
+node --enable-fips --experimental-sea-config sea-config.json 
 cp $(node -p process.execPath) ./build/sea/p0
 codesign --remove-signature ./build/sea/p0
 npx postject ./build/sea/p0 NODE_SEA_BLOB ./build/sea/p0.blob \
