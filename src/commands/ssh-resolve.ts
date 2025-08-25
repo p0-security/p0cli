@@ -119,8 +119,10 @@ const sshResolveAction = async (
     print2("Generating Keys");
   }
   const keys = await sshProvider?.generateKeys?.(
+    authn,
     provisionedRequest.permission.resource,
     {
+      requestId,
       debug: args.debug,
     }
   );

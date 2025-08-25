@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
+import { createTempDirectoryForKeys } from "../ssh/shared";
 import {
   azAccountSetCommand,
   azSetSubscription,
@@ -21,7 +22,6 @@ import {
   AD_CERT_FILENAME,
   AD_SSH_KEY_PRIVATE,
   azSshCertCommand,
-  createTempDirectoryForKeys,
   generateSshKeyAndAzureAdCert,
 } from "./keygen";
 import { azBastionTunnelCommand, trySpawnBastionTunnel } from "./tunnel";
@@ -107,7 +107,7 @@ export const azureSshProvider: SshProvider<
       // elsewhere. It'll be an annoying long temporary directory name, but it strictly will work for reproduction. If
       // additionalData isn't present (which it always should be for the azureSshProvider), we'll use the user's home
       // directory.
-      if (additionalData) {
+      if (additionalData?.identityFile) {
         return path.dirname(additionalData.identityFile);
       } else {
         const basePath = process.env.HOME || process.env.USERPROFILE || "";
@@ -137,7 +137,7 @@ export const azureSshProvider: SshProvider<
     ];
   },
 
-  generateKeys: async (request, options: { debug?: boolean } = {}) => {
+  generateKeys: async (_authn, request, options: { debug?: boolean } = {}) => {
     const { debug } = options;
     const { path: keyPath } = await createTempDirectoryForKeys();
     await azSetSubscription(request, options);
@@ -166,7 +166,7 @@ export const azureSshProvider: SshProvider<
     };
   },
 
-  setup: async (request, options) => {
+  setup: async (_authn, request, options) => {
     // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
     // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
     // subscription as which contains the Bastion host or the target VM.
