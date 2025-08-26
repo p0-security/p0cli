@@ -74,12 +74,12 @@ const convertLsSizeArg = (args: string[]) => {
   if (sizeIndex >= 0) {
     // Handle --size n format
     const sizeValue = pullAt(convertedArgs, sizeIndex, sizeIndex + 1)[1];
-    requestedSize = +(sizeValue ?? DEFAULT_RESPONSE_SIZE);
+    requestedSize = +(sizeValue || DEFAULT_RESPONSE_SIZE);
   } else if (sizeEqualIndex >= 0) {
     // Handle --size=n format
     const sizeArg = pullAt(convertedArgs, sizeEqualIndex)[0];
-    const sizeValue = sizeArg?.split("=")[1];
-    requestedSize = +(sizeValue ?? DEFAULT_RESPONSE_SIZE);
+    const sizeValue = sizeArg?.split("=")[1]?.trim();
+    requestedSize = +(sizeValue || DEFAULT_RESPONSE_SIZE);
   } else {
     requestedSize = DEFAULT_RESPONSE_SIZE;
   }
