@@ -63,13 +63,29 @@ export const lsCommand = (yargs: yargs.Argv) =>
  */
 const convertLsSizeArg = (args: string[]) => {
   const convertedArgs = [...args];
+
   const sizeIndex = convertedArgs.findIndex((a) => a === "--size");
-  const requestedSize = +(
-    (sizeIndex >= 0
-      ? pullAt(convertedArgs, sizeIndex, sizeIndex + 1)[1]
-      : undefined) ?? DEFAULT_RESPONSE_SIZE
+  const sizeEqualIndex = convertedArgs.findIndex((a) =>
+    a.startsWith("--size=")
   );
+
+  let requestedSize: number;
+
+  if (sizeIndex >= 0) {
+    // Handle --size n format
+    const sizeValue = pullAt(convertedArgs, sizeIndex, sizeIndex + 1)[1];
+    requestedSize = +(sizeValue ?? DEFAULT_RESPONSE_SIZE);
+  } else if (sizeEqualIndex >= 0) {
+    // Handle --size=n format
+    const sizeArg = pullAt(convertedArgs, sizeEqualIndex)[0];
+    const sizeValue = sizeArg?.split("=")[1];
+    requestedSize = +(sizeValue ?? DEFAULT_RESPONSE_SIZE);
+  } else {
+    requestedSize = DEFAULT_RESPONSE_SIZE;
+  }
+
   convertedArgs.push("--size", String(requestedSize * 2));
+
   return { convertedArgs, requestedSize };
 };
 
