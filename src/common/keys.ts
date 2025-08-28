@@ -133,11 +133,13 @@ export const saveHostKeys = async (
     // Check if file already exists
     if (await fileExists(hostFilePath)) {
       if (options?.debug) {
-        print2(`Host keys file for instance ${instanceId} already exists, skipping`);
+        print2(
+          `Host keys file for instance ${instanceId} already exists, skipping`
+        );
       }
       return;
     }
-    
+
     const content = hostKeys.join("\n") + "\n";
     await fs.writeFile(hostFilePath, content, { mode: 0o600 });
 
