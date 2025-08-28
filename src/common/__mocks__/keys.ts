@@ -14,4 +14,6 @@ export const createKeyPair = jest.fn().mockImplementation(() => ({
   privateKey: "test-private-key",
 }));
 export const saveHostKeys = jest.fn().mockResolvedValue(undefined);
-export const getKnownHostsFilePath = jest.fn().mockReturnValue("/mock/path/to/known_hosts/instance");
+export const getKnownHostsFilePath = jest
+  .fn()
+  .mockReturnValue("/mock/path/to/known_hosts/instance");
