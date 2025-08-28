@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { PRIVATE_KEY_PATH, saveHostKeys } from "../../common/keys";
 import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
 import { throwAssertNever } from "../../util";
@@ -128,13 +128,24 @@ export const awsSshProvider: SshProvider<
     };
   },
 
+  saveHostKeys: async (request, options) => {
+    const { hostKeys, id } = request;
+    await saveHostKeys(id, hostKeys, { ...options });
+  },
+
   requestToSsh: (request) => {
     const { permission, generated } = request;
     const { resource, region } = permission;
     const { idcId, idcRegion, instanceId, accountId } = resource;
-    const { linuxUserName, resource: generatedResource } = generated;
+    const { linuxUserName, hostKeys, resource: generatedResource } = generated;
     const { name } = generatedResource;
-    const common = { linuxUserName, accountId, region, id: instanceId };
+    const common = {
+      linuxUserName,
+      accountId,
+      region,
+      id: instanceId,
+      hostKeys,
+    };
     return !idcId || !idcRegion
       ? { ...common, role: name, type: "aws", access: "role" }
       : {

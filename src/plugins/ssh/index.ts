@@ -15,7 +15,7 @@ import {
   SshAdditionalSetup,
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
-import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { PRIVATE_KEY_PATH, getKnownHostsFilePath } from "../../common/keys";
 import { auditSshSessionActivity } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
@@ -254,7 +254,7 @@ const createCommand = (
   setupData: SshAdditionalSetup | undefined,
   proxyCommand: string[]
 ) => {
-  addCommonArgs(args, proxyCommand, setupData);
+  addCommonArgs(args, proxyCommand, setupData, data);
 
   const sshOptionsOverrides = setupData?.sshOptions ?? [];
   const port = setupData?.port;
@@ -301,7 +301,8 @@ const createCommand = (
 const addCommonArgs = (
   args: CommandArgs,
   sshProviderProxyCommand: string[],
-  setupData: SshAdditionalSetup | undefined
+  setupData: SshAdditionalSetup | undefined,
+  data: SshRequest
 ) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
@@ -334,6 +335,16 @@ const addCommonArgs = (
 
   if (!userSpecifiedProxyCommand && sshProviderProxyCommand.length > 0) {
     sshOptions.push("-o", `ProxyCommand=${sshProviderProxyCommand.join(" ")}`);
+  }
+
+  const userKnownHostsFileOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("UserKnownHostsFile")
+  );
+
+  if (!userKnownHostsFileOptionExists) {
+    const knownHostsFile = getKnownHostsFilePath(data.id);
+    sshOptions.push("-o", `UserKnownHostsFile=${knownHostsFile}`);
   }
 
   // Force verbose output from SSH so we can parse the output

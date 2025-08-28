@@ -217,10 +217,12 @@ export const prepareRequest = async (
 
   await sshProvider.ensureInstall();
 
-  const cliRequest = await pluginToCliRequest(provisionedRequest, {
-    debug: args.debug,
-  });
+  const options = { debug: args.debug };
+  const cliRequest = await pluginToCliRequest(provisionedRequest, options);
+
   const request = sshProvider.requestToSsh(cliRequest);
+
+  await sshProvider.saveHostKeys?.(request, options);
 
   return { ...result, request, sshProvider, provisionedRequest };
 };
