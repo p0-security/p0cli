@@ -31,10 +31,10 @@ const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
 export const fetchOrgData = async <T>(orgId: string) =>
-  unauthenticatedApiFetch<T>(tenantOrgUrl(orgId), "GET");
+  baseFetch<T>({ url: tenantOrgUrl(orgId), method: "GET" });
 
 export const fetchAccountInfo = async <T>(authn: Authn) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/account`,
     method: "GET",
   });
@@ -43,7 +43,7 @@ export const fetchPermissionRequestDetails = async <T>(
   authn: Authn,
   requestId: string
 ) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
     method: "GET",
     maxTimeoutMs: DEFAULT_PERMISSION_REQUEST_TIMEOUT,
@@ -53,7 +53,7 @@ export const fetchIntegrationConfig = async <T>(
   authn: Authn,
   integration: string
 ) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
     method: "GET",
   });
@@ -84,7 +84,7 @@ export const fetchCommand = async <T>(
   args: yargs.ArgumentsCamelCase,
   argv: string[]
 ) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: commandUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
@@ -99,7 +99,7 @@ export const fetchAdminLsCommand = async <T>(
   args: yargs.ArgumentsCamelCase,
   argv: string[]
 ) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: adminLsCommandUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
@@ -112,7 +112,7 @@ export const submitPublicKey = async <T>(
   authn: Authn,
   args: { publicKey: string; requestId: string }
 ) =>
-  baseFetch<T>(authn, {
+  authFetch<T>(authn, {
     url: publicKeysUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
@@ -268,7 +268,7 @@ export const auditSshSessionActivity = async (args: {
   }
 
   try {
-    await baseFetch(authn, {
+    await authFetch(authn, {
       url: sshAuditUrl(authn.identity.org.slug),
       method: "POST",
       body: JSON.stringify({
@@ -288,37 +288,34 @@ export const auditSshSessionActivity = async (args: {
   }
 };
 
-export const baseFetch = async <T>(
-  authn: Authn,
-  args: {
-    url: string;
-    method: string;
-    body?: string;
-    maxTimeoutMs?: number;
-  }
-) => {
+const baseFetch = async <T>(args: {
+  url: string;
+  method: string;
+  body?: string;
+  headers?: Record<string, string>;
+  maxTimeoutMs?: number;
+}) => {
   const { version } = p0VersionInfo;
-  const { url, method, body, maxTimeoutMs } = args;
-  const token = await authn.getToken();
+  const { url, method, body, maxTimeoutMs, headers } = args;
   const fetchOptions = {
     method,
     headers: {
-      authorization: `Bearer ${token}`,
+      ...(headers ?? {}),
       "Content-Type": "application/json",
       "User-Agent": `P0 CLI/${version}`,
     },
     body,
     keepalive: true,
+    ...(maxTimeoutMs ? { signal: AbortSignal.timeout(maxTimeoutMs) } : {}),
   };
 
   try {
-    const response = await fetch(
-      url,
-      maxTimeoutMs
-        ? { ...fetchOptions, signal: AbortSignal.timeout(maxTimeoutMs) }
-        : fetchOptions
-    );
+    const response = await fetch(url, fetchOptions);
     const text = await response.text();
+    const errorMessage = tryParseHtmlError(text);
+    if (errorMessage) {
+      throw errorMessage;
+    }
     const data = JSON.parse(text);
     if ("error" in data) {
       throw data.error;
@@ -333,35 +330,40 @@ export const baseFetch = async <T>(
   }
 };
 
-const unauthenticatedApiFetch = async <T>(
-  url: string,
-  method: string,
-  body?: string
-) => {
-  const { version } = p0VersionInfo;
-  try {
-    const fetchConfig = {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": `P0 CLI/${version}`,
-      },
-    };
-    const response = await fetch(url, {
-      ...fetchConfig,
-      body,
-    });
-    const text = await response.text();
-    const data = JSON.parse(text);
-    if ("error" in data) {
-      throw data.error;
-    }
-    return data as T;
-  } catch (error) {
-    if (error instanceof TypeError && error.message === "fetch failed") {
-      throw `Network error: Unable to reach the server at ${url}.`;
-    } else {
-      throw error;
-    }
+const authFetch = async <T>(
+  authn: Authn,
+  args: {
+    url: string;
+    method: string;
+    body?: string;
+    maxTimeoutMs?: number;
   }
+) => {
+  const token = await authn.getToken();
+  const headers = {
+    authorization: `Bearer ${token}`,
+  };
+  return baseFetch<T>({
+    ...args,
+    headers,
+  });
+};
+
+/** Check if text contains an error code in the html title by looking for 3-digit http codes.
+ *
+ * Example text:
+ * <!doctype html><meta charset="utf-8"><meta name=viewport content="width=device-width, initial-scale=1"><title>429</title>429 Too Many Requests
+ */
+const tryParseHtmlError = (text: string) => {
+  const match = text.match(/<title>(\d{3})<\/title>/);
+  if (!match) {
+    return undefined;
+  }
+  const statusCode = match[1];
+  const statusText = text
+    // Remove the title tag
+    .replace(/<title>(\d{3})<\/title>/g, "")
+    // Remove meta HTML tags
+    .replace(/<[^>]+>/g, "");
+  return `${statusText}: (HTTP status ${statusCode})`;
 };
