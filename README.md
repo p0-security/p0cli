@@ -74,6 +74,14 @@ You can now request access via
 p0 request
 ```
 
+#### Using Non-Firebase Auth Tokens
+
+By default, the CLI performs a login with your auth issuer, then exchanges that token
+with firebase for a firebase token to use with the API.
+
+To use your auth issuer's token directly, set `ssoPassthrough` to `true` in your org's
+discover doc.
+
 ## CLI Reference
 
 ### Usage
