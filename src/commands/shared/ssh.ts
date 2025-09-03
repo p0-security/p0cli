@@ -222,7 +222,7 @@ export const prepareRequest = async (
 
   const request = sshProvider.requestToSsh(cliRequest);
 
-  const hostKeysPath = await sshProvider.saveHostKeys?.(request, options);
+  const hostKeys = await sshProvider.saveHostKeys?.(request, options);
 
-  return { ...result, request, sshProvider, provisionedRequest, hostKeysPath };
+  return { ...result, request, sshProvider, provisionedRequest, hostKeys };
 };

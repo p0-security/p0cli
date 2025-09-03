@@ -130,7 +130,8 @@ export const awsSshProvider: SshProvider<
 
   saveHostKeys: async (request, options) => {
     const { hostKeys, id } = request;
-    return await saveHostKeys(id, hostKeys, { ...options });
+    const path = await saveHostKeys(id, hostKeys, { ...options });
+    return path ? { alias: id, path } : undefined;
   },
 
   requestToSsh: (request) => {

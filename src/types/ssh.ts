@@ -120,7 +120,7 @@ export type SshProvider<
   saveHostKeys?: (
     request: SR,
     options?: { debug?: boolean }
-  ) => Promise<string | undefined>;
+  ) => Promise<{ alias: string; path: string } | undefined>;
 
   submitPublicKey?: (
     authn: Authn,

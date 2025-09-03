@@ -105,7 +105,7 @@ const sshResolveAction = async (
     debug: args.debug,
   }).catch(silentlyExit);
 
-  const { request, requestId, provisionedRequest, hostKeysPath } =
+  const { request, requestId, provisionedRequest, hostKeys } =
     await prepareRequest(authn, args, args.destination, true, args.quiet).catch(
       requestErrorHandler
     );
@@ -138,7 +138,9 @@ const sshResolveAction = async (
   const certificateInfo = keys?.certificatePath
     ? `CertificateFile ${keys.certificatePath}`
     : "";
-  const hostKeysInfo = hostKeysPath ? `UserKnownHostsFile ${hostKeysPath}` : "";
+  const hostKeysInfo = hostKeys
+    ? `UserKnownHostsFile ${hostKeys.path}\nHostKeyAlias ${hostKeys.alias}`
+    : "";
 
   const appPath = getAppPath();
 
