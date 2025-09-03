@@ -127,7 +127,7 @@ export const certificateSigningRequest = async (
   authn: Authn,
   args: { publicKey: string; requestId: string }
 ) =>
-  baseFetch<{ signedCertificate: string }>(authn, {
+  authFetch<{ signedCertificate: string }>(authn, {
     url: certSignRequestUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
