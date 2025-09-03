@@ -86,30 +86,30 @@ jobs:
         run: |
           # Configure OpenSSL FIPS
           cd $HOME/fips-node/openssl
-          
+
           # Install FIPS provider and create config
           ./bin/openssl fipsinstall -out fipsmodule.cnf -module lib/ossl-modules/fips.dylib
-          
+
           # Create OpenSSL config file
-          cat > openssl.cnf << 'EOF'
-openssl_conf = openssl_init
+          {
+            echo "openssl_conf = openssl_init"
+            echo ""
+            echo "[openssl_init]"
+            echo "providers = provider_sect"
+            echo ""
+            echo "[provider_sect]"
+            echo "fips = fips_sect"
+            echo "base = base_sect"
+            echo ""
+            echo "[base_sect]"
+            echo "activate = 1"
+            echo ""
+            echo "[fips_sect]"
+            echo "activate = 1"
+            echo "conditional_errors = 1"
+            echo "module_filename = lib/ossl-modules/fips.dylib"
+          } > openssl.cnf
 
-[openssl_init]
-providers = provider_sect
-
-[provider_sect]
-fips = fips_sect
-base = base_sect
-
-[base_sect]
-activate = 1
-
-[fips_sect]
-activate = 1
-conditional_errors = 1
-module_filename = lib/ossl-modules/fips.dylib
-EOF
-          
           # Copy the FIPS config into the main config
           cat fipsmodule.cnf >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
