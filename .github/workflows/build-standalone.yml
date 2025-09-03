@@ -81,20 +81,53 @@ jobs:
           # Build Node.js (this takes a while)
           make -j$(getconf _NPROCESSORS_ONLN)
           make install
+      - name: Configure FIPS
+        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        run: |
+          # Configure OpenSSL FIPS
+          cd $HOME/fips-node/openssl
+          
+          # Install FIPS provider and create config
+          ./bin/openssl fipsinstall -out fipsmodule.cnf -module lib/ossl-modules/fips.dylib
+          
+          # Create OpenSSL config file
+          cat > openssl.cnf << 'EOF'
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+fips = fips_sect
+base = base_sect
+
+[base_sect]
+activate = 1
+
+[fips_sect]
+activate = 1
+conditional_errors = 1
+module_filename = lib/ossl-modules/fips.dylib
+EOF
+          
+          # Copy the FIPS config into the main config
+          cat fipsmodule.cnf >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
       - name: Verify FIPS Node.js
         run: |
+          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           # Verify the custom Node.js build
           $HOME/fips-node/bin/node --version
 
           # Test FIPS capability
-          $HOME/fips-node/bin/node -e "console.log('FIPS available:', process.versions.openssl, require('crypto').getFips ? require('crypto').getFips() : 'N/A')"
+          $HOME/fips-node/bin/node --enable-fips -e "console.log('FIPS enabled:', require('crypto').getFips())"
       - name: Yarn install
         run: yarn install
       - name: Build
         run: |
+          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Codesign binary
