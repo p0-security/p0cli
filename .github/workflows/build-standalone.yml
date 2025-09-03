@@ -72,7 +72,7 @@ jobs:
           # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
           ./configure \
             --shared-openssl \
-            --shared-openssl-libpath=$HOME/fips-node/openssl/lib64 \
+            --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
             --shared-openssl-includes=$HOME/fips-node/openssl/include \
             --shared-openssl-libname=crypto,ssl \
             --openssl-is-fips \
