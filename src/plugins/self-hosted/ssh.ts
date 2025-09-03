@@ -62,15 +62,14 @@ export const selfHostedSshProvider: SshProvider<
     const { publicKey } = await createKeyPair();
 
     const signedCertificate = await generateSelfHostedCertificate(authn, {
-      requestId: options.requestId,
-      debug: options.debug,
+      ...options,
       publicKey,
     });
 
-    const sshCertificateKeyPath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
-    await fs.writeFile(sshCertificateKeyPath, signedCertificate);
+    const certificatePath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
+    await fs.writeFile(certificatePath, signedCertificate);
     return {
-      certificatePath: sshCertificateKeyPath,
+      certificatePath,
     };
   },
 
@@ -87,13 +86,9 @@ export const selfHostedSshProvider: SshProvider<
     const sshCertificateKeyPath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
     await fs.writeFile(sshCertificateKeyPath, signedCertificate);
 
-    const teardown = async () => {
-      await sshKeyPathCleanup();
-    };
-
     return {
       sshOptions: [`CertificateFile=${sshCertificateKeyPath}`],
-      teardown,
+      teardown: sshKeyPathCleanup,
     };
   },
 
