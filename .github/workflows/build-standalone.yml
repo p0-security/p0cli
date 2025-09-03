@@ -82,12 +82,14 @@ jobs:
           make -j$(getconf _NPROCESSORS_ONLN)
           make install
       - name: Configure FIPS
-        if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
-          # Configure OpenSSL FIPS
+          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
           cd $HOME/fips-node/openssl
-
-          # Install FIPS provider and create config
+          
+          # Verify FIPS module exists
+          ls -la lib/ossl-modules/
+          
+          # Install FIPS provider and create config with fresh checksums
           ./bin/openssl fipsinstall -out fipsmodule.cnf -module lib/ossl-modules/fips.dylib
 
           # Create OpenSSL config file
