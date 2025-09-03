@@ -110,6 +110,9 @@ jobs:
 
           # Append the generated FIPS config (which includes [fips_sect] with checksums)
           cat fipsmodule.cnf >> openssl.cnf
+
+          # Add the missing module_filename parameter to the FIPS section
+          echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
