@@ -106,13 +106,9 @@ jobs:
             echo "[base_sect]"
             echo "activate = 1"
             echo ""
-            echo "[fips_sect]"
-            echo "activate = 1"
-            echo "conditional_errors = 1"
-            echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib"
           } > openssl.cnf
 
-          # Copy the FIPS config into the main config
+          # Append the generated FIPS config (which includes [fips_sect] with checksums)
           cat fipsmodule.cnf >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
         run: |
