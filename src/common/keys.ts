@@ -112,7 +112,7 @@ export const saveHostKeys = async (
   instanceId: string,
   hostKeys: string[],
   options?: { debug?: boolean }
-): Promise<void> => {
+): Promise<string | undefined> => {
   if (!hostKeys || hostKeys.length === 0) {
     if (options?.debug) {
       print2("No host keys provided, skipping");
@@ -137,7 +137,7 @@ export const saveHostKeys = async (
           `Host keys file for instance ${instanceId} already exists, skipping`
         );
       }
-      return;
+      return hostFilePath;
     }
 
     const content = hostKeys.join("\n") + "\n";
@@ -148,10 +148,12 @@ export const saveHostKeys = async (
         `Saved ${hostKeys.length} host keys for instance ${instanceId} to ${hostFilePath}`
       );
     }
+    return hostFilePath;
   } else {
     if (options?.debug) {
       print2("No valid host keys to save");
     }
+    return;
   }
 };
 

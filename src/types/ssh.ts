@@ -117,7 +117,10 @@ export type SshProvider<
     port: string;
   }>;
 
-  saveHostKeys?: (request: SR, options?: { debug?: boolean }) => Promise<void>;
+  saveHostKeys?: (
+    request: SR,
+    options?: { debug?: boolean }
+  ) => Promise<string | undefined>;
 
   submitPublicKey?: (
     authn: Authn,
