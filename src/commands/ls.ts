@@ -12,7 +12,7 @@ import { AnsiSgr } from "../drivers/ansi";
 import { fetchAdminLsCommand, fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { print1, print2, spinUntil } from "../drivers/stdio";
-import { max, orderBy, pullAt, slice } from "lodash";
+import { max, orderBy, slice } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
@@ -40,6 +40,11 @@ const lsArgs = <T>(yargs: yargs.Argv<T>) =>
       string: true,
       default: [] as string[],
     })
+    .option("size", {
+      type: "number",
+      default: DEFAULT_RESPONSE_SIZE,
+      description: "Number of results to return",
+    })
     .option("json", {
       type: "boolean",
       default: false,
@@ -47,66 +52,44 @@ const lsArgs = <T>(yargs: yargs.Argv<T>) =>
     });
 
 export const lsCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[]; json: boolean }>(
+  yargs.command<{ arguments: string[]; json: boolean; size: number }>(
     "ls [arguments..]",
     "List request-command arguments",
     lsArgs,
     ls
   );
 
-/**
- * If the user has requested a size, replace it with double the requested size,
- * otherwise request double the default.
- *
- * This is done so that we can give the user a sense of the number of results
- * that are not displayed.
- */
-const convertLsSizeArg = (args: string[]) => {
-  const convertedArgs = [...args];
-
-  const sizeIndex = convertedArgs.findIndex((a) => a === "--size");
-  const sizeEqualIndex = convertedArgs.findIndex((a) =>
-    a.startsWith("--size=")
-  );
-
-  let requestedSize: number;
-
-  if (sizeIndex >= 0) {
-    // Handle --size n format
-    const sizeValue = pullAt(convertedArgs, sizeIndex, sizeIndex + 1)[1];
-    requestedSize = +(sizeValue || DEFAULT_RESPONSE_SIZE);
-  } else if (sizeEqualIndex >= 0) {
-    // Handle --size=n format
-    const sizeArg = pullAt(convertedArgs, sizeEqualIndex)[0];
-    const sizeValue = sizeArg?.split("=")[1]?.trim();
-    requestedSize = +(sizeValue || DEFAULT_RESPONSE_SIZE);
-  } else {
-    requestedSize = DEFAULT_RESPONSE_SIZE;
-  }
-
-  convertedArgs.push("--size", String(requestedSize * 2));
-
-  return { convertedArgs, requestedSize };
-};
-
 const ls = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
     json: boolean;
+    size: number;
   }>
 ) => {
   const authn = await authenticate();
-  const { convertedArgs, requestedSize } = convertLsSizeArg(args.arguments);
 
   const isAdminCommand =
     args.arguments.includes("--all") || args.arguments.includes("--principal");
 
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
+  const allArguments = [
+    ...args._,
+    ...args.arguments,
+    /**
+     * If the user has requested a size, replace it with double the requested size,
+     * otherwise request double the default.
+     *
+     * This is done so that we can give the user a sense of the number of results
+     * that are not displayed.
+     */
+    ...(args.size ? ["--size", args.size * 2] : []),
+  ].map(String); // make sure all elements are strings to satisfy command line args
+
   const responsePromise: Promise<LsResponse> = command<LsResponse>(
     authn,
     args,
-    ["ls", ...(args.json ? args.arguments : convertedArgs)]
+    allArguments
   );
 
   const data = await spinUntil("Listing accessible resources", responsePromise);
@@ -117,16 +100,14 @@ const ls = async (
       return;
     }
 
-    const allArguments = [...args._, ...args.arguments];
-
     const label = pluralize(data.arg);
     if (data.items.length === 0) {
       print2(`No ${label}`);
       return;
     }
     const truncationPart =
-      data.items.length > requestedSize
-        ? ` the first ${requestedSize} (of ${data.isTruncated ? "many" : data.items.length})`
+      data.items.length > args.size
+        ? ` the first ${args.size} (of ${data.isTruncated ? "many" : data.items.length})`
         : "";
     const postfixPart = data.term
       ? ` matching '${data.term}'`
@@ -137,7 +118,7 @@ const ls = async (
     print2(
       `Showing${truncationPart} ${label}${postfixPart}.\nResources labeled with * are already accessible to you:`
     );
-    const truncated = slice(data.items, 0, requestedSize);
+    const truncated = slice(data.items, 0, args.size);
     const sortedItems = orderBy(truncated, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
