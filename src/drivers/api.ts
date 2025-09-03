@@ -13,7 +13,6 @@ import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
-import { pick } from "lodash";
 import * as path from "node:path";
 import yargs from "yargs";
 
@@ -124,15 +123,17 @@ export const submitPublicKey = async <T>(
     }),
   });
 
-const CSR_KEYS = ["requestId", "publicKey"] as const;
 export const certificateSigningRequest = async (
   authn: Authn,
-  args: Record<(typeof CSR_KEYS)[number], string>
+  args: { publicKey: string; requestId: string }
 ) =>
   baseFetch<{ signedCertificate: string }>(authn, {
     url: certSignRequestUrl(authn.identity.org.slug),
     method: "POST",
-    body: JSON.stringify(pick(args, CSR_KEYS)),
+    body: JSON.stringify({
+      requestId: args.requestId,
+      publicKey: args.publicKey,
+    }),
   });
 
 export const fetchWithStreaming = async function* <T>(
