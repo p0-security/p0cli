@@ -49,10 +49,6 @@ jobs:
       - name: Build FIPS-compliant Node.js
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
-          # Install build dependencies
-          brew install python@3.11
-          export PATH="/opt/homebrew/bin:$PATH"
-
           # Create build directory
           mkdir -p ~/fips-node-build
           cd ~/fips-node-build
@@ -61,16 +57,16 @@ jobs:
           curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
           cd openssl-3.0.9
           ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
-          make -j$(sysctl -n hw.ncpu)
+          make -j$(getconf _NPROCESSORS_ONLN)
           make install
           cd ..
 
           # Get Node.js version from .nvmrc
-          NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc | tr -d 'v')
+          NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc)
 
           # Download and extract Node.js source
-          curl -L https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.gz | tar -xz
-          cd node-v${NODE_VERSION}
+          curl -L https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.tar.gz | tar -xz
+          cd node-${NODE_VERSION}
 
           # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
           ./configure \
@@ -82,7 +78,7 @@ jobs:
             --prefix=$HOME/fips-node
 
           # Build Node.js (this takes a while)
-          make -j$(sysctl -n hw.ncpu)
+          make -j$(getconf _NPROCESSORS_ONLN)
           make install
       - name: Setup FIPS Node.js in PATH
         run: |
