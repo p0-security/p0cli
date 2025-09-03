@@ -89,8 +89,8 @@ jobs:
           # Verify FIPS module exists
           ls -la lib/ossl-modules/
 
-          # Install FIPS provider and create config with fresh checksums
-          ./bin/openssl fipsinstall -out fipsmodule.cnf -module lib/ossl-modules/fips.dylib
+          # Install FIPS provider and create config with fresh checksums using absolute path
+          ./bin/openssl fipsinstall -out fipsmodule.cnf -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
 
           # Create OpenSSL config file with absolute paths
           {
@@ -111,7 +111,7 @@ jobs:
           # Append the generated FIPS config (which includes [fips_sect] with checksums)
           cat fipsmodule.cnf >> openssl.cnf
 
-          # Add the missing module_filename parameter to the FIPS section
+          # Add the module_filename parameter to the FIPS section
           echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
         run: |
