@@ -100,8 +100,13 @@ export type SshProvider<
   /** Perform any setup required before running the SSH command. Returns a list of additional arguments to pass to the
    * SSH command. */
   setup?: (
+    authn: Authn,
     request: SR,
-    options: { abortController: AbortController; debug?: boolean }
+    options: {
+      requestId: string;
+      abortController: AbortController;
+      debug?: boolean;
+    }
   ) => Promise<SshAdditionalSetup>;
 
   setupProxy?: (
@@ -120,10 +125,11 @@ export type SshProvider<
   ) => Promise<void>;
 
   generateKeys?: (
+    authn: Authn,
     request: SR,
-    options?: { debug?: boolean }
+    options: { requestId: string; debug?: boolean }
   ) => Promise<{
-    privateKeyPath: string;
+    privateKeyPath?: string;
     certificatePath?: string;
   }>;
 

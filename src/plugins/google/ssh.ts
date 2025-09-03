@@ -87,7 +87,7 @@ export const gcpSshProvider: SshProvider<
     return undefined;
   },
 
-  generateKeys: async (request, _) => {
+  generateKeys: async (_authn, request) => {
     return {
       username: request.linuxUserName,
       privateKeyPath: PRIVATE_KEY_PATH,
