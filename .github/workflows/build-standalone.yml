@@ -85,14 +85,14 @@ jobs:
         run: |
           # Configure OpenSSL FIPS (always run to ensure fresh checksums)
           cd $HOME/fips-node/openssl
-          
+
           # Verify FIPS module exists
           ls -la lib/ossl-modules/
-          
+
           # Install FIPS provider and create config with fresh checksums
           ./bin/openssl fipsinstall -out fipsmodule.cnf -module lib/ossl-modules/fips.dylib
 
-          # Create OpenSSL config file
+          # Create OpenSSL config file with absolute paths
           {
             echo "openssl_conf = openssl_init"
             echo ""
@@ -109,7 +109,7 @@ jobs:
             echo "[fips_sect]"
             echo "activate = 1"
             echo "conditional_errors = 1"
-            echo "module_filename = lib/ossl-modules/fips.dylib"
+            echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib"
           } > openssl.cnf
 
           # Copy the FIPS config into the main config
@@ -120,6 +120,12 @@ jobs:
       - name: Verify FIPS Node.js
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
+          echo "OPENSSL_CONF=$OPENSSL_CONF"
+          echo "=== OpenSSL config file ==="
+          cat $HOME/fips-node/openssl/openssl.cnf
+          echo "=== FIPS module file exists? ==="
+          ls -la $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
+
           # Verify the custom Node.js build
           $HOME/fips-node/bin/node --version
 
