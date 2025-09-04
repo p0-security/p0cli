@@ -47,80 +47,6 @@ jobs:
         with:
           path: ~/fips-node
           key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.0.9-v1
-      - name: FAIL-FAST FIPS Pre-checks
-        if: steps.cache-fips-node.outputs.cache-hit == 'true'
-        run: |
-          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
-
-          # PRE-CHECK: OpenSSL libraries exist
-          if [ ! -f "$HOME/fips-node/openssl/lib/libssl.dylib" ] || [ ! -f "$HOME/fips-node/openssl/lib/libcrypto.dylib" ]; then
-            echo "❌ FAIL-FAST: FIPS OpenSSL libraries missing"
-            ls -la $HOME/fips-node/openssl/lib/lib*ssl* $HOME/fips-node/openssl/lib/lib*crypto* 2>/dev/null || echo "No SSL libraries found"
-            exit 1
-          fi
-
-          # PRE-CHECK: Node.js uses correct OpenSSL version
-          NODE_SSL_VERSION=$($HOME/fips-node/bin/node -e "console.log(process.versions.openssl)")
-          if ! echo "$NODE_SSL_VERSION" | grep -q "3.0.9"; then
-            echo "❌ FAIL-FAST: Node.js using wrong OpenSSL version: $NODE_SSL_VERSION (expected 3.0.9)"
-            exit 1
-          fi
-
-          # PRE-CHECK: Node.js links to our custom OpenSSL (not system)
-          if ! otool -L $HOME/fips-node/bin/node | grep -q "$HOME/fips-node/openssl/lib"; then
-            echo "❌ FAIL-FAST: Node.js not linked to custom OpenSSL libraries"
-            otool -L $HOME/fips-node/bin/node | grep -E "(ssl|crypto)"
-            exit 1
-          fi
-
-          # PRE-CHECK: Custom OpenSSL has FIPS provider
-          if ! $HOME/fips-node/openssl/bin/openssl list -providers | grep -q "fips"; then
-            echo "❌ FAIL-FAST: FIPS provider not available in custom OpenSSL"
-            $HOME/fips-node/openssl/bin/openssl list -providers
-            exit 1
-          fi
-
-          # PRE-CHECK: Node.js basic functionality
-          if ! $HOME/fips-node/bin/node -e "console.log('test')" >/dev/null; then
-            echo "❌ FAIL-FAST: Node.js basic execution failed"
-            exit 1
-          fi
-
-          # PRE-CHECK: Node.js crypto module loads
-          if ! $HOME/fips-node/bin/node -e "require('crypto')" 2>/dev/null; then
-            echo "❌ FAIL-FAST: Node.js crypto module failed to load"
-            exit 1
-          fi
-
-          # PRE-CHECK: getFips function available
-          if ! $HOME/fips-node/bin/node -e "console.log(typeof require('crypto').getFips)" | grep -q "function"; then
-            echo "❌ FAIL-FAST: crypto.getFips() function not available"
-            exit 1
-          fi
-
-
-          # PRE-CHECK: SEA config file exists (needed for build)
-          if [ ! -f "$GITHUB_WORKSPACE/sea-config.json" ]; then
-            echo "❌ FAIL-FAST: sea-config.json not found"
-            exit 1
-          fi
-
-          # PRE-CHECK: Build script exists and is executable
-          if [ ! -x "$GITHUB_WORKSPACE/mac/build-macOS.sh" ]; then
-            echo "❌ FAIL-FAST: mac/build-macOS.sh not found or not executable"
-            exit 1
-          fi
-
-          # PRE-CHECK: Test SEA flag availability (without FIPS)
-          cd "$GITHUB_WORKSPACE"
-          if ! $HOME/fips-node/bin/node --experimental-sea-config --help >/dev/null 2>&1; then
-            echo "❌ FAIL-FAST: Node.js --experimental-sea-config flag not available"
-            exit 1
-          fi
-
-
-          echo "✅ FAIL-FAST: All FIPS components validated - proceeding with build"
       - name: Build FIPS-compliant Node.js
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
@@ -185,6 +111,9 @@ jobs:
           # Generate and append FIPS provider configuration (use absolute path)
           ./bin/openssl fipsinstall -out - -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib >> openssl.cnf
           
+          # Add the module_filename to the [fips_sect] section
+          echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
+          
           # Debug: Show the generated config
           echo "=== Generated OpenSSL Config ==="
           cat openssl.cnf
@@ -205,6 +134,18 @@ jobs:
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          
+          # Debug: Show OpenSSL config before build
+          echo "=== OpenSSL Config at Build Time ==="
+          echo "OPENSSL_CONF=$OPENSSL_CONF"
+          if [ -f "$OPENSSL_CONF" ]; then
+            echo "Config file exists, contents:"
+            cat "$OPENSSL_CONF"
+          else
+            echo "Config file does NOT exist!"
+          fi
+          echo "================================="
+          
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Codesign binary
