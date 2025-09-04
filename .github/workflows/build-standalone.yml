@@ -110,10 +110,10 @@ jobs:
 
           # Generate and append FIPS provider configuration (use absolute path)
           ./bin/openssl fipsinstall -out - -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib >> openssl.cnf
-          
+
           # Add the module_filename to the [fips_sect] section
           echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
-          
+
           # Debug: Show the generated config
           echo "=== Generated OpenSSL Config ==="
           cat openssl.cnf
@@ -134,7 +134,7 @@ jobs:
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
-          
+
           # Debug: Show OpenSSL config before build
           echo "=== OpenSSL Config at Build Time ==="
           echo "OPENSSL_CONF=$OPENSSL_CONF"
@@ -145,7 +145,7 @@ jobs:
             echo "Config file does NOT exist!"
           fi
           echo "================================="
-          
+
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Codesign binary
