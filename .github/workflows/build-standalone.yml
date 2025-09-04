@@ -8,7 +8,7 @@ name: Build Standalone CLI
 jobs:
   build_macos:
     name: Build CLI on MacOS
-    runs-on: macos-latest
+    runs-on: macos-latest-xlarge
     env:
       APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
