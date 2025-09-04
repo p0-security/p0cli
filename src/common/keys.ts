@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../drivers/stdio";
 import { P0_PATH } from "../util";
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
@@ -96,4 +97,62 @@ const toOpenSshFormat = (keyObject: crypto.KeyObject): string => {
   // Base64 encode and format as OpenSSH key
   const base64Key = sshWireFormat.toString("base64");
   return `${keyType} ${base64Key} p0-generated-key`;
+};
+
+export const KNOWN_HOSTS_DIR = path.join(P0_KEY_FOLDER, "known_hosts");
+export const KNOWN_HOSTS_PATH = path.join(P0_KEY_FOLDER, "known_hosts_config");
+
+/**
+ * Save host keys to separate files in the P0 SSH known_hosts directory
+ * - Creates a separate file for each host in known_hosts/ directory
+ * - Replaces the entire file with the most up-to-date host keys for that host
+ * - Creates an SSH config file that includes all host key files
+ */
+export const saveHostKeys = async (
+  instanceId: string,
+  hostKeys: string[],
+  options?: { debug?: boolean }
+): Promise<string | undefined> => {
+  if (!hostKeys || hostKeys.length === 0) {
+    if (options?.debug) {
+      print2("No host keys provided, skipping saving of host keys");
+    }
+    return;
+  }
+
+  if (options?.debug) {
+    print2(`Processing ${hostKeys.length} host keys`);
+    print2(`Known hosts directory: ${KNOWN_HOSTS_DIR}`);
+  }
+
+  await fs.mkdir(KNOWN_HOSTS_DIR, { recursive: true });
+
+  const hostFilePath = getKnownHostsFilePath(instanceId);
+
+  // Always overwrite the file with the latest host keys
+  if (await fileExists(hostFilePath)) {
+    if (options?.debug) {
+      print2(
+        `Host keys file for instance ${instanceId} already exists, overwriting`
+      );
+    }
+  }
+
+  const content = hostKeys.join("\n") + "\n";
+  await fs.writeFile(hostFilePath, content, { mode: 0o600 });
+
+  if (options?.debug) {
+    print2(
+      `Saved ${hostKeys.length} host keys for instance ${instanceId} to ${hostFilePath}`
+    );
+  }
+  return hostFilePath;
+};
+
+/**
+ * Get the known_hosts file path for a specific instance ID
+ */
+export const getKnownHostsFilePath = (instanceId: string): string => {
+  const sanitizedId = instanceId.replace(/[^a-zA-Z0-9.-]/g, "_");
+  return path.join(KNOWN_HOSTS_DIR, sanitizedId);
 };
