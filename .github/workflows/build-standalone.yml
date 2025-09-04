@@ -113,28 +113,115 @@ jobs:
 
           # Add the module_filename parameter to the FIPS section
           echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
+      - name: FAIL-FAST FIPS Pre-checks
+        run: |
+          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
+          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+
+          # PRE-CHECK: OpenSSL libraries exist
+          if [ ! -f "$HOME/fips-node/openssl/lib/libssl.dylib" ] || [ ! -f "$HOME/fips-node/openssl/lib/libcrypto.dylib" ]; then
+            echo "❌ FAIL-FAST: FIPS OpenSSL libraries missing"
+            ls -la $HOME/fips-node/openssl/lib/lib*ssl* $HOME/fips-node/openssl/lib/lib*crypto* 2>/dev/null || echo "No SSL libraries found"
+            exit 1
+          fi
+
+          # PRE-CHECK: Node.js uses correct OpenSSL version
+          NODE_SSL_VERSION=$($HOME/fips-node/bin/node -e "console.log(process.versions.openssl)")
+          if ! echo "$NODE_SSL_VERSION" | grep -q "3.0.9"; then
+            echo "❌ FAIL-FAST: Node.js using wrong OpenSSL version: $NODE_SSL_VERSION (expected 3.0.9)"
+            exit 1
+          fi
+
+          # PRE-CHECK: Node.js links to our custom OpenSSL (not system)
+          if ! otool -L $HOME/fips-node/bin/node | grep -q "$HOME/fips-node/openssl/lib"; then
+            echo "❌ FAIL-FAST: Node.js not linked to custom OpenSSL libraries"
+            otool -L $HOME/fips-node/bin/node | grep -E "(ssl|crypto)"
+            exit 1
+          fi
+
+          # PRE-CHECK: Custom OpenSSL has FIPS provider
+          if ! $HOME/fips-node/openssl/bin/openssl list -providers | grep -q "fips"; then
+            echo "❌ FAIL-FAST: FIPS provider not available in custom OpenSSL"
+            $HOME/fips-node/openssl/bin/openssl list -providers
+            exit 1
+          fi
+
+          # PRE-CHECK: Node.js basic functionality
+          if ! $HOME/fips-node/bin/node -e "console.log('test')" >/dev/null; then
+            echo "❌ FAIL-FAST: Node.js basic execution failed"
+            exit 1
+          fi
+
+          # PRE-CHECK: Node.js crypto module loads
+          if ! $HOME/fips-node/bin/node -e "require('crypto')" 2>/dev/null; then
+            echo "❌ FAIL-FAST: Node.js crypto module failed to load"
+            exit 1
+          fi
+
+          # PRE-CHECK: getFips function available
+          if ! $HOME/fips-node/bin/node -e "console.log(typeof require('crypto').getFips)" | grep -q "function"; then
+            echo "❌ FAIL-FAST: crypto.getFips() function not available"
+            exit 1
+          fi
+
+          # FINAL TEST: FIPS actually works
+          if ! $HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())" | grep -q "true"; then
+            echo "❌ FAIL-FAST: FIPS validation failed - stopping before expensive build steps"
+            exit 1
+          fi
+
+          # PRE-CHECK: SEA config file exists (needed for build)
+          if [ ! -f "$GITHUB_WORKSPACE/sea-config.json" ]; then
+            echo "❌ FAIL-FAST: sea-config.json not found"
+            exit 1
+          fi
+
+          # PRE-CHECK: Build script exists and is executable
+          if [ ! -x "$GITHUB_WORKSPACE/mac/build-macOS.sh" ]; then
+            echo "❌ FAIL-FAST: mac/build-macOS.sh not found or not executable"
+            exit 1
+          fi
+
+          # PRE-CHECK: Test FIPS in the actual build directory context
+          cd "$GITHUB_WORKSPACE"
+          if ! $HOME/fips-node/bin/node --enable-fips --experimental-sea-config --help >/dev/null 2>&1; then
+            echo "❌ FAIL-FAST: Node.js --experimental-sea-config not working with FIPS"
+            exit 1
+          fi
+
+          # PRE-CHECK: Verify postject is available (needed for SEA injection)
+          if ! npx postject --help >/dev/null 2>&1; then
+            echo "❌ FAIL-FAST: postject not available for SEA injection"
+            exit 1
+          fi
+
+          # PRE-CHECK: Test actual SEA blob generation (dry run)
+          if ! $HOME/fips-node/bin/node --enable-fips --experimental-sea-config sea-config.json --dry-run 2>/dev/null; then
+            echo "❌ FAIL-FAST: SEA blob generation test failed with FIPS"
+            # Try without --dry-run flag as it might not exist
+            if ! timeout 10s $HOME/fips-node/bin/node --enable-fips --experimental-sea-config sea-config.json 2>/dev/null || true; then
+              echo "❌ FAIL-FAST: SEA config validation failed"
+              exit 1
+            fi
+          fi
+
+          echo "✅ FAIL-FAST: All FIPS components validated - proceeding with build"
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
       - name: Verify FIPS Node.js
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          echo "OPENSSL_CONF=$OPENSSL_CONF"
-          echo "=== OpenSSL config file ==="
-          cat $HOME/fips-node/openssl/openssl.cnf
-          echo "=== FIPS module file exists? ==="
-          ls -la $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
+          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
 
-          # Verify the custom Node.js build
-          $HOME/fips-node/bin/node --version
-
-          # Test FIPS capability
-          $HOME/fips-node/bin/node --enable-fips -e "console.log('FIPS enabled:', require('crypto').getFips())"
+          echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
+          echo "✅ FIPS enabled: $($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")"
       - name: Yarn install
         run: yarn install
       - name: Build
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
+          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Codesign binary
