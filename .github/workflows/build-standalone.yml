@@ -160,7 +160,24 @@ jobs:
           # Configure OpenSSL FIPS (always run to ensure fresh checksums)
           cd $HOME/fips-node/openssl
 
-          ./bin/openssl fipsinstall -out openssl.cnf -module lib/ossl-modules/fips.dylib
+          # Generate FIPS config with proper base provider configuration
+          {
+            echo "openssl_conf = openssl_init"
+            echo ""
+            echo "[openssl_init]"
+            echo "providers = provider_sect"
+            echo ""
+            echo "[provider_sect]"
+            echo "fips = fips_sect"
+            echo "base = base_sect"
+            echo ""
+            echo "[base_sect]"
+            echo "activate = 1"
+            echo ""
+          } > openssl.cnf
+
+          # Generate and append FIPS provider configuration
+          ./bin/openssl fipsinstall -out - -module lib/ossl-modules/fips.dylib >> openssl.cnf
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
