@@ -112,7 +112,10 @@ jobs:
             echo "activate = 1"
           } > openssl.cnf
 
-          # Debug: Show the generated config
+          # Debug: Show the generated config files
+          echo "=== Generated FIPS Module Config ==="
+          cat fipsmodule.cnf
+          echo "================================="
           echo "=== Generated OpenSSL Config ==="
           cat openssl.cnf
           echo "================================="
