@@ -115,7 +115,7 @@ export const saveHostKeys = async (
 ): Promise<string | undefined> => {
   if (!hostKeys || hostKeys.length === 0) {
     if (options?.debug) {
-      print2("No host keys provided, skipping");
+      print2("No host keys provided, skipping saving of host keys");
     }
     return;
   }
@@ -129,32 +129,24 @@ export const saveHostKeys = async (
 
   const hostFilePath = getKnownHostsFilePath(instanceId);
 
-  if (hostKeys.length > 0) {
-    // Check if file already exists
-    if (await fileExists(hostFilePath)) {
-      if (options?.debug) {
-        print2(
-          `Host keys file for instance ${instanceId} already exists, skipping`
-        );
-      }
-      return hostFilePath;
-    }
-
-    const content = hostKeys.join("\n") + "\n";
-    await fs.writeFile(hostFilePath, content, { mode: 0o600 });
-
+  // Always overwrite the file with the latest host keys
+  if (await fileExists(hostFilePath)) {
     if (options?.debug) {
       print2(
-        `Saved ${hostKeys.length} host keys for instance ${instanceId} to ${hostFilePath}`
+        `Host keys file for instance ${instanceId} already exists, overwriting`
       );
     }
-    return hostFilePath;
-  } else {
-    if (options?.debug) {
-      print2("No valid host keys to save");
-    }
-    return;
   }
+
+  const content = hostKeys.join("\n") + "\n";
+  await fs.writeFile(hostFilePath, content, { mode: 0o600 });
+
+  if (options?.debug) {
+    print2(
+      `Saved ${hostKeys.length} host keys for instance ${instanceId} to ${hostFilePath}`
+    );
+  }
+  return hostFilePath;
 };
 
 /**

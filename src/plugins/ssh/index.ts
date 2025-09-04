@@ -249,12 +249,12 @@ async function spawnSshNode(
 }
 
 const createCommand = (
-  data: SshRequest,
+  request: SshRequest,
   args: CommandArgs,
   setupData: SshAdditionalSetup | undefined,
   proxyCommand: string[]
 ) => {
-  addCommonArgs(args, proxyCommand, setupData, data);
+  addCommonArgs(args, proxyCommand, setupData, request);
 
   const sshOptionsOverrides = setupData?.sshOptions ?? [];
   const port = setupData?.port;
@@ -282,7 +282,7 @@ const createCommand = (
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
       ...(port ? ["-p", port] : []),
-      `${data.linuxUserName}@${data.id}`,
+      `${request.linuxUserName}@${request.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
