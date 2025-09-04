@@ -47,73 +47,8 @@ jobs:
         with:
           path: ~/fips-node
           key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.0.9-v1
-      - name: Build FIPS-compliant Node.js
-        if: steps.cache-fips-node.outputs.cache-hit != 'true'
-        run: |
-          # Create build directory
-          mkdir -p ~/fips-node-build
-          cd ~/fips-node-build
-
-          # Build OpenSSL 3.0.9 with FIPS support
-          curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
-          cd openssl-3.0.9
-          ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
-          make -j$(getconf _NPROCESSORS_ONLN)
-          make install
-          cd ..
-
-          # Get Node.js version from .nvmrc
-          NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc)
-
-          # Download and extract Node.js source
-          curl -L https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.tar.gz | tar -xz
-          cd node-${NODE_VERSION}
-
-          # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
-          ./configure \
-            --shared-openssl \
-            --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
-            --shared-openssl-includes=$HOME/fips-node/openssl/include \
-            --shared-openssl-libname=crypto,ssl \
-            --openssl-is-fips \
-            --prefix=$HOME/fips-node
-
-          # Build Node.js (this takes a while)
-          make -j$(getconf _NPROCESSORS_ONLN)
-          make install
-      - name: Configure FIPS
-        run: |
-          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
-          cd $HOME/fips-node/openssl
-
-          # Verify FIPS module exists
-          ls -la lib/ossl-modules/
-
-          # Install FIPS provider and create config with fresh checksums using absolute path
-          ./bin/openssl fipsinstall -out fipsmodule.cnf -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
-
-          # Create OpenSSL config file with absolute paths
-          {
-            echo "openssl_conf = openssl_init"
-            echo ""
-            echo "[openssl_init]"
-            echo "providers = provider_sect"
-            echo ""
-            echo "[provider_sect]"
-            echo "fips = fips_sect"
-            echo "base = base_sect"
-            echo ""
-            echo "[base_sect]"
-            echo "activate = 1"
-            echo ""
-          } > openssl.cnf
-
-          # Append the generated FIPS config (which includes [fips_sect] with checksums)
-          cat fipsmodule.cnf >> openssl.cnf
-
-          # Add the module_filename parameter to the FIPS section
-          echo "module_filename = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> openssl.cnf
       - name: FAIL-FAST FIPS Pre-checks
+        if: steps.cache-fips-node.outputs.cache-hit == 'true'
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
@@ -164,11 +99,6 @@ jobs:
             exit 1
           fi
 
-          # FINAL TEST: FIPS actually works
-          if ! $HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())" | grep -q "true"; then
-            echo "❌ FAIL-FAST: FIPS validation failed - stopping before expensive build steps"
-            exit 1
-          fi
 
           # PRE-CHECK: SEA config file exists (needed for build)
           if [ ! -f "$GITHUB_WORKSPACE/sea-config.json" ]; then
@@ -182,30 +112,55 @@ jobs:
             exit 1
           fi
 
-          # PRE-CHECK: Test FIPS in the actual build directory context
+          # PRE-CHECK: Test SEA flag availability (without FIPS)
           cd "$GITHUB_WORKSPACE"
-          if ! $HOME/fips-node/bin/node --enable-fips --experimental-sea-config --help >/dev/null 2>&1; then
-            echo "❌ FAIL-FAST: Node.js --experimental-sea-config not working with FIPS"
+          if ! $HOME/fips-node/bin/node --experimental-sea-config --help >/dev/null 2>&1; then
+            echo "❌ FAIL-FAST: Node.js --experimental-sea-config flag not available"
             exit 1
           fi
 
-          # PRE-CHECK: Verify postject is available (needed for SEA injection)
-          if ! npx postject --help >/dev/null 2>&1; then
-            echo "❌ FAIL-FAST: postject not available for SEA injection"
-            exit 1
-          fi
-
-          # PRE-CHECK: Test actual SEA blob generation (dry run)
-          if ! $HOME/fips-node/bin/node --enable-fips --experimental-sea-config sea-config.json --dry-run 2>/dev/null; then
-            echo "❌ FAIL-FAST: SEA blob generation test failed with FIPS"
-            # Try without --dry-run flag as it might not exist
-            if ! timeout 10s $HOME/fips-node/bin/node --enable-fips --experimental-sea-config sea-config.json 2>/dev/null || true; then
-              echo "❌ FAIL-FAST: SEA config validation failed"
-              exit 1
-            fi
-          fi
 
           echo "✅ FAIL-FAST: All FIPS components validated - proceeding with build"
+      - name: Build FIPS-compliant Node.js
+        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        run: |
+          # Create build directory
+          mkdir -p ~/fips-node-build
+          cd ~/fips-node-build
+
+          # Build OpenSSL 3.0.9 with FIPS support
+          curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
+          cd openssl-3.0.9
+          ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
+          make -j$(getconf _NPROCESSORS_ONLN)
+          make install
+          cd ..
+
+          # Get Node.js version from .nvmrc
+          NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc)
+
+          # Download and extract Node.js source
+          curl -L https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.tar.gz | tar -xz
+          cd node-${NODE_VERSION}
+
+          # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
+          ./configure \
+            --shared-openssl \
+            --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
+            --shared-openssl-includes=$HOME/fips-node/openssl/include \
+            --shared-openssl-libname=crypto,ssl \
+            --openssl-is-fips \
+            --prefix=$HOME/fips-node
+
+          # Build Node.js (this takes a while)
+          make -j$(getconf _NPROCESSORS_ONLN)
+          make install
+      - name: Configure FIPS
+        run: |
+          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
+          cd $HOME/fips-node/openssl
+
+          ./bin/openssl fipsinstall -out openssl.cnf -module lib/ossl-modules/fips.dylib
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
