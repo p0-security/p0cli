@@ -100,7 +100,7 @@ jobs:
 
           # Create main OpenSSL config with include directive
           {
-            echo ".include fipsmodule.cnf"
+            echo ".include $HOME/fips-node/openssl/fipsmodule.cnf"
             echo ""
             echo "openssl_conf = openssl_init"
             echo ""
@@ -138,6 +138,7 @@ jobs:
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
           export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           # Debug: Show OpenSSL config before build
           echo "=== OpenSSL Config at Build Time ==="
