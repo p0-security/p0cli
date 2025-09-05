@@ -41,7 +41,7 @@ const unprovisionedAccessPatterns = [
   // Note that the resource will randomly be either the SSM document or the EC2 instance
   {
     pattern:
-      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
+      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:.*:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:.*:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
   },
   /**
    * Matches the following error messages that AWS SSM pints when ssh authorized
