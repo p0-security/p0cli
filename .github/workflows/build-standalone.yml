@@ -47,20 +47,78 @@ jobs:
         with:
           path: ~/fips-node
           key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.0.9-v1
-      - name: Build FIPS-compliant Node.js
+      - name: Build FIPS-compliant OpenSSL
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
           # Create build directory
           mkdir -p ~/fips-node-build
           cd ~/fips-node-build
 
-          # Build OpenSSL 3.0.9 with FIPS support
+          # Download and extract OpenSSL source
           curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
           cd openssl-3.0.9
+
+          echo "===== Starting building OpenSSL ====="
+
+          # Build OpenSSL 3.0.9 with FIPS support
+
+          # Configure OpenSSL build to built a FIPS-compliant openssl version
           ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
+
+          # Build OpenSSL
           make -j$(getconf _NPROCESSORS_ONLN)
+
+          # Install OpenSSL into $HOME/fips-node/openssl directory
           make install
-          cd ..
+
+          echo "===== Finished building OpenSSL ====="
+      - name: Configure FIPS
+        run: |
+          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
+          cd $HOME/fips-node/openssl
+
+          # Debug: Verify FIPS module exists
+          echo "=== FIPS Module Check ==="
+          ls -la lib/ossl-modules/
+          echo "=========================="
+
+          # Generate FIPS module config file
+          ./bin/openssl fipsinstall -out fipsmodule.cnf -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
+
+          # Add the module parameter to the FIPS config
+          echo "module = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> fipsmodule.cnf
+
+          echo "=== Create OpenSSL Config ==="
+          tee openssl.cnf <<-EOF
+            config_diagnostics = 1
+            openssl_conf = openssl_init
+            nodejs_conf = nodejs_init
+
+            .include $HOME/fips-node/openssl/fipsmodule.cnf
+
+            [openssl_init]
+            providers = provider_sect
+            alg_section = algorithm_sect
+
+            [nodejs_init]
+            providers = provider_sect
+            alg_section = algorithm_sect
+
+            [provider_sect]
+            fips = fips_sect
+            base = base_sect
+
+            [base_sect]
+            activate = 1
+
+            [algorithm_sect]
+            default_properties = fips=yes
+          EOF
+          echo "==========================="
+      - name: Build FIPS-compliant Node.js
+        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        run: |
+          cd ~/fips-node-build
 
           # Get Node.js version from .nvmrc
           NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc)
@@ -68,6 +126,12 @@ jobs:
           # Download and extract Node.js source
           curl -L https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.tar.gz | tar -xz
           cd node-${NODE_VERSION}
+
+          echo "===== Starting building Node.js ====="
+
+          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
+          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
           ./configure \
@@ -78,57 +142,21 @@ jobs:
             --openssl-is-fips \
             --prefix=$HOME/fips-node
 
-          # Build Node.js (this takes a while)
+          # Build Node.js
           make -j$(getconf _NPROCESSORS_ONLN)
+
+          # Install OpenSSL into $HOME/fips-node directory
           make install
-      - name: Configure FIPS
-        run: |
-          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
-          cd $HOME/fips-node/openssl
 
-          # Debug: Verify FIPS module exists
-          echo "=== FIPS Module Check ==="
-          ls -la lib/ossl-modules/
-          pwd
-          echo "=========================="
-
-          # Generate FIPS module config file
-          ./bin/openssl fipsinstall -out fipsmodule.cnf -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
-
-          # Add the module parameter to the FIPS config
-          echo "module = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> fipsmodule.cnf
-
-          # Create main OpenSSL config with include directive
-          {
-            echo ".include $HOME/fips-node/openssl/fipsmodule.cnf"
-            echo ""
-            echo "openssl_conf = openssl_init"
-            echo ""
-            echo "[openssl_init]"
-            echo "providers = provider_sect"
-            echo ""
-            echo "[provider_sect]"
-            echo "fips = fips_sect"
-            echo "base = base_sect"
-            echo ""
-            echo "[base_sect]"
-            echo "activate = 1"
-          } > openssl.cnf
-
-          # Debug: Show the generated config files
-          echo "=== Generated FIPS Module Config ==="
-          cat fipsmodule.cnf
-          echo "================================="
-          echo "=== Generated OpenSSL Config ==="
-          cat openssl.cnf
-          echo "================================="
+          echo "===== Finished building Node.js ====="
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
       - name: Verify FIPS Node.js
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
           echo "✅ FIPS enabled: $($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")"
@@ -137,27 +165,8 @@ jobs:
       - name: Build
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
+          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
           export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
-
-          # Debug: Show OpenSSL config before build
-          echo "=== OpenSSL Config at Build Time ==="
-          echo "OPENSSL_CONF=$OPENSSL_CONF"
-          if [ -f "$OPENSSL_CONF" ]; then
-            echo "Config file exists, contents:"
-            cat "$OPENSSL_CONF"
-          else
-            echo "Config file does NOT exist!"
-          fi
-          echo "================================="
-
-          # Debug: Test FIPS module directly with custom OpenSSL
-          echo "=== Testing FIPS with custom OpenSSL ==="
-          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
-          $HOME/fips-node/openssl/bin/openssl list -providers
-          echo "Trying to load FIPS provider..."
-          $HOME/fips-node/openssl/bin/openssl list -provider fips -verbose || echo "FIPS provider failed to load"
-          echo "================================="
 
           yarn build:macos
           ./mac/build-macOS.sh
