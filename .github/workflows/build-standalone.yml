@@ -95,6 +95,9 @@ jobs:
           # Generate FIPS module config file
           ./bin/openssl fipsinstall -out fipsmodule.cnf -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
 
+          # Add the module parameter to the FIPS config
+          echo "module = $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib" >> fipsmodule.cnf
+
           # Create main OpenSSL config with include directive
           {
             echo ".include fipsmodule.cnf"
