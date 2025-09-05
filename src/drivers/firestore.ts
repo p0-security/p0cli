@@ -24,12 +24,24 @@ import {
   signInWithCredential,
   UserCredential,
 } from "firebase/auth";
+import {
+  DocumentReference,
+  Firestore,
+  doc as fsDoc,
+  getFirestore,
+} from "firebase/firestore";
 
 let app: FirebaseApp;
+let firestore: Firestore;
 
 export async function initializeFirebase() {
   const tenantConfig = await loadConfig();
   app = initializeApp(tenantConfig.fs, "authFirebase");
+  if (!firestore) {
+    const tenantConfig = await loadConfig();
+    app = initializeApp(tenantConfig.fs, "authFirebase");
+    firestore = getFirestore(app);
+  }
 }
 
 const findProviderId = (org: OrgData) => {
@@ -47,7 +59,9 @@ const findProviderId = (org: OrgData) => {
       return org.providerId;
   }
 };
-
+export const doc = <T>(path: string) => {
+  return fsDoc(firestore, path) as DocumentReference<T>;
+};
 export const signInToTenant = async (
   org: OrgData,
   firebaseCredential: EmailAuthCredential | OAuthCredential,
