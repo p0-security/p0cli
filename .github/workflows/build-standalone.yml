@@ -17,12 +17,6 @@ jobs:
       VERSION: v0.0.0
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: yarn
-          cache-dependency-path: |
-            yarn.lock
       - name: Setup environment variables
         run: |
           KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
@@ -152,28 +146,31 @@ jobs:
       - name: Setup FIPS Node.js in PATH
         run: |
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
+      - name: Install yarn
+        run: |
+          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
+          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
+
+          npm install -g yarn
       - name: Verify FIPS Node.js
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
           export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
           echo "✅ FIPS enabled: $($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")"
-      - name: Yarn install
+      - name: Install dependencies
         run: yarn install
       - name: Build
         run: |
           export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
           export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Codesign binary
         run: |
-          codesign --verbose=4 --remove-signature build/sea/p0
-          codesign --verbose=4 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
+          codesign --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
