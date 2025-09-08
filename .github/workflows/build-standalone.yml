@@ -170,6 +170,7 @@ jobs:
           ./mac/build-macOS.sh
       - name: Codesign binary
         run: |
+          codesign --verbose=4 --remove-signature build/sea/p0
           codesign --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
       - name: Package application
         run: |
