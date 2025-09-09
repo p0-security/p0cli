@@ -22,7 +22,7 @@ import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
   AccessPattern,
-  SshHostKeys,
+  SshHostKeyInfo,
   SshProvider,
   SshRequest,
   SupportedSshProvider,
@@ -254,7 +254,7 @@ const createCommand = (
   args: CommandArgs,
   setupData: SshAdditionalSetup | undefined,
   proxyCommand: string[],
-  sshHostKeys: SshHostKeys
+  sshHostKeys: SshHostKeyInfo
 ) => {
   addCommonArgs(args, proxyCommand, setupData, sshHostKeys);
 
@@ -304,7 +304,7 @@ const addCommonArgs = (
   args: CommandArgs,
   sshProviderProxyCommand: string[],
   setupData: SshAdditionalSetup | undefined,
-  sshHostKeys: SshHostKeys
+  sshHostKeys: SshHostKeyInfo
 ) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
@@ -418,7 +418,7 @@ const preTestAccessPropagationIfNeeded = async <
   setupData: SshAdditionalSetup | undefined,
   endTime: number,
   abortController: AbortController,
-  sshHostKeys: SshHostKeys
+  sshHostKeys: SshHostKeyInfo
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
 
@@ -455,7 +455,7 @@ export const sshOrScp = async (args: {
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
-  sshHostKeys: SshHostKeys;
+  sshHostKeys: SshHostKeyInfo;
 }) => {
   const sshSessionId = randomUUID();
   const {
