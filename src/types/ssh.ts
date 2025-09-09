@@ -62,6 +62,10 @@ export type AccessPattern = {
   readonly validationWindowMs?: number;
 };
 
+export type SshHostKeys =
+  | { alias: string; path: string; keys: string[] }
+  | undefined;
+
 export type SshProvider<
   PR extends PluginSshRequest = PluginSshRequest,
   O extends object | undefined = undefined,
@@ -120,7 +124,7 @@ export type SshProvider<
   saveHostKeys?: (
     request: SR,
     options?: { debug?: boolean }
-  ) => Promise<{ alias: string; path: string } | undefined>;
+  ) => Promise<SshHostKeys>;
 
   submitPublicKey?: (
     authn: Authn,

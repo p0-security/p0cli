@@ -15,13 +15,14 @@ import {
   SshAdditionalSetup,
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
-import { PRIVATE_KEY_PATH, getKnownHostsFilePath } from "../../common/keys";
+import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { auditSshSessionActivity } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import {
   AccessPattern,
+  SshHostKeys,
   SshProvider,
   SshRequest,
   SupportedSshProvider,
@@ -252,9 +253,10 @@ const createCommand = (
   request: SshRequest,
   args: CommandArgs,
   setupData: SshAdditionalSetup | undefined,
-  proxyCommand: string[]
+  proxyCommand: string[],
+  sshHostKeys: SshHostKeys
 ) => {
-  addCommonArgs(args, proxyCommand, setupData, request);
+  addCommonArgs(args, proxyCommand, setupData, sshHostKeys);
 
   const sshOptionsOverrides = setupData?.sshOptions ?? [];
   const port = setupData?.port;
@@ -302,7 +304,7 @@ const addCommonArgs = (
   args: CommandArgs,
   sshProviderProxyCommand: string[],
   setupData: SshAdditionalSetup | undefined,
-  data: SshRequest
+  sshHostKeys: SshHostKeys
 ) => {
   const sshOptions = args.sshOptions ? args.sshOptions : [];
 
@@ -342,10 +344,17 @@ const addCommonArgs = (
       opt === "-o" && sshOptions[idx + 1]?.startsWith("UserKnownHostsFile")
   );
 
-  if (!userKnownHostsFileOptionExists) {
-    const knownHostsFile = getKnownHostsFilePath(data.id);
-    sshOptions.push("-o", `UserKnownHostsFile=${knownHostsFile}`);
+  if (sshHostKeys && !userKnownHostsFileOptionExists) {
+    sshOptions.push("-o", `UserKnownHostsFile=${sshHostKeys.path}`);
   }
+
+  const hostKeyAliasOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("HostKeyAlias")
+  );
+
+  if (sshHostKeys && !hostKeyAliasOptionExists)
+    sshOptions.push("-o", `HostKeyAlias=${sshHostKeys.alias}`);
 
   // Force verbose output from SSH so we can parse the output
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
@@ -408,7 +417,8 @@ const preTestAccessPropagationIfNeeded = async <
     : undefined,
   setupData: SshAdditionalSetup | undefined,
   endTime: number,
-  abortController: AbortController
+  abortController: AbortController,
+  sshHostKeys: SshHostKeys
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
 
@@ -419,7 +429,8 @@ const preTestAccessPropagationIfNeeded = async <
       request,
       testCmdArgs,
       setupData,
-      proxyCommand
+      proxyCommand,
+      sshHostKeys
     );
     // Assumes that this is a non-interactive ssh command that exits automatically
     return spawnSshNode({
@@ -444,9 +455,18 @@ export const sshOrScp = async (args: {
   cmdArgs: CommandArgs;
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
+  sshHostKeys: SshHostKeys;
 }) => {
   const sshSessionId = randomUUID();
-  const { authn, request, requestId, cmdArgs, privateKey, sshProvider } = args;
+  const {
+    authn,
+    request,
+    requestId,
+    cmdArgs,
+    privateKey,
+    sshProvider,
+    sshHostKeys,
+  } = args;
   const { debug } = cmdArgs;
 
   if (!privateKey) {
@@ -470,7 +490,8 @@ export const sshOrScp = async (args: {
     request,
     cmdArgs,
     setupData,
-    proxyCommand
+    proxyCommand,
+    sshHostKeys
   );
 
   if (debug) {
@@ -497,7 +518,8 @@ export const sshOrScp = async (args: {
       credential,
       setupData,
       endTime,
-      abortController
+      abortController,
+      sshHostKeys
     );
     if (exitCode && exitCode !== 0) {
       return exitCode; // Only exit if there was an error when pre-testing
