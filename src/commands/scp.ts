@@ -92,11 +92,8 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     throw "Could not determine host identifier from source or destination";
   }
 
-  const { request, requestId, privateKey, sshProvider } = await prepareRequest(
-    authn,
-    args,
-    host
-  );
+  const { request, requestId, privateKey, sshProvider, sshHostKeys } =
+    await prepareRequest(authn, args, host);
 
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(request, args);
@@ -112,6 +109,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     },
     privateKey,
     sshProvider,
+    sshHostKeys,
   });
 };
 
