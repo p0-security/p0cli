@@ -193,13 +193,25 @@ export const prepareRequest = async (
   approvedOnly?: boolean,
   quiet?: boolean
 ) => {
-  const result = await provisionRequest(
-    authn,
-    args,
-    destination,
-    approvedOnly,
-    quiet
-  );
+  let result: Awaited<ReturnType<typeof provisionRequest>>;
+  try {
+    result = await provisionRequest(
+      authn,
+      args,
+      destination,
+      approvedOnly,
+      quiet
+    );
+  } catch (e: unknown) {
+    const message = "SSH access could not be provisioned."
+      + "\nYour organization may not allow you to access this resource."
+      + "\nAlternatively, your organization may allow you to access this resource,"
+      + "\nbut only if you have previously requested (and been granted)"
+      + "\naccess to an SSH group or parent resource.";
+    throw message;
+  }
+
+
   if (!result) {
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
