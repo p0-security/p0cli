@@ -9,10 +9,16 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
-import { PRIVATE_KEY_PATH } from "../../common/keys";
-import { submitPublicKey } from "../../drivers/api";
+import { createKeyPair } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
+import { createTempDirectoryForKeys } from "../ssh/shared";
+import { generateSelfHostedCertificate } from "./keygen";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
+import * as fs from "fs/promises";
+import path from "node:path";
+
+// We pass in the name of the certificate file to generate
+export const SELF_HOSTED_CERT_FILENAME = "p0cli-self-hosted-ssh-cert.pub";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
 
@@ -51,9 +57,38 @@ export const selfHostedSshProvider: SshProvider<
     return undefined;
   },
 
-  generateKeys: async (_) => {
+  generateKeys: async (authn, _request, options) => {
+    const { path: keyPath } = await createTempDirectoryForKeys();
+    const { publicKey } = await createKeyPair();
+
+    const signedCertificate = await generateSelfHostedCertificate(authn, {
+      ...options,
+      publicKey,
+    });
+
+    const certificatePath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
+    await fs.writeFile(certificatePath, signedCertificate);
     return {
-      privateKeyPath: PRIVATE_KEY_PATH,
+      certificatePath,
+    };
+  },
+
+  setup: async (authn, _request, options) => {
+    const { path: keyPath, cleanup: sshKeyPathCleanup } =
+      await createTempDirectoryForKeys();
+    const { publicKey } = await createKeyPair();
+
+    const signedCertificate = await generateSelfHostedCertificate(authn, {
+      debug: options.debug,
+      requestId: options.requestId,
+      publicKey,
+    });
+    const sshCertificateKeyPath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
+    await fs.writeFile(sshCertificateKeyPath, signedCertificate);
+
+    return {
+      sshOptions: [`CertificateFile=${sshCertificateKeyPath}`],
+      teardown: sshKeyPathCleanup,
     };
   },
 
@@ -74,14 +109,4 @@ export const selfHostedSshProvider: SshProvider<
   unprovisionedAccessPatterns,
 
   toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
-
-  async submitPublicKey(authn, request, requestId, publicKey) {
-    if (request.generated.publicKey) {
-      if (request.generated.publicKey !== publicKey) {
-        throw "Public key mismatch. Please revoke the request and try again.";
-      }
-    } else {
-      await submitPublicKey(authn, { publicKey, requestId });
-    }
-  },
 };

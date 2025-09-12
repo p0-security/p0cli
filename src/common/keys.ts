@@ -8,7 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../drivers/stdio";
 import { P0_PATH } from "../util";
+import { toOpenSshFormat } from "./crypto";
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -59,41 +61,60 @@ const fileExists = async (path: string) => {
   }
 };
 
+export const KNOWN_HOSTS_DIR = path.join(P0_KEY_FOLDER, "known_hosts");
+export const KNOWN_HOSTS_PATH = path.join(P0_KEY_FOLDER, "known_hosts_config");
+
 /**
- * Convert a crypto.KeyObject RSA public key to OpenSSH format
+ * Save host keys to separate files in the P0 SSH known_hosts directory
+ * - Creates a separate file for each host in known_hosts/ directory
+ * - Replaces the entire file with the most up-to-date host keys for that host
+ * - Creates an SSH config file that includes all host key files
  */
-const toOpenSshFormat = (keyObject: crypto.KeyObject): string => {
-  // Export the key in JWK format to get n and e values
-  const jwk = keyObject.export({ format: "jwk" });
+export const saveHostKeys = async (
+  instanceId: string,
+  hostKeys: string[],
+  options?: { debug?: boolean }
+): Promise<string | undefined> => {
+  if (!hostKeys || hostKeys.length === 0) {
+    if (options?.debug) {
+      print2("No host keys provided, skipping saving of host keys");
+    }
+    return;
+  }
 
-  // Convert base64url to buffer
-  const nBuffer = Buffer.from(jwk.n!, "base64url");
-  const eBuffer = Buffer.from(jwk.e!, "base64url");
+  if (options?.debug) {
+    print2(`Processing ${hostKeys.length} host keys`);
+    print2(`Known hosts directory: ${KNOWN_HOSTS_DIR}`);
+  }
 
-  // Create SSH wire format
-  const keyType = "ssh-rsa";
-  const keyTypeBuffer = Buffer.from(keyType);
+  await fs.mkdir(KNOWN_HOSTS_DIR, { recursive: true });
 
-  // SSH wire format: [key_type_len][key_type][e_len][e][n_len][n]
-  const keyTypeLen = Buffer.alloc(4);
-  keyTypeLen.writeUInt32BE(keyTypeBuffer.length, 0);
+  const hostFilePath = getKnownHostsFilePath(instanceId);
 
-  const eLen = Buffer.alloc(4);
-  eLen.writeUInt32BE(eBuffer.length, 0);
+  // Always overwrite the file with the latest host keys
+  if (await fileExists(hostFilePath)) {
+    if (options?.debug) {
+      print2(
+        `Host keys file for instance ${instanceId} already exists, overwriting`
+      );
+    }
+  }
 
-  const nLen = Buffer.alloc(4);
-  nLen.writeUInt32BE(nBuffer.length, 0);
+  const content = hostKeys.join("\n") + "\n";
+  await fs.writeFile(hostFilePath, content, { mode: 0o600 });
 
-  const sshWireFormat = Buffer.concat([
-    keyTypeLen,
-    keyTypeBuffer,
-    eLen,
-    eBuffer,
-    nLen,
-    nBuffer,
-  ]);
+  if (options?.debug) {
+    print2(
+      `Saved ${hostKeys.length} host keys for instance ${instanceId} to ${hostFilePath}`
+    );
+  }
+  return hostFilePath;
+};
 
-  // Base64 encode and format as OpenSSH key
-  const base64Key = sshWireFormat.toString("base64");
-  return `${keyType} ${base64Key} p0-generated-key`;
+/**
+ * Get the known_hosts file path for a specific instance ID
+ */
+export const getKnownHostsFilePath = (instanceId: string): string => {
+  const sanitizedId = instanceId.replace(/[^a-zA-Z0-9.-]/g, "_");
+  return path.join(KNOWN_HOSTS_DIR, sanitizedId);
 };

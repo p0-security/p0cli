@@ -78,10 +78,10 @@ export type SshAdditionalSetup = {
   sshOptions: string[];
 
   /** The path to the private key file to use for the SSH connection, instead of the default P0 CLI managed key */
-  identityFile: string;
+  identityFile?: string;
 
   /** The port to connect to, overriding the default */
-  port: string;
+  port?: string;
 
   /** Perform any teardown required after the SSH command exits but before terminating the P0 CLI */
   teardown: () => Promise<void>;
@@ -243,5 +243,7 @@ export const prepareRequest = async (
 
   const request = sshProvider.requestToSsh(cliRequest);
 
-  return { ...result, request, sshProvider, provisionedRequest };
+  const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
+
+  return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
 };
