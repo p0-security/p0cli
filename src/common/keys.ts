@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../drivers/stdio";
 import { P0_PATH } from "../util";
+import { toOpenSshFormat } from "./crypto";
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -58,45 +59,6 @@ const fileExists = async (path: string) => {
   } catch (error) {
     return false;
   }
-};
-
-/**
- * Convert a crypto.KeyObject RSA public key to OpenSSH format
- */
-const toOpenSshFormat = (keyObject: crypto.KeyObject): string => {
-  // Export the key in JWK format to get n and e values
-  const jwk = keyObject.export({ format: "jwk" });
-
-  // Convert base64url to buffer
-  const nBuffer = Buffer.from(jwk.n!, "base64url");
-  const eBuffer = Buffer.from(jwk.e!, "base64url");
-
-  // Create SSH wire format
-  const keyType = "ssh-rsa";
-  const keyTypeBuffer = Buffer.from(keyType);
-
-  // SSH wire format: [key_type_len][key_type][e_len][e][n_len][n]
-  const keyTypeLen = Buffer.alloc(4);
-  keyTypeLen.writeUInt32BE(keyTypeBuffer.length, 0);
-
-  const eLen = Buffer.alloc(4);
-  eLen.writeUInt32BE(eBuffer.length, 0);
-
-  const nLen = Buffer.alloc(4);
-  nLen.writeUInt32BE(nBuffer.length, 0);
-
-  const sshWireFormat = Buffer.concat([
-    keyTypeLen,
-    keyTypeBuffer,
-    eLen,
-    eBuffer,
-    nLen,
-    nBuffer,
-  ]);
-
-  // Base64 encode and format as OpenSSH key
-  const base64Key = sshWireFormat.toString("base64");
-  return `${keyType} ${base64Key} p0-generated-key`;
 };
 
 export const KNOWN_HOSTS_DIR = path.join(P0_KEY_FOLDER, "known_hosts");
