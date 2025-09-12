@@ -109,8 +109,7 @@ const sshResolveAction = async (
     authn,
     args,
     args.destination,
-    true,
-    args.quiet
+    { approvedOnly: true, quiet: args.quiet }
   ).catch(requestErrorHandler);
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
@@ -120,9 +119,7 @@ const sshResolveAction = async (
   }
   const keys = await sshProvider?.generateKeys?.(
     provisionedRequest.permission.resource,
-    {
-      debug: args.debug,
-    }
+    { debug: args.debug }
   );
 
   const tmpFile = tmp.fileSync();
