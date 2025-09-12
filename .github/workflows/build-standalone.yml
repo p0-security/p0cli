@@ -35,6 +35,8 @@ jobs:
           security import codesign_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
           security import installer_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/pkgbuild
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          security set-keychain-settings -lut 3600 build.keychain
       - name: Cache FIPS-compliant Node.js
         id: cache-fips-node
         uses: actions/cache@v4
