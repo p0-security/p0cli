@@ -177,7 +177,25 @@ jobs:
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
+          mkdir -p build/sea/root/usr/local/lib/p0
+
+          # Copy the binary
           cp build/sea/p0 build/sea/root/usr/local/bin/p0
+
+          # Copy required OpenSSL libraries
+          cp $HOME/fips-node/openssl/lib/libssl.3.dylib build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/lib/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/
+          cp -r $HOME/fips-node/openssl/lib/ossl-modules build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/fipsmodule.cnf build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/openssl.cnf build/sea/root/usr/local/lib/p0/
+
+          # Update binary to look for libraries in the bundled location
+          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @executable_path/../lib/p0/libssl.3.dylib build/sea/root/usr/local/bin/p0
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @executable_path/../lib/p0/libcrypto.3.dylib build/sea/root/usr/local/bin/p0
+
+          # Also update any interdependencies between the OpenSSL libraries themselves
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/libssl.3.dylib
+
           pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Notarize build artifact
         run: |
