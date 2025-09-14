@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { PRIVATE_KEY_PATH } from "../../common/keys";
+import { PRIVATE_KEY_PATH, saveHostKeys } from "../../common/keys";
 import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
 import { throwAssertNever } from "../../util";
@@ -41,7 +41,7 @@ const unprovisionedAccessPatterns = [
   // Note that the resource will randomly be either the SSM document or the EC2 instance
   {
     pattern:
-      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:aws:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:aws:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
+      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:.*:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:.*:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
   },
   /**
    * Matches the following error messages that AWS SSM pints when ssh authorized
@@ -122,19 +122,31 @@ export const awsSshProvider: SshProvider<
     return undefined;
   },
 
-  generateKeys: async (_) => {
+  generateKeys: async () => {
     return {
       privateKeyPath: PRIVATE_KEY_PATH,
     };
+  },
+
+  saveHostKeys: async (request, options) => {
+    const { hostKeys, id } = request;
+    const path = await saveHostKeys(id, hostKeys, { ...options });
+    return path ? { alias: id, path, keys: hostKeys } : undefined;
   },
 
   requestToSsh: (request) => {
     const { permission, generated } = request;
     const { resource, region } = permission;
     const { idcId, idcRegion, instanceId, accountId } = resource;
-    const { linuxUserName, resource: generatedResource } = generated;
+    const { linuxUserName, hostKeys, resource: generatedResource } = generated;
     const { name } = generatedResource;
-    const common = { linuxUserName, accountId, region, id: instanceId };
+    const common = {
+      linuxUserName,
+      accountId,
+      region,
+      id: instanceId,
+      hostKeys,
+    };
     return !idcId || !idcRegion
       ? { ...common, role: name, type: "aws", access: "role" }
       : {

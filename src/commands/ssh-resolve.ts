@@ -105,13 +105,10 @@ const sshResolveAction = async (
     debug: args.debug,
   }).catch(silentlyExit);
 
-  const { request, requestId, provisionedRequest } = await prepareRequest(
-    authn,
-    args,
-    args.destination,
-    true,
-    args.quiet
-  ).catch(requestErrorHandler);
+  const { request, requestId, provisionedRequest, sshHostKeys } =
+    await prepareRequest(authn, args, args.destination, true, args.quiet).catch(
+      requestErrorHandler
+    );
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 
@@ -119,8 +116,10 @@ const sshResolveAction = async (
     print2("Generating Keys");
   }
   const keys = await sshProvider?.generateKeys?.(
+    authn,
     provisionedRequest.permission.resource,
     {
+      requestId,
       debug: args.debug,
     }
   );
@@ -139,6 +138,13 @@ const sshResolveAction = async (
   const certificateInfo = keys?.certificatePath
     ? `CertificateFile ${keys.certificatePath}`
     : "";
+  const hostKeysInfo = sshHostKeys
+    ? `UserKnownHostsFile ${sshHostKeys.path}`
+    : "";
+
+  const alias = sshHostKeys?.alias ?? request?.id;
+
+  const hostKeyAlias = alias ? `HostKeyAlias ${alias}` : "";
 
   const appPath = getAppPath();
 
@@ -157,7 +163,10 @@ const sshResolveAction = async (
   IdentityFile ${identityFile}
   ${certificateInfo}
   PasswordAuthentication no
-  ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name} ${args.debug ? "--debug" : ""}`;
+  ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name} ${args.debug ? "--debug" : ""}
+  ${hostKeysInfo}
+  ${hostKeyAlias}
+`;
 
   await fs.promises.mkdir(path.join(P0_PATH, "ssh", "configs"), {
     recursive: true,

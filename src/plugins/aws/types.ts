@@ -83,6 +83,7 @@ export type AwsSshPermission = CommonSshPermissionSpec & {
 
 export type AwsSshGenerated = {
   resource: { name: string };
+  hostKeys: string[];
   linuxUserName: string;
   publicKey: string;
 };
@@ -98,6 +99,7 @@ export type AwsSsh = CliPermissionSpec<AwsSshPermissionSpec, undefined>;
 export type BaseAwsSshRequest = {
   linuxUserName: string;
   accountId: string;
+  hostKeys: string[];
   region: string;
   id: string;
   type: "aws";

@@ -8,12 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-export const TEST_PUBLIC_KEY = "test-public-key";
-export const createKeyPair = jest.fn().mockImplementation(() => ({
-  publicKey: "test-public-key",
-  privateKey: "test-private-key",
-}));
-export const saveHostKeys = jest.fn().mockResolvedValue(undefined);
-export const getKnownHostsFilePath = jest
-  .fn()
-  .mockReturnValue("/mock/path/to/known_hosts/instance");
+import tmp from "tmp-promise";
+
+export const createTempDirectoryForKeys = async (): Promise<{
+  path: string;
+  cleanup: () => Promise<void>;
+}> => {
+  // unsafeCleanup lets us delete the directory even if there are still files in it, which is fine since the
+  // files are no longer needed once we've authenticated to the remote system.
+  const { path, cleanup } = await tmp.dir({
+    mode: 0o700,
+    prefix: "p0cli-",
+    unsafeCleanup: true,
+  });
+
+  return { path, cleanup };
+};

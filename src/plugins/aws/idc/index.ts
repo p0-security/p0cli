@@ -62,13 +62,19 @@ const awsIdcHelpers = (
   const { clientId, clientSecret } = clientCredentials;
   const { id, region } = idc;
 
+  // The start url can be customized with a subdomain. Here only the default is supported.
+  const buildStartUrl = () =>
+    region.includes("us-gov")
+      ? `https://start.us-gov-home.awsapps.com/directory/${id}`
+      : `https://${id}.awsapps.com/start`;
+
   const buildOidcAuthorizeRequest = () => ({
     init: {
       method: "POST",
       body: JSON.stringify({
         clientId,
         clientSecret,
-        startUrl: `https://${id}.awsapps.com/start`,
+        startUrl: buildStartUrl(),
       }),
     },
     url: `https://oidc.${region}.amazonaws.com/device_authorization`,
