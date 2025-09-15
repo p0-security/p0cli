@@ -239,7 +239,6 @@ export const prepareRequest = async (
 
   await sshProvider.ensureInstall();
 
-  const options = { debug: args.debug };
   const cliRequest = await pluginToCliRequest(provisionedRequest, args);
 
   const request = sshProvider.requestToSsh(cliRequest);
