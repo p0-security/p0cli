@@ -106,9 +106,10 @@ const sshResolveAction = async (
   }).catch(silentlyExit);
 
   const { request, requestId, provisionedRequest, sshHostKeys } =
-    await prepareRequest(authn, args, args.destination, true, args.quiet).catch(
-      requestErrorHandler
-    );
+    await prepareRequest(authn, args, args.destination, {
+      approvedOnly: true,
+      quiet: args.quiet,
+    }).catch(requestErrorHandler);
 
   const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 

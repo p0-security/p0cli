@@ -94,6 +94,7 @@ export const request =
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
+
     const accessMessage = (message?: string) => {
       switch (message) {
         case "approval-required":
@@ -102,6 +103,7 @@ export const request =
           return "Requesting access";
       }
     };
+
     const executeApiRequest = async (
       fetcher: Promise<RequestResponse<T> | undefined>
     ) => {
@@ -109,6 +111,7 @@ export const request =
         ? await spinUntil(accessMessage(options?.message), fetcher)
         : await fetcher;
     };
+
     const processResponse = (
       data: RequestResponse<T> | undefined
     ): { shouldLogMessage: boolean; data: RequestResponse<T> } => {
@@ -124,6 +127,7 @@ export const request =
         throw data;
       }
     };
+
     const invokeRequest = async () => {
       const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
         resolvedAuthn,
@@ -135,6 +139,7 @@ export const request =
       if (shouldLogMessage) print2(data.message);
       return data;
     };
+
     const executeStreamingRequest = async () => {
       const fetchStreamingCommandGenerator = fetchStreamingCommand<
         RequestResponse<T>
@@ -170,6 +175,7 @@ export const request =
       }
       throw data;
     };
+
     try {
       return await (!args.wait ? invokeRequest() : executeStreamingRequest());
     } catch (error: any) {
