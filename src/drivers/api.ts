@@ -334,7 +334,6 @@ const baseFetch = async <T>(args: {
       ...(headers ?? {}),
       "Content-Type": "application/json",
       "User-Agent": `P0 CLI/${version}`,
-      Host: "teal-copper-hound.ngrok.app",
     },
     body,
     keepalive: true,

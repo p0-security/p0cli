@@ -9,7 +9,13 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { fetchAccountInfo } from "../drivers/api";
-import { authenticate, deleteIdentity, loadCredentials, remainingTokenTime, writeIdentity } from "../drivers/auth";
+import {
+  authenticate,
+  deleteIdentity,
+  loadCredentials,
+  remainingTokenTime,
+  writeIdentity,
+} from "../drivers/auth";
 import { saveConfig } from "../drivers/config";
 import { initializeFirebase } from "../drivers/firestore";
 import { getOrgData } from "../drivers/org";
@@ -17,9 +23,7 @@ import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
 import { Authn } from "../types/identity";
 import { OrgData } from "../types/org";
-import { debug } from "node:console";
 import yargs from "yargs";
-
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
 
