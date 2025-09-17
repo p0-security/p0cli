@@ -73,7 +73,11 @@ export type SshProvider<
   C extends object | undefined = undefined, // credentials object
 > = {
   /** Logs in the user to the cloud provider */
-  cloudProviderLogin: (authn: Authn, request: SR, debug?: boolean) => Promise<C>;
+  cloudProviderLogin: (
+    authn: Authn,
+    request: SR,
+    debug?: boolean
+  ) => Promise<C>;
 
   /** Callback to ensure that this provider's CLI utils are installed */
   ensureInstall: () => Promise<void>;
