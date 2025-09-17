@@ -10,8 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { sleep } from "../util";
 
-const MAX_RETRIES = 3;
-const MAX_RETRY_BACK_OFF_TIME = 10000;
+const DEFAULT_RETRIES = 3;
+const DEFAULT_DELAY_MS = 10_000;
+const DEFAULT_MULTIPLIER = 1.0;
 
 /**
  * Retries an operation with a delay between retries
@@ -19,13 +20,15 @@ const MAX_RETRY_BACK_OFF_TIME = 10000;
  * @param shouldRetry predicate to evaluate on error; will retry only if this is true
  * @param retries number of retries
  * @param delay time to wait before retrying
+ * @param multiplier multiplier to apply to delay after each retry
  * @returns
  */
 export async function retryWithSleep<T>(
   operation: () => Promise<T>,
   shouldRetry: (error: unknown) => boolean,
-  retries = MAX_RETRIES,
-  delayMs: number = MAX_RETRY_BACK_OFF_TIME
+  retries = DEFAULT_RETRIES,
+  delayMs: number = DEFAULT_DELAY_MS,
+  multiplier: number = DEFAULT_MULTIPLIER
 ): Promise<T> {
   try {
     return await operation();
@@ -33,7 +36,13 @@ export async function retryWithSleep<T>(
     if (shouldRetry(error)) {
       if (retries > 0) {
         await sleep(delayMs);
-        return await retryWithSleep(operation, shouldRetry, retries - 1);
+        return await retryWithSleep(
+          operation,
+          shouldRetry,
+          retries - 1,
+          delayMs * multiplier,
+          multiplier
+        );
       }
     }
     throw error;

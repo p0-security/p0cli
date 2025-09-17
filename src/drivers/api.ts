@@ -13,6 +13,7 @@ import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
+import http from "http";
 import * as path from "node:path";
 import yargs from "yargs";
 
@@ -203,7 +204,7 @@ export const fetchWithStreaming = async function* <T>(
       // Decode this chunk and append to buffer. {stream:true} preserves
       // multi-byte code points that might be split across chunks.
       buffer += decoder.decode(value, { stream: true });
-      if (debug) print2(`\n[API:stream]Processing buffer: ${buffer}`);
+      if (debug) print2(`\n[API:stream] Processing buffer: ${buffer}`);
       // Split on both Unix and Windows newlines; keep the last (possibly partial) piece in buffer.
       const parts = buffer.split(/\r?\n/);
       buffer = parts.pop() ?? "";
@@ -220,7 +221,7 @@ export const fetchWithStreaming = async function* <T>(
       // this should not happen in most scenarios except errors
       if (debug) {
         print2(
-          "[API:stream]Remaining data received from the server but not processed due to the lack of new-line: " +
+          "[API:stream] Remaining data received from the server but not processed due to the lack of new-line: " +
             buffer
         );
       }
@@ -229,7 +230,7 @@ export const fetchWithStreaming = async function* <T>(
       try {
         if (debug) {
           print2(
-            "[API:stream]Trying to parse to validate json completeness: " +
+            "[API:stream] Trying to parse to validate json completeness: " +
               buffer
           );
         }
@@ -245,7 +246,7 @@ export const fetchWithStreaming = async function* <T>(
           // log the error in debug logs
           if (debug) {
             print2(
-              "[API:stream]Failed to parse JSON from server response: " +
+              "[API:stream] Failed to parse JSON from server response: " +
                 String(err)
             );
           }
@@ -260,6 +261,9 @@ export const fetchWithStreaming = async function* <T>(
       error instanceof TypeError &&
       (error.message === "fetch failed" || error.message === "terminated")
     ) {
+      if (debug) {
+        print2("Network error: " + String(error));
+      }
       throw `Network error: Unable to reach the server.`;
     } else {
       throw error;
@@ -318,6 +322,7 @@ const baseFetch = async <T>(args: {
       ...(headers ?? {}),
       "Content-Type": "application/json",
       "User-Agent": `P0 CLI/${version}`,
+      Host: "teal-copper-hound.ngrok.app",
     },
     body,
     keepalive: true,
@@ -366,19 +371,19 @@ const authFetch = async <T>(
 
 /** Check if text contains an error code in the html title by looking for 3-digit http codes.
  *
- * Example text:
- * <!doctype html><meta charset="utf-8"><meta name=viewport content="width=device-width, initial-scale=1"><title>429</title>429 Too Many Requests
+ * Example texts:
+ * 1. <!doctype html><meta charset="utf-8"><meta name=viewport content="width=device-width, initial-scale=1"><title>429</title>429 Too Many Requests
+ * 2. <html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>
  */
 const tryParseHtmlError = (text: string) => {
-  const match = text.match(/<title>(\d{3})<\/title>/);
+  const match = text.match(/<title>.*(\d{3}).*<\/title>/);
   if (!match) {
     return undefined;
   }
   const statusCode = match[1];
-  const statusText = text
-    // Remove the title tag
-    .replace(/<title>(\d{3})<\/title>/g, "")
-    // Remove meta HTML tags
-    .replace(/<[^>]+>/g, "");
-  return `${statusText}: (HTTP status ${statusCode})`;
+  if (!statusCode) {
+    return undefined;
+  }
+  const statusText = http.STATUS_CODES[statusCode];
+  return `HTTP Error: ${statusCode} ${statusText}`;
 };
