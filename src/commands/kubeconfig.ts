@@ -144,22 +144,24 @@ const kubeconfigAction = async (
       "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
       retryWithSleep(
         async () => await exec("aws", updateKubeconfigArgs, { check: true }),
-        (error: any) => {
-          if (error?.stderr) {
-            if (
-              error.stderr.includes("Unknown options") ||
-              error.stderr.includes("--user-alias")
-            ) {
-              print2(
-                "\nThe AWS CLI version is not compatible with the p0 kubeconfig command. Please update to at least version 2.11.6."
-              );
-              return false; // Stop retrying if the CLI version is incompatible
+        {
+          shouldRetry: (error: any) => {
+            if (error?.stderr) {
+              if (
+                error.stderr.includes("Unknown options") ||
+                error.stderr.includes("--user-alias")
+              ) {
+                print2(
+                  "\nThe AWS CLI version is not compatible with the p0 kubeconfig command. Please update to at least version 2.11.6."
+                );
+                return false; // Stop retrying if the CLI version is incompatible
+              }
             }
-          }
-          return true;
-        },
-        8,
-        2500
+            return true;
+          },
+          retries: 8,
+          delayMs: 2500,
+        }
       )
     );
     print2(awsResult.stdout);

@@ -104,36 +104,32 @@ const awsIdcHelpers = (
     // There is a delay in between aws issuing the sso token and it being available for exchange for AWS credentials
     // When exchanging token immediately, an "unauthorized" may will be thrown, so retry with sleep.
 
-    return await retryWithSleep(
-      async () => {
-        const init = {
-          method: "GET",
-          headers: {
-            "x-amz-sso_bearer_token": oidcResponse.accessToken,
-          },
-        };
-        const { accountId, permissionSet } = request;
-        if (accountId === undefined)
-          throw new Error(
-            "Could not find an AWS account ID for this access request"
-          );
-
-        const params = new URLSearchParams();
-        params.append("account_id", accountId);
-        params.append("role_name", permissionSet);
-        const response = await fetch(
-          `https://portal.sso.${region}.amazonaws.com/federation/credentials?${params.toString()}`,
-          init
+    return await retryWithSleep(async () => {
+      const init = {
+        method: "GET",
+        headers: {
+          "x-amz-sso_bearer_token": oidcResponse.accessToken,
+        },
+      };
+      const { accountId, permissionSet } = request;
+      if (accountId === undefined)
+        throw new Error(
+          "Could not find an AWS account ID for this access request"
         );
-        if (!response.ok)
-          throw new Error(
-            `Failed to fetch AWS credentials: ${response.statusText}: ${await response.text()}`
-          );
-        return await response.json();
-      },
-      () => true,
-      3
-    );
+
+      const params = new URLSearchParams();
+      params.append("account_id", accountId);
+      params.append("role_name", permissionSet);
+      const response = await fetch(
+        `https://portal.sso.${region}.amazonaws.com/federation/credentials?${params.toString()}`,
+        init
+      );
+      if (!response.ok)
+        throw new Error(
+          `Failed to fetch AWS credentials: ${response.statusText}: ${await response.text()}`
+        );
+      return await response.json();
+    });
   };
 
   return {

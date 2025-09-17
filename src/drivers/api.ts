@@ -19,9 +19,13 @@ import * as path from "node:path";
 import yargs from "yargs";
 
 // Longest delay before last retry attempt is 4 minutes (1,000ms * 2^8 = 256s ~ 4 minutes)
-const RETRIES = 8;
-const DELAY_MS = 1_000;
-const MULTIPLIER = 2.0;
+const RETRY_OPTIONS = {
+  shouldRetry: (error: unknown) =>
+    error === "HTTP Error: 429 Too Many Requests",
+  retries: 8,
+  delayMs: 1_000,
+  multiplier: 2.0,
+};
 
 const tenantOrgUrl = (tenant: string) =>
   `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
@@ -259,14 +263,10 @@ export const fetchWithStreaming = async function* <T>(
   };
 
   try {
-    yield* regenerateWithSleep(
-      () => attemptFetch(),
-      (error) => error === "HTTP Error: 429 Too Many Requests",
-      RETRIES,
-      DELAY_MS,
-      MULTIPLIER,
-      debug
-    );
+    yield* regenerateWithSleep(() => attemptFetch(), {
+      ...RETRY_OPTIONS,
+      debug,
+    });
   } catch (error) {
     if (
       error instanceof TypeError &&
@@ -347,14 +347,10 @@ const baseFetch = async <T>(args: {
   };
 
   try {
-    return await retryWithSleep(
-      () => attemptFetch(),
-      (error) => error === "HTTP Error: 429 Too Many Requests",
-      RETRIES,
-      DELAY_MS,
-      MULTIPLIER,
-      args.debug
-    );
+    return await retryWithSleep(() => attemptFetch(), {
+      ...RETRY_OPTIONS,
+      debug: args.debug,
+    });
   } catch (error) {
     if (error instanceof TypeError && error.message === "fetch failed") {
       throw `Network error: Unable to reach the server at ${url}.`;
@@ -400,7 +396,7 @@ const tryParseHtmlError = (text: string) => {
     return undefined;
   }
   const statusText = http.STATUS_CODES[statusCode];
-  return `HTTP Error: ${statusCode} ${statusText}`;
+  return `HTTP Error: ${statusCode}${statusText ? ` ${statusText}` : ""}`;
 };
 
 const parseResponseText = (text: string) => {

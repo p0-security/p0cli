@@ -11,27 +11,55 @@ You should have received a copy of the GNU General Public License along with @p0
 import { print2 } from "../drivers/stdio";
 import { sleep } from "../util";
 
-const DEFAULT_RETRIES = 3;
-const DEFAULT_DELAY_MS = 10_000;
-const DEFAULT_MULTIPLIER = 1.0;
+type RetryOptions = {
+  shouldRetry?: (error: unknown) => boolean;
+  retries?: number;
+  delayMs?: number;
+  multiplier?: number;
+  debug?: boolean;
+};
+
+const DEFAULT_OPTIONS: Required<RetryOptions> = {
+  shouldRetry: () => true,
+  retries: 3,
+  delayMs: 1_000,
+  multiplier: 1.0,
+  debug: false,
+};
+
+const optionsWithDefaults = (
+  options?: RetryOptions
+): Required<RetryOptions> => {
+  return { ...DEFAULT_OPTIONS, ...(options || {}) };
+};
+
+const optionsForNextRetry = (
+  options: Required<RetryOptions>
+): Required<RetryOptions> => {
+  return {
+    ...options,
+    retries: options.retries - 1,
+    delayMs: options.delayMs * options.multiplier,
+  };
+};
 
 /**
  * Retries an operation with a delay between retries
  * @param operation operation to retry
- * @param shouldRetry predicate to evaluate on error; will retry only if this is true
- * @param retries number of retries
- * @param delay time to wait before retrying
- * @param multiplier multiplier to apply to delay after each retry
- * @returns
+ * @param {RetryOptions} options options of retrying the operation
+ * @param {function} options.shouldRetry - function to determine if the operation should be retried based on the error
+ * @param {number} options.retries - number of retries
+ * @param {number} options.delay - time to wait before retrying
+ * @param {number} options.multiplier - multiplier to apply to delay after each retry
+ * @param {boolean} options.debug - whether to print debug information
+ * @returns result of the operation
  */
 export async function retryWithSleep<T>(
   operation: () => Promise<T>,
-  shouldRetry: (error: unknown) => boolean,
-  retries = DEFAULT_RETRIES,
-  delayMs: number = DEFAULT_DELAY_MS,
-  multiplier: number = DEFAULT_MULTIPLIER,
-  debug?: boolean
+  options?: RetryOptions
 ): Promise<T> {
+  const retryOptions = optionsWithDefaults(options);
+  const { shouldRetry, retries, delayMs, debug } = retryOptions;
   try {
     return await operation();
   } catch (error: any) {
@@ -45,11 +73,7 @@ export async function retryWithSleep<T>(
         await sleep(delayMs);
         return await retryWithSleep(
           operation,
-          shouldRetry,
-          retries - 1,
-          delayMs * multiplier,
-          multiplier,
-          debug
+          optionsForNextRetry(retryOptions)
         );
       }
     }
@@ -57,14 +81,23 @@ export async function retryWithSleep<T>(
   }
 }
 
+/**
+ * Retries generation of values with a delay between retries
+ * @param operation operation to retry
+ * @param {RetryOptions} options options of retrying the operation
+ * @param {function} options.shouldRetry - function to determine if the operation should be retried based on the error
+ * @param {number} options.retries - number of retries
+ * @param {number} options.delay - time to wait before retrying
+ * @param {number} options.multiplier - multiplier to apply to delay after each retry
+ * @param {boolean} options.debug - whether to print debug information
+ * @yields values from the generator
+ */
 export async function* regenerateWithSleep<T>(
   generator: () => AsyncGenerator<T, void, unknown>,
-  shouldRetry: (error: unknown) => boolean,
-  retries = DEFAULT_RETRIES,
-  delayMs: number = DEFAULT_DELAY_MS,
-  multiplier: number = DEFAULT_MULTIPLIER,
-  debug?: boolean
+  options?: RetryOptions
 ): AsyncGenerator<T, void, unknown> {
+  const retryOptions = optionsWithDefaults(options);
+  const { shouldRetry, retries, delayMs, debug } = retryOptions;
   try {
     yield* generator();
   } catch (error: any) {
@@ -78,11 +111,7 @@ export async function* regenerateWithSleep<T>(
         await sleep(delayMs);
         yield* regenerateWithSleep(
           generator,
-          shouldRetry,
-          retries - 1,
-          delayMs * multiplier,
-          multiplier,
-          debug
+          optionsForNextRetry(retryOptions)
         );
       }
     }
