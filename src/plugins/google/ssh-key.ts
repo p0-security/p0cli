@@ -12,6 +12,7 @@ import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
 import { getOperatingSystem } from "../../util";
 import { ImportSshPublicKeyResponse } from "./types";
+import { gcloudCommandArgs } from "./util";
 
 /**
  * Adds an ssh public key to the user object's sshPublicKeys array in Google Workspace.
@@ -36,17 +37,13 @@ export const importSshKey = async (
   const accessToken = await asyncSpawn(
     { debug: false },
     cmd,
-    isWindows
-      ? ["/d", "/s", "/c", "gcloud", "auth", "print-access-token"]
-      : ["auth", "print-access-token"]
+    gcloudCommandArgs(["auth", "print-access-token"])
   );
 
   const account = await asyncSpawn(
     { debug },
     cmd,
-    isWindows
-      ? ["/d", "/s", "/c", "gcloud", "config", "get-value", "account"]
-      : ["config", "get-value", "account"]
+    gcloudCommandArgs(["config", "get-value", "account"])
   );
 
   if (debug) {
