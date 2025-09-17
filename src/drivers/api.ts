@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
@@ -36,29 +37,22 @@ export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 export const fetchOrgData = async <T>(orgId: string) =>
   baseFetch<T>({ url: tenantOrgUrl(orgId), method: "GET" });
 
-export const fetchAccountInfo = async <T>(authn: Authn) =>
+export const fetchAccountInfo = async <T>(authn: Authn, debug?: boolean) =>
   authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/account`,
     method: "GET",
-  });
-
-export const fetchPermissionRequestDetails = async <T>(
-  authn: Authn,
-  requestId: string
-) =>
-  authFetch<T>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
-    method: "GET",
-    maxTimeoutMs: DEFAULT_PERMISSION_REQUEST_TIMEOUT,
+    debug,
   });
 
 export const fetchIntegrationConfig = async <T>(
   authn: Authn,
-  integration: string
+  integration: string,
+  debug?: boolean
 ) =>
   authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
     method: "GET",
+    debug,
   });
 
 export const fetchStreamingCommand = async function* <T>(
@@ -84,7 +78,7 @@ export const fetchStreamingCommand = async function* <T>(
 
 export const fetchCommand = async <T>(
   authn: Authn,
-  args: yargs.ArgumentsCamelCase,
+  args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
 ) =>
   authFetch<T>(authn, {
@@ -94,12 +88,13 @@ export const fetchCommand = async <T>(
       argv,
       scriptName: path.basename(args.$0),
     }),
+    debug: args.debug,
   });
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
 export const fetchAdminLsCommand = async <T>(
   authn: Authn,
-  args: yargs.ArgumentsCamelCase,
+  args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
 ) =>
   authFetch<T>(authn, {
@@ -109,11 +104,13 @@ export const fetchAdminLsCommand = async <T>(
       argv,
       scriptName: path.basename(args.$0),
     }),
+    debug: args.debug,
   });
 
 export const submitPublicKey = async <T>(
   authn: Authn,
-  args: { publicKey: string; requestId: string }
+  args: { publicKey: string; requestId: string },
+  debug?: boolean
 ) =>
   authFetch<T>(authn, {
     url: publicKeysUrl(authn.identity.org.slug),
@@ -122,6 +119,7 @@ export const submitPublicKey = async <T>(
       requestId: args.requestId,
       publicKey: args.publicKey,
     }),
+    debug,
   });
 
 export const certificateSigningRequest = async (
@@ -160,6 +158,7 @@ export const fetchWithStreaming = async function* <T>(
     body,
     keepalive: true,
   };
+
   try {
     const response = await fetch(
       url,
@@ -226,7 +225,8 @@ export const fetchWithStreaming = async function* <T>(
         );
       }
       // there is a chance that the server could have errored with a non-streaming response
-      // we hit a errorBoundary in the backend and we received a valid json without a new-line delimiter at the end
+      // - we hit an errorBoundary in the backend and we received a valid json without a new-line delimiter at the end
+      // - or the load balancer in front of the backend errored out and returned a html error page
       try {
         if (debug) {
           print2(
@@ -234,10 +234,7 @@ export const fetchWithStreaming = async function* <T>(
               buffer
           );
         }
-        const response = JSON.parse(buffer);
-        if ("error" in response) {
-          throw response.error;
-        }
+        parseResponseText(buffer);
       } catch (err) {
         // If this is a json parse error then we have received a partial response
         // we could throw an error saying incomplete response from the server
@@ -313,6 +310,7 @@ const baseFetch = async <T>(args: {
   body?: string;
   headers?: Record<string, string>;
   maxTimeoutMs?: number;
+  debug?: boolean;
 }) => {
   const { version } = p0VersionInfo;
   const { url, method, body, maxTimeoutMs, headers } = args;
@@ -329,18 +327,21 @@ const baseFetch = async <T>(args: {
     ...(maxTimeoutMs ? { signal: AbortSignal.timeout(maxTimeoutMs) } : {}),
   };
 
-  try {
+  const attemptFetch = async () => {
     const response = await fetch(url, fetchOptions);
     const text = await response.text();
-    const errorMessage = tryParseHtmlError(text);
-    if (errorMessage) {
-      throw errorMessage;
-    }
-    const data = JSON.parse(text);
-    if ("error" in data) {
-      throw data.error;
-    }
-    return data as T;
+    return parseResponseText(text) as T;
+  };
+
+  try {
+    return await retryWithSleep(
+      () => attemptFetch(),
+      (error) => error === "HTTP Error: 429 Too Many Requests",
+      6,
+      1_000,
+      2.0,
+      args.debug
+    );
   } catch (error) {
     if (error instanceof TypeError && error.message === "fetch failed") {
       throw `Network error: Unable to reach the server at ${url}.`;
@@ -357,6 +358,7 @@ const authFetch = async <T>(
     method: string;
     body?: string;
     maxTimeoutMs?: number;
+    debug?: boolean;
   }
 ) => {
   const token = await authn.getToken();
@@ -386,4 +388,16 @@ const tryParseHtmlError = (text: string) => {
   }
   const statusText = http.STATUS_CODES[statusCode];
   return `HTTP Error: ${statusCode} ${statusText}`;
+};
+
+const parseResponseText = (text: string) => {
+  const errorMessage = tryParseHtmlError(text);
+  if (errorMessage) {
+    throw errorMessage;
+  }
+  const data = JSON.parse(text);
+  if ("error" in data) {
+    throw data.error;
+  }
+  return data;
 };

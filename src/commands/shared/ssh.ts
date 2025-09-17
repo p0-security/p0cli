@@ -103,7 +103,8 @@ const validateSshInstall = async (
 ) => {
   const configDoc = await fetchIntegrationConfig<{ config: SshConfig }>(
     authn,
-    "ssh"
+    "ssh",
+    args.debug
   );
   const configItems = configDoc?.config["iam-write"];
 
@@ -234,7 +235,8 @@ export const prepareRequest = async (
     authn,
     provisionedRequest,
     requestId,
-    publicKey
+    publicKey,
+    args.debug
   );
 
   await sshProvider.ensureInstall();

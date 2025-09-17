@@ -34,6 +34,10 @@ const awsArgs = async (yargs: yargs.Argv) => {
         describe: "Reason access is needed",
         type: "string",
       })
+      .option("debug", {
+        type: "boolean",
+        describe: "Print debug information.",
+      })
       .env("P0_AWS");
 
     const withCommand =

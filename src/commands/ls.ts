@@ -16,6 +16,7 @@ import { max, orderBy, slice } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
+
 const DEFAULT_RESPONSE_SIZE = 15;
 
 type LsResponse = {
@@ -49,10 +50,14 @@ const lsArgs = <T>(yargs: yargs.Argv<T>) =>
       type: "boolean",
       default: false,
       description: "Output in JSON format",
+    })
+    .option("debug", {
+      type: "boolean",
+      describe: "Print debug information.",
     });
 
 export const lsCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[]; json: boolean; size: number }>(
+  yargs.command<{ arguments: string[]; json: boolean; size: number; debug: boolean }>(
     "ls [arguments..]",
     "List request-command arguments",
     lsArgs,
@@ -64,6 +69,7 @@ const ls = async (
     arguments: string[];
     json: boolean;
     size: number;
+    debug: boolean;
   }>
 ) => {
   const authn = await authenticate();

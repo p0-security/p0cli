@@ -61,8 +61,8 @@ export const awsSshProvider: SshProvider<
   AwsSshRequest,
   AwsCredentials
 > = {
-  cloudProviderLogin: async (authn, request) => {
-    const { config } = await getAwsConfig(authn, request.accountId);
+  cloudProviderLogin: async (authn, request, debug) => {
+    const { config } = await getAwsConfig(authn, request.accountId, debug);
     if (!config.login?.type || config.login?.type === "iam") {
       throw "This account is not configured for SSH access via the P0 CLI";
     }
@@ -70,7 +70,11 @@ export const awsSshProvider: SshProvider<
     return config.login?.type === "idc"
       ? await assumeRoleWithIdc(request as AwsSshIdcRequest)
       : config.login?.type === "federated"
-        ? await assumeRoleWithOktaSaml(authn, request as AwsSshRoleRequest)
+        ? await assumeRoleWithOktaSaml(
+            authn,
+            request as AwsSshRoleRequest,
+            debug
+          )
         : throwAssertNever(config.login);
   },
 
@@ -86,13 +90,13 @@ export const awsSshProvider: SshProvider<
 
   preTestAccessPropagationArgs: () => undefined,
 
-  async submitPublicKey(authn, request, requestId, publicKey) {
+  async submitPublicKey(authn, request, requestId, publicKey, debug) {
     if (request.generated.publicKey) {
       if (request.generated.publicKey !== publicKey) {
         throw "Public key mismatch. Please revoke the request and try again.";
       }
     } else {
-      await submitPublicKey(authn, { publicKey, requestId });
+      await submitPublicKey(authn, { publicKey, requestId }, debug);
     }
   },
 

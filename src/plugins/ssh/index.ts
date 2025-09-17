@@ -476,7 +476,7 @@ export const sshOrScp = async (args: {
   const abortController = new AbortController();
 
   const credential: AwsCredentials | undefined =
-    await sshProvider.cloudProviderLogin(authn, request);
+    await sshProvider.cloudProviderLogin(authn, request, debug);
 
   const setupData = await sshProvider.setup?.(authn, request, {
     requestId,

@@ -13,11 +13,12 @@ import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
 import { sortBy } from "lodash";
 
-export const getFirstAwsConfig = async (authn: Authn) => {
+export const getFirstAwsConfig = async (authn: Authn, debug?: boolean) => {
   const { identity } = authn;
   const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
     authn,
-    "aws"
+    "aws",
+    debug
   );
 
   const item = Object.entries(config?.["iam-write"] ?? {}).find(
@@ -31,12 +32,14 @@ export const getFirstAwsConfig = async (authn: Authn) => {
 
 export const getAwsConfig = async (
   authn: Authn,
-  account: string | undefined
+  account: string | undefined,
+  debug?: boolean
 ) => {
   const { identity } = authn;
   const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
     authn,
-    "aws"
+    "aws",
+    debug
   );
   // TODO: Support alias lookup
   const allItems = sortBy(

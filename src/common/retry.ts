@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../drivers/stdio";
 import { sleep } from "../util";
 
 const DEFAULT_RETRIES = 3;
@@ -28,16 +29,54 @@ export async function retryWithSleep<T>(
   shouldRetry: (error: unknown) => boolean,
   retries = DEFAULT_RETRIES,
   delayMs: number = DEFAULT_DELAY_MS,
-  multiplier: number = DEFAULT_MULTIPLIER
+  multiplier: number = DEFAULT_MULTIPLIER,
+  debug?: boolean
 ): Promise<T> {
   try {
     return await operation();
   } catch (error: any) {
     if (shouldRetry(error)) {
       if (retries > 0) {
+        if (debug) {
+          print2(
+            `Retry in ${delayMs}ms (remaining attempts: ${retries}). Cause: ${error}`
+          );
+        }
         await sleep(delayMs);
         return await retryWithSleep(
           operation,
+          shouldRetry,
+          retries - 1,
+          delayMs * multiplier,
+          multiplier
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+export async function* regenerateWithSleep<T>(
+  generator: () => AsyncGenerator<T, void, unknown>,
+  shouldRetry: (error: unknown) => boolean,
+  retries = DEFAULT_RETRIES,
+  delayMs: number = DEFAULT_DELAY_MS,
+  multiplier: number = DEFAULT_MULTIPLIER,
+  debug?: boolean
+): AsyncGenerator<T, void, unknown> {
+  try {
+    yield* generator();
+  } catch (error: any) {
+    if (shouldRetry(error)) {
+      if (retries > 0) {
+        if (debug) {
+          print2(
+            `Retry in ${delayMs}ms (remaining attempts: ${retries}). Cause: ${error}`
+          );
+        }
+        await sleep(delayMs);
+        yield* regenerateWithSleep(
+          generator,
           shouldRetry,
           retries - 1,
           delayMs * multiplier,
