@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { retryWithSleep } from "../common/retry";
+import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
@@ -18,7 +18,10 @@ import http from "http";
 import * as path from "node:path";
 import yargs from "yargs";
 
-const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
+// Longest delay before last retry attempt is 4 minutes (1,000ms * 2^8 = 256s ~ 4 minutes)
+const RETRIES = 8;
+const DELAY_MS = 1_000;
+const MULTIPLIER = 2.0;
 
 const tenantOrgUrl = (tenant: string) =>
   `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
@@ -159,7 +162,7 @@ export const fetchWithStreaming = async function* <T>(
     keepalive: true,
   };
 
-  try {
+  const attemptFetch = async function* () {
     const response = await fetch(
       url,
       maxTimeoutMs
@@ -253,6 +256,17 @@ export const fetchWithStreaming = async function* <T>(
         }
       }
     }
+  };
+
+  try {
+    yield* regenerateWithSleep(
+      () => attemptFetch(),
+      (error) => error === "HTTP Error: 429 Too Many Requests",
+      RETRIES,
+      DELAY_MS,
+      MULTIPLIER,
+      debug
+    );
   } catch (error) {
     if (
       error instanceof TypeError &&
@@ -337,9 +351,9 @@ const baseFetch = async <T>(args: {
     return await retryWithSleep(
       () => attemptFetch(),
       (error) => error === "HTTP Error: 429 Too Many Requests",
-      6,
-      1_000,
-      2.0,
+      RETRIES,
+      DELAY_MS,
+      MULTIPLIER,
       args.debug
     );
   } catch (error) {

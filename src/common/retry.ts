@@ -48,7 +48,8 @@ export async function retryWithSleep<T>(
           shouldRetry,
           retries - 1,
           delayMs * multiplier,
-          multiplier
+          multiplier,
+          debug
         );
       }
     }
@@ -80,7 +81,8 @@ export async function* regenerateWithSleep<T>(
           shouldRetry,
           retries - 1,
           delayMs * multiplier,
-          multiplier
+          multiplier,
+          debug
         );
       }
     }
