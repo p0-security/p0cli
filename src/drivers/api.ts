@@ -382,7 +382,7 @@ const authFetch = async <T>(
 };
 
 const handleResponse = (response: Response, responseText: string) => {
-  if (!response.ok) {
+  if ("ok" in response && !response.ok) {
     throw `HTTP Error: ${response.status} ${response.statusText}`;
   }
   const data = JSON.parse(responseText);
