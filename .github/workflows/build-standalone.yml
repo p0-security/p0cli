@@ -170,15 +170,10 @@ jobs:
 
           yarn build:macos
           ./mac/build-macOS.sh
-      - name: Codesign binary and libraries
+      - name: Codesign binary
         run: |
           codesign --verbose=4 --remove-signature build/sea/p0
           codesign --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
-
-          # Codesign bundled OpenSSL libraries for notarization
-          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
-          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
-          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
@@ -200,7 +195,14 @@ jobs:
 
           # Also update any interdependencies between the OpenSSL libraries themselves
           install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/libssl.3.dylib
+      - name: Codesign bundled libraries
+        run: |
+          # Codesign bundled OpenSSL libraries for notarization
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
 
+          # Create the signed package
           pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Notarize build artifact
         run: |
