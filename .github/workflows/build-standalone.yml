@@ -199,14 +199,18 @@ jobs:
           # Codesign bundled OpenSSL libraries for notarization
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
-          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
+
+          # Sign all OpenSSL modules (fips.dylib, legacy.dylib, etc.)
+          find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" {} \;
 
           # Debug: Verify all signatures before packaging
           echo "=== Verifying signatures ==="
           codesign --verify --verbose build/sea/root/usr/local/bin/p0
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
-          codesign --verify --verbose build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
+
+          # Verify all OpenSSL modules
+          find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verify --verbose {} \;
           echo "=== All signatures verified ==="
 
           # Create the signed package
