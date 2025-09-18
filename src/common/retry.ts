@@ -16,6 +16,7 @@ type RetryOptions = {
   retries?: number;
   delayMs?: number;
   multiplier?: number;
+  maxDelayMs?: number;
   debug?: boolean;
 };
 
@@ -23,6 +24,8 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   shouldRetry: () => true,
   retries: 3,
   delayMs: 1_000,
+  // A 0 or negative maxDelayMs means no max
+  maxDelayMs: 0,
   multiplier: 1.0,
   debug: false,
 };
@@ -36,10 +39,15 @@ const optionsWithDefaults = (
 const optionsForNextRetry = (
   options: Required<RetryOptions>
 ): Required<RetryOptions> => {
+  const { delayMs, maxDelayMs, multiplier } = options;
+  const nextDelayMs =
+    maxDelayMs > 0
+      ? Math.min(delayMs * multiplier, maxDelayMs)
+      : delayMs * multiplier;
   return {
     ...options,
     retries: options.retries - 1,
-    delayMs: options.delayMs * options.multiplier,
+    delayMs: nextDelayMs,
   };
 };
 
@@ -51,6 +59,7 @@ const optionsForNextRetry = (
  * @param {number} options.retries - number of retries
  * @param {number} options.delay - time to wait before retrying
  * @param {number} options.multiplier - multiplier to apply to delay after each retry
+ * @param {number} options.maxDelayMs - maximum delay between retries; 0 or negative means no max
  * @param {boolean} options.debug - whether to print debug information
  * @returns result of the operation
  */
@@ -89,6 +98,7 @@ export async function retryWithSleep<T>(
  * @param {number} options.retries - number of retries
  * @param {number} options.delay - time to wait before retrying
  * @param {number} options.multiplier - multiplier to apply to delay after each retry
+ * @param {number} options.maxDelayMs - maximum delay between retries; 0 or negative means no max
  * @param {boolean} options.debug - whether to print debug information
  * @yields values from the generator
  */

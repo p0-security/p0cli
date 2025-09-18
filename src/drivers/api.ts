@@ -14,17 +14,18 @@ import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
 import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
-import http from "http";
 import * as path from "node:path";
 import yargs from "yargs";
 
-// Longest delay before last retry attempt is 4 minutes (1,000ms * 2^8 = 256s ~ 4 minutes)
+// We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
+// for a total of 121s wait time over 8 retries
 const RETRY_OPTIONS = {
   shouldRetry: (error: unknown) =>
     error === "HTTP Error: 429 Too Many Requests",
   retries: 8,
   delayMs: 1_000,
   multiplier: 2.0,
+  maxDelayMs: 30_000,
 };
 
 const tenantOrgUrl = (tenant: string) =>
@@ -241,7 +242,7 @@ export const fetchWithStreaming = async function* <T>(
               buffer
           );
         }
-        parseResponseText(buffer);
+        handleResponse(response, buffer);
       } catch (err) {
         // If this is a json parse error then we have received a partial response
         // we could throw an error saying incomplete response from the server
@@ -343,7 +344,7 @@ const baseFetch = async <T>(args: {
   const attemptFetch = async () => {
     const response = await fetch(url, fetchOptions);
     const text = await response.text();
-    return parseResponseText(text) as T;
+    return handleResponse(response, text) as T;
   };
 
   try {
@@ -380,31 +381,11 @@ const authFetch = async <T>(
   });
 };
 
-/** Check if text contains an error code in the html title by looking for 3-digit http codes.
- *
- * Example texts:
- * 1. <!doctype html><meta charset="utf-8"><meta name=viewport content="width=device-width, initial-scale=1"><title>429</title>429 Too Many Requests
- * 2. <html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>
- */
-const tryParseHtmlError = (text: string) => {
-  const match = text.match(/<title>.*(\d{3}).*<\/title>/);
-  if (!match) {
-    return undefined;
+const handleResponse = (response: Response, responseText: string) => {
+  if (!response.ok) {
+    throw `HTTP Error: ${response.status} ${response.statusText}`;
   }
-  const statusCode = match[1];
-  if (!statusCode) {
-    return undefined;
-  }
-  const statusText = http.STATUS_CODES[statusCode];
-  return `HTTP Error: ${statusCode}${statusText ? ` ${statusText}` : ""}`;
-};
-
-const parseResponseText = (text: string) => {
-  const errorMessage = tryParseHtmlError(text);
-  if (errorMessage) {
-    throw errorMessage;
-  }
-  const data = JSON.parse(text);
+  const data = JSON.parse(responseText);
   if ("error" in data) {
     throw data.error;
   }
