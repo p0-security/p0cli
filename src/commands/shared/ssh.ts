@@ -68,6 +68,11 @@ export type SshProxyCommandArgs = {
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
 
+export type SshRequestOptions = {
+  approvedOnly?: boolean;
+  quiet?: boolean;
+};
+
 export type SshAdditionalSetup = {
   /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
   sshOptions: string[];
@@ -117,6 +122,90 @@ const validateSshInstall = async (
   }
 };
 
+export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
+  args.sudo || args.command === "sudo";
+
+export const provisionRequest = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
+  destination: string,
+  options?: SshRequestOptions
+) => {
+  await validateSshInstall(authn, args);
+
+  const { publicKey, privateKey } = await createKeyPair();
+
+  const makeRequest = async (requestOptions?: { forceSudo: boolean }) => {
+    return await request("request")<PermissionRequest<PluginSshRequest>>(
+      {
+        ...pick(args, "$0", "_"),
+        arguments: [
+          "ssh",
+          "session",
+          destination,
+          "--public-key",
+          publicKey,
+          ...(options?.approvedOnly ? ["--approved"] : []),
+          ...(args.provider ? ["--provider", args.provider] : []),
+          ...(requestOptions?.forceSudo || isSudoCommand(args)
+            ? ["--sudo"]
+            : []),
+          ...(args.reason ? ["--reason", args.reason] : []),
+          ...(args.parent ? ["--parent", args.parent] : []),
+        ],
+        wait: true,
+        debug: args.debug,
+      },
+      authn,
+      { message: options?.quiet ? "quiet" : "approval-required" }
+    );
+  };
+
+  let response;
+  if (options?.approvedOnly) {
+    // Try first with sudo
+    try {
+      response = await makeRequest({ forceSudo: true });
+    } catch (error) {
+      // If that fails, try without sudo
+      if (args.debug) {
+        print2("Request with sudo failed, retrying without sudo");
+      }
+      response = await makeRequest();
+    }
+  } else {
+    // Normal behavior when not approvedOnly
+    response = await makeRequest();
+  }
+
+  if (!response) {
+    if (!options?.quiet) {
+      print2("Did not receive access ID from server");
+    }
+    return;
+  }
+
+  const { id, isPreexisting } = response;
+
+  const message = isPreexisting
+    ? "Existing access found.  Connecting to instance."
+    : "Waiting for access to be provisioned";
+  print2(message);
+
+  const result = await decodeProvisionStatus<PluginSshRequest>(
+    response.request
+  );
+
+  if (!result) sys.exit(1);
+
+  return {
+    requestId: id,
+    provisionedRequest: response.request,
+    publicKey,
+    privateKey,
+  };
+};
+
 const pluginToCliRequest = async (
   request: PermissionRequest<PluginSshRequest>,
   options?: { debug?: boolean }
@@ -126,80 +215,13 @@ const pluginToCliRequest = async (
     options
   );
 
-export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
-  args.sudo || args.command === "sudo";
-
-export const provisionRequest = async (
-  authn: Authn,
-  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
-  destination: string,
-  approvedOnly?: boolean,
-  quiet?: boolean
-) => {
-  await validateSshInstall(authn, args);
-
-  const { publicKey, privateKey } = await createKeyPair();
-  const response = await request("request")<
-    PermissionRequest<PluginSshRequest>
-  >(
-    {
-      ...pick(args, "$0", "_"),
-      arguments: [
-        "ssh",
-        "session",
-        destination,
-        "--public-key",
-        publicKey,
-        ...(approvedOnly ? ["--approved"] : []),
-        ...(args.provider ? ["--provider", args.provider] : []),
-        ...(isSudoCommand(args) ? ["--sudo"] : []),
-        ...(args.reason ? ["--reason", args.reason] : []),
-        ...(args.parent ? ["--parent", args.parent] : []),
-      ],
-      wait: true,
-      debug: args.debug,
-    },
-    authn,
-    { message: quiet ? "quiet" : "approval-required" }
-  );
-
-  if (!response) {
-    if (!quiet) {
-      print2("Did not receive access ID from server");
-    }
-    return;
-  }
-  const { id, isPreexisting } = response;
-  if (!isPreexisting) print2("Waiting for access to be provisioned");
-  else print2("Existing access found.  Connecting to instance.");
-  const result = await decodeProvisionStatus<PluginSshRequest>(
-    response.request
-  );
-  if (!result) {
-    sys.exit(1);
-  }
-  return {
-    requestId: id,
-    provisionedRequest: response.request,
-    publicKey,
-    privateKey,
-  };
-};
-
 export const prepareRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
   destination: string,
-  approvedOnly?: boolean,
-  quiet?: boolean
+  options?: SshRequestOptions
 ) => {
-  const result = await provisionRequest(
-    authn,
-    args,
-    destination,
-    approvedOnly,
-    quiet
-  );
+  const result = await provisionRequest(authn, args, destination, options);
   if (!result) {
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
@@ -217,12 +239,11 @@ export const prepareRequest = async (
 
   await sshProvider.ensureInstall();
 
-  const options = { debug: args.debug };
-  const cliRequest = await pluginToCliRequest(provisionedRequest, options);
+  const cliRequest = await pluginToCliRequest(provisionedRequest, args);
 
   const request = sshProvider.requestToSsh(cliRequest);
 
-  const sshHostKeys = await sshProvider.saveHostKeys?.(request, options);
+  const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
 
   return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
 };
