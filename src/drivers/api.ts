@@ -18,7 +18,7 @@ import * as path from "node:path";
 import yargs from "yargs";
 
 // We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
-// for a total of 121s wait time over 8 retries
+// for a total of 121s wait time over 8 retries (ignoring jitter)
 const RETRY_OPTIONS = {
   shouldRetry: (error: unknown) =>
     error === "HTTP Error: 429 Too Many Requests",
