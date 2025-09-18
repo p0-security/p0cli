@@ -170,10 +170,15 @@ jobs:
 
           yarn build:macos
           ./mac/build-macOS.sh
-      - name: Codesign binary
+      - name: Codesign binary and libraries
         run: |
           codesign --verbose=4 --remove-signature build/sea/p0
           codesign --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
+
+          # Codesign bundled OpenSSL libraries for notarization
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
