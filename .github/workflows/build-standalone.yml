@@ -202,11 +202,24 @@ jobs:
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
 
+          # Debug: Verify all signatures before packaging
+          echo "=== Verifying signatures ==="
+          codesign --verify --verbose build/sea/root/usr/local/bin/p0
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
+          echo "=== All signatures verified ==="
+
           # Create the signed package
           pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Notarize build artifact
         run: |
-          xcrun notarytool submit build/sea/p0-macOS-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
+          # Submit for notarization and capture the submission ID
+          SUBMISSION_ID=$(xcrun notarytool submit build/sea/p0-macOS-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --output-format json | jq -r '.id')
+
+          # Get detailed log if notarization fails
+          xcrun notarytool log "$SUBMISSION_ID" --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID"
+
           xcrun stapler staple build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to workflow
         uses: actions/upload-artifact@v4
