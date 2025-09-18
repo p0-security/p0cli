@@ -24,6 +24,6 @@ export const gcloudCommandArgs = (args: string[]) => {
   // Unlike in MacOS, the underlying Windows OS API that spawn uses doesn't
   // resolve .CMD files by default
   return isWindows
-    ? ["cmd.exe", "/d", "/s", "/c", "gcloud", ...args]
-    : ["gcloud", ...args];
+    ? { command: "cmd.exe", args: ["/d", "/s", "/c", "gcloud", ...args] }
+    : { command: "gcloud", args };
 };
