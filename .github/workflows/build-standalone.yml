@@ -160,7 +160,16 @@ jobs:
           export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
           echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
-          echo "✅ FIPS enabled: $($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")"
+
+          # Check FIPS mode and fail if not enabled
+          FIPS_STATUS=$($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")
+
+          if [ "$FIPS_STATUS" != "1" ]; then
+            echo "❌ FIPS mode is not enabled! Expected '1', got '$FIPS_STATUS'"
+            exit 1
+          fi
+
+          echo "✅ FIPS enabled: $FIPS_STATUS"
       - name: Install dependencies
         run: yarn install
       - name: Build
