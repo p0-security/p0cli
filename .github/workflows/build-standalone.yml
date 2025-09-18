@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/fips-node
-          key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.0.9-v1
+          key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.1.2-v1
       - name: Build FIPS-compliant OpenSSL
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
@@ -51,12 +51,12 @@ jobs:
           cd ~/fips-node-build
 
           # Download and extract OpenSSL source
-          curl -L https://www.openssl.org/source/openssl-3.0.9.tar.gz | tar -xz
-          cd openssl-3.0.9
+          curl -L https://www.openssl.org/source/openssl-3.1.2.tar.gz | tar -xz
+          cd openssl-3.1.2
 
           echo "===== Starting building OpenSSL ====="
 
-          # Build OpenSSL 3.0.9 with FIPS support
+          # Build OpenSSL 3.1.2 with FIPS support
 
           # Configure OpenSSL build to built a FIPS-compliant openssl version
           ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
@@ -129,7 +129,7 @@ jobs:
           # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
           export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
 
-          # Configure Node.js with FIPS support using our custom OpenSSL 3.0.9
+          # Configure Node.js with FIPS support using our custom OpenSSL 3.1.2
           ./configure \
             --shared-openssl \
             --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
