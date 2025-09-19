@@ -50,8 +50,12 @@ const isFederatedLogin = (
  * If no account is passed, and the organization only has one account configured,
  * assumes that account.
  */
-const initOktaSaml = async (authn: Authn, account: string | undefined) => {
-  const { identity, config } = await getAwsConfig(authn, account);
+const initOktaSaml = async (
+  authn: Authn,
+  account: string | undefined,
+  debug?: boolean
+) => {
+  const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
   const samlResponse = await getSamlResponse(identity, config.login);
@@ -64,14 +68,16 @@ const initOktaSaml = async (authn: Authn, account: string | undefined) => {
 
 export const assumeRoleWithOktaSaml = async (
   authn: Authn,
-  args: { accountId?: string; role: string }
+  args: { accountId?: string; role: string },
+  debug?: boolean
 ) =>
   await cached(
     `aws-okta-${args.accountId}-${args.role}`,
     async () => {
       const { account, config, samlResponse } = await initOktaSaml(
         authn,
-        args.accountId
+        args.accountId,
+        debug
       );
       const { roles } = rolesFromSaml(account, samlResponse);
       if (!roles.includes(args.role))

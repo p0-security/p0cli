@@ -49,21 +49,26 @@ const lsArgs = <T>(yargs: yargs.Argv<T>) =>
       type: "boolean",
       default: false,
       description: "Output in JSON format",
+    })
+    .option("debug", {
+      type: "boolean",
+      describe: "Print debug information.",
     });
 
 export const lsCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[]; json: boolean; size: number }>(
-    "ls [arguments..]",
-    "List request-command arguments",
-    lsArgs,
-    ls
-  );
+  yargs.command<{
+    arguments: string[];
+    json: boolean;
+    size: number;
+    debug: boolean;
+  }>("ls [arguments..]", "List request-command arguments", lsArgs, ls);
 
 const ls = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
     json: boolean;
     size: number;
+    debug: boolean;
   }>
 ) => {
   const authn = await authenticate();

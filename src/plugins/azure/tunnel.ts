@@ -20,7 +20,6 @@ import { AzureSshRequest } from "./types";
 import { spawn } from "node:child_process";
 
 const TUNNEL_READY_STRING = "Tunnel is ready";
-const SPAWN_TUNNEL_TRIES = 3;
 
 // Ignore these debug messages from the tunnel process; they are far too noisy and spam the terminal with useless info
 // anytime the SSH/SCP session has network activity.
@@ -205,10 +204,7 @@ export const trySpawnBastionTunnel = async (
   // Attempt to spawn the tunnel SPAWN_TUNNEL_TRIES times, picking a new port each time. If we fail
   // too many times, then the problem is likely not the port, but something else.
 
-  return await retryWithSleep(
-    () => spawnBastionTunnelInBackground(request, selectRandomPort(), options),
-    () => true,
-    SPAWN_TUNNEL_TRIES,
-    1000
+  return await retryWithSleep(() =>
+    spawnBastionTunnelInBackground(request, selectRandomPort(), options)
   );
 };

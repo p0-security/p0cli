@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { p0VersionInfo } from "../version";
 import { getTenantConfig } from "./config";
@@ -16,7 +17,16 @@ import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
 
-const DEFAULT_PERMISSION_REQUEST_TIMEOUT = 300e3; // 5 minutes
+// We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
+// for a total of 121s wait time over 8 retries (ignoring jitter)
+const RETRY_OPTIONS = {
+  shouldRetry: (error: unknown) =>
+    error === "HTTP Error: 429 Too Many Requests",
+  retries: 8,
+  delayMs: 1_000,
+  multiplier: 2.0,
+  maxDelayMs: 30_000,
+};
 
 const tenantOrgUrl = (tenant: string) =>
   `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
@@ -35,29 +45,22 @@ export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 export const fetchOrgData = async <T>(orgId: string) =>
   baseFetch<T>({ url: tenantOrgUrl(orgId), method: "GET" });
 
-export const fetchAccountInfo = async <T>(authn: Authn) =>
+export const fetchAccountInfo = async <T>(authn: Authn, debug?: boolean) =>
   authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/account`,
     method: "GET",
-  });
-
-export const fetchPermissionRequestDetails = async <T>(
-  authn: Authn,
-  requestId: string
-) =>
-  authFetch<T>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/permission-requests/${requestId}`,
-    method: "GET",
-    maxTimeoutMs: DEFAULT_PERMISSION_REQUEST_TIMEOUT,
+    debug,
   });
 
 export const fetchIntegrationConfig = async <T>(
   authn: Authn,
-  integration: string
+  integration: string,
+  debug?: boolean
 ) =>
   authFetch<T>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/integrations/${integration}/config`,
     method: "GET",
+    debug,
   });
 
 export const fetchStreamingCommand = async function* <T>(
@@ -83,7 +86,7 @@ export const fetchStreamingCommand = async function* <T>(
 
 export const fetchCommand = async <T>(
   authn: Authn,
-  args: yargs.ArgumentsCamelCase,
+  args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
 ) =>
   authFetch<T>(authn, {
@@ -93,12 +96,13 @@ export const fetchCommand = async <T>(
       argv,
       scriptName: path.basename(args.$0),
     }),
+    debug: args.debug,
   });
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
 export const fetchAdminLsCommand = async <T>(
   authn: Authn,
-  args: yargs.ArgumentsCamelCase,
+  args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
 ) =>
   authFetch<T>(authn, {
@@ -108,11 +112,13 @@ export const fetchAdminLsCommand = async <T>(
       argv,
       scriptName: path.basename(args.$0),
     }),
+    debug: args.debug,
   });
 
 export const submitPublicKey = async <T>(
   authn: Authn,
-  args: { publicKey: string; requestId: string }
+  args: { publicKey: string; requestId: string },
+  debug?: boolean
 ) =>
   authFetch<T>(authn, {
     url: publicKeysUrl(authn.identity.org.slug),
@@ -121,6 +127,7 @@ export const submitPublicKey = async <T>(
       requestId: args.requestId,
       publicKey: args.publicKey,
     }),
+    debug,
   });
 
 export const certificateSigningRequest = async (
@@ -159,7 +166,8 @@ export const fetchWithStreaming = async function* <T>(
     body,
     keepalive: true,
   };
-  try {
+
+  const attemptFetch = async function* () {
     const response = await fetch(
       url,
       maxTimeoutMs
@@ -203,7 +211,7 @@ export const fetchWithStreaming = async function* <T>(
       // Decode this chunk and append to buffer. {stream:true} preserves
       // multi-byte code points that might be split across chunks.
       buffer += decoder.decode(value, { stream: true });
-      if (debug) print2(`\n[API:stream]Processing buffer: ${buffer}`);
+      if (debug) print2(`\n[API:stream] Processing buffer: ${buffer}`);
       // Split on both Unix and Windows newlines; keep the last (possibly partial) piece in buffer.
       const parts = buffer.split(/\r?\n/);
       buffer = parts.pop() ?? "";
@@ -220,23 +228,21 @@ export const fetchWithStreaming = async function* <T>(
       // this should not happen in most scenarios except errors
       if (debug) {
         print2(
-          "[API:stream]Remaining data received from the server but not processed due to the lack of new-line: " +
+          "[API:stream] Remaining data received from the server but not processed due to the lack of new-line: " +
             buffer
         );
       }
       // there is a chance that the server could have errored with a non-streaming response
-      // we hit a errorBoundary in the backend and we received a valid json without a new-line delimiter at the end
+      // - we hit an errorBoundary in the backend and we received a valid json without a new-line delimiter at the end
+      // - or the load balancer in front of the backend errored out and returned a html error page
       try {
         if (debug) {
           print2(
-            "[API:stream]Trying to parse to validate json completeness: " +
+            "[API:stream] Trying to parse to validate json completeness: " +
               buffer
           );
         }
-        const response = JSON.parse(buffer);
-        if ("error" in response) {
-          throw response.error;
-        }
+        handleResponse(response, buffer);
       } catch (err) {
         // If this is a json parse error then we have received a partial response
         // we could throw an error saying incomplete response from the server
@@ -245,7 +251,7 @@ export const fetchWithStreaming = async function* <T>(
           // log the error in debug logs
           if (debug) {
             print2(
-              "[API:stream]Failed to parse JSON from server response: " +
+              "[API:stream] Failed to parse JSON from server response: " +
                 String(err)
             );
           }
@@ -255,11 +261,21 @@ export const fetchWithStreaming = async function* <T>(
         }
       }
     }
+  };
+
+  try {
+    yield* regenerateWithSleep(() => attemptFetch(), {
+      ...RETRY_OPTIONS,
+      debug,
+    });
   } catch (error) {
     if (
       error instanceof TypeError &&
       (error.message === "fetch failed" || error.message === "terminated")
     ) {
+      if (debug) {
+        print2("Network error: " + String(error));
+      }
       throw `Network error: Unable to reach the server.`;
     } else {
       throw error;
@@ -309,6 +325,7 @@ const baseFetch = async <T>(args: {
   body?: string;
   headers?: Record<string, string>;
   maxTimeoutMs?: number;
+  debug?: boolean;
 }) => {
   const { version } = p0VersionInfo;
   const { url, method, body, maxTimeoutMs, headers } = args;
@@ -324,18 +341,17 @@ const baseFetch = async <T>(args: {
     ...(maxTimeoutMs ? { signal: AbortSignal.timeout(maxTimeoutMs) } : {}),
   };
 
-  try {
+  const attemptFetch = async () => {
     const response = await fetch(url, fetchOptions);
     const text = await response.text();
-    const errorMessage = tryParseHtmlError(text);
-    if (errorMessage) {
-      throw errorMessage;
-    }
-    const data = JSON.parse(text);
-    if ("error" in data) {
-      throw data.error;
-    }
-    return data as T;
+    return handleResponse(response, text) as T;
+  };
+
+  try {
+    return await retryWithSleep(() => attemptFetch(), {
+      ...RETRY_OPTIONS,
+      debug: args.debug,
+    });
   } catch (error) {
     if (error instanceof TypeError && error.message === "fetch failed") {
       throw `Network error: Unable to reach the server at ${url}.`;
@@ -352,6 +368,7 @@ const authFetch = async <T>(
     method: string;
     body?: string;
     maxTimeoutMs?: number;
+    debug?: boolean;
   }
 ) => {
   const token = await authn.getToken();
@@ -364,21 +381,13 @@ const authFetch = async <T>(
   });
 };
 
-/** Check if text contains an error code in the html title by looking for 3-digit http codes.
- *
- * Example text:
- * <!doctype html><meta charset="utf-8"><meta name=viewport content="width=device-width, initial-scale=1"><title>429</title>429 Too Many Requests
- */
-const tryParseHtmlError = (text: string) => {
-  const match = text.match(/<title>(\d{3})<\/title>/);
-  if (!match) {
-    return undefined;
+const handleResponse = (response: Response, responseText: string) => {
+  if ("ok" in response && !response.ok) {
+    throw `HTTP Error: ${response.status} ${response.statusText}`;
   }
-  const statusCode = match[1];
-  const statusText = text
-    // Remove the title tag
-    .replace(/<title>(\d{3})<\/title>/g, "")
-    // Remove meta HTML tags
-    .replace(/<[^>]+>/g, "");
-  return `${statusText}: (HTTP status ${statusCode})`;
+  const data = JSON.parse(responseText);
+  if ("error" in data) {
+    throw data.error;
+  }
+  return data;
 };
