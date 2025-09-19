@@ -96,7 +96,7 @@ export const gcpSshProvider: SshProvider<
   },
 
   proxyCommand: (request, port) => {
-    return gcloudCommandArgs([
+    const { command, args } = gcloudCommandArgs([
       "compute",
       "start-iap-tunnel",
       request.id,
@@ -109,6 +109,7 @@ export const gcpSshProvider: SshProvider<
       `--zone=${request.zone}`,
       `--project=${request.projectId}`,
     ]);
+    return [command, ...args];
   },
 
   reproCommands: () => undefined,
