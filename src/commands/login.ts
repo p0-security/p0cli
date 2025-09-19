@@ -110,7 +110,7 @@ export const login = async (
 
   if (!options?.skipAuthenticate) {
     const authn = await authenticate({ debug: options?.debug });
-    await validateTenantAccess(authn);
+    await validateTenantAccess(authn, options?.debug);
   }
 
   if (!loggedIn) {
@@ -149,9 +149,9 @@ export const loginCommand = (yargs: yargs.Argv) =>
     ) => login(args, args)
   );
 
-const validateTenantAccess = async (authn: Authn) => {
+const validateTenantAccess = async (authn: Authn, debug?: boolean) => {
   try {
-    await fetchAccountInfo(authn);
+    await fetchAccountInfo(authn, debug);
     return true;
   } catch (e) {
     await deleteIdentity();

@@ -59,10 +59,14 @@ const oktaAwsAssumeRole = async (
 
   await provisionRequest(requestCommand, authn);
 
-  const awsCredential = await assumeRoleWithOktaSaml(authn, {
-    accountId: argv.account,
-    role: argv.role,
-  });
+  const awsCredential = await assumeRoleWithOktaSaml(
+    authn,
+    {
+      accountId: argv.account,
+      role: argv.role,
+    },
+    argv.debug
+  );
 
   const command = `p0 aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role}`;
   printAwsCredentials(awsCredential, command);

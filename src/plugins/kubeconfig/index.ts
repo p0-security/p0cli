@@ -29,7 +29,8 @@ const KUBECONFIG_PREFIX = "p0";
 
 export const getAndValidateK8sIntegration = async (
   authn: Authn,
-  clusterId: string
+  clusterId: string,
+  debug?: boolean
 ): Promise<{
   clusterConfig: {
     clusterId: string;
@@ -40,7 +41,8 @@ export const getAndValidateK8sIntegration = async (
 }> => {
   const configDoc = await fetchIntegrationConfig<{ config: K8sConfig }>(
     authn,
-    "k8s"
+    "k8s",
+    debug
   );
 
   // Validation done here in lieu of the backend, since the backend doesn't validate until approval. TODO: ENG-2365.
@@ -64,7 +66,7 @@ export const getAndValidateK8sIntegration = async (
 
   const { arn: awsClusterArn } = hosting;
   const { accountId: awsAccountId } = parseArn(awsClusterArn);
-  const { config: awsConfig } = await getAwsConfig(authn, awsAccountId);
+  const { config: awsConfig } = await getAwsConfig(authn, awsAccountId, debug);
   const { login: awsLogin } = awsConfig;
 
   // Verify that the AWS auth type is supported before issuing the requests
@@ -129,7 +131,8 @@ export const awsCloudAuth = async (
   authn: Authn,
   awsAccountId: string,
   request: PermissionRequest<K8sPermissionSpec>,
-  loginType: "federated" | "idc"
+  loginType: "federated" | "idc",
+  debug?: boolean
 ): Promise<AwsCredentials> => {
   const { permission, generated } = request;
   const { eksGenerated } = generated;
@@ -150,10 +153,14 @@ export const awsCloudAuth = async (
       });
     }
     case "federated":
-      return await assumeRoleWithOktaSaml(authn, {
-        accountId: awsAccountId,
-        role: name,
-      });
+      return await assumeRoleWithOktaSaml(
+        authn,
+        {
+          accountId: awsAccountId,
+          role: name,
+        },
+        debug
+      );
     default:
       throw assertNever(loginType);
   }

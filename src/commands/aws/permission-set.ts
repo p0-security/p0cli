@@ -43,7 +43,7 @@ const oktaAwsAssumePermissionSet = async (
   authn: Authn
 ) => {
   const { account, permissionSet } = argv;
-  const { config } = await getAwsConfig(authn, account);
+  const { config } = await getAwsConfig(authn, account, argv.debug);
 
   if (config.login?.type !== "idc") {
     throw new Error(

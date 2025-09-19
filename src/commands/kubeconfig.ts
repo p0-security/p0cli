@@ -31,6 +31,7 @@ export type KubeconfigCommandArgs = {
   resource?: string;
   reason?: string;
   requestedDuration?: string;
+  debug?: boolean;
 };
 
 // The P0 backend must be updated if this CLI command changes!
@@ -66,6 +67,10 @@ export const kubeconfigCommand = (yargs: yargs.Argv) =>
           // Copied from the P0 backend
           describe:
             "Requested duration for access (format like '10 minutes', '2 hours', '5 days', or '1 week')",
+        })
+        .option("debug", {
+          type: "boolean",
+          describe: "Print debug information.",
         }),
     kubeconfigAction
   );
@@ -83,7 +88,8 @@ const kubeconfigAction = async (
 
   const { clusterConfig, awsLoginType } = await getAndValidateK8sIntegration(
     authn,
-    args.cluster
+    args.cluster,
+    args.debug
   );
   const { clusterId, awsAccountId, awsClusterArn } = clusterConfig;
 
@@ -98,7 +104,8 @@ const kubeconfigAction = async (
     authn,
     awsAccountId,
     request,
-    awsLoginType
+    awsLoginType,
+    args.debug
   );
 
   const profile = profileName(clusterId);
@@ -137,22 +144,24 @@ const kubeconfigAction = async (
       "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
       retryWithSleep(
         async () => await exec("aws", updateKubeconfigArgs, { check: true }),
-        (error: any) => {
-          if (error?.stderr) {
-            if (
-              error.stderr.includes("Unknown options") ||
-              error.stderr.includes("--user-alias")
-            ) {
-              print2(
-                "\nThe AWS CLI version is not compatible with the p0 kubeconfig command. Please update to at least version 2.11.6."
-              );
-              return false; // Stop retrying if the CLI version is incompatible
+        {
+          shouldRetry: (error: any) => {
+            if (error?.stderr) {
+              if (
+                error.stderr.includes("Unknown options") ||
+                error.stderr.includes("--user-alias")
+              ) {
+                print2(
+                  "\nThe AWS CLI version is not compatible with the p0 kubeconfig command. Please update to at least version 2.11.6."
+                );
+                return false; // Stop retrying if the CLI version is incompatible
+              }
             }
-          }
-          return true;
-        },
-        8,
-        2500
+            return true;
+          },
+          retries: 8,
+          delayMs: 2500,
+        }
       )
     );
     print2(awsResult.stdout);
