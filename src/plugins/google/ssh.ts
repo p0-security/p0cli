@@ -14,6 +14,7 @@ import { SshProvider } from "../../types/ssh";
 import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
+import { gcloudCommandArgs } from "./util";
 
 // It typically takes < 1 minute for access to propagate on GCP, so set the time limit to 2 minutes.
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
@@ -95,8 +96,7 @@ export const gcpSshProvider: SshProvider<
   },
 
   proxyCommand: (request, port) => {
-    return [
-      "gcloud",
+    const { command, args } = gcloudCommandArgs([
       "compute",
       "start-iap-tunnel",
       request.id,
@@ -108,7 +108,8 @@ export const gcpSshProvider: SshProvider<
       "--listen-on-stdin",
       `--zone=${request.zone}`,
       `--project=${request.projectId}`,
-    ];
+    ]);
+    return [command, ...args];
   },
 
   reproCommands: () => undefined,
