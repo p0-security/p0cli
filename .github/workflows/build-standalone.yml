@@ -190,8 +190,14 @@ jobs:
           cp $HOME/fips-node/openssl/lib/libssl.3.dylib build/sea/root/usr/local/lib/p0/
           cp $HOME/fips-node/openssl/lib/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/
           cp -r $HOME/fips-node/openssl/lib/ossl-modules build/sea/root/usr/local/lib/p0/
-          cp $HOME/fips-node/openssl/fipsmodule.cnf build/sea/root/usr/local/lib/p0/
-          cp $HOME/fips-node/openssl/openssl.cnf build/sea/root/usr/local/lib/p0/
+
+          # Create updated FIPS configuration files with correct bundled paths
+          
+          # Update fipsmodule.cnf to point to bundled FIPS module
+          sed 's|module = .*/fips\.dylib|module = /usr/local/lib/p0/ossl-modules/fips.dylib|g' $HOME/fips-node/openssl/fipsmodule.cnf > build/sea/root/usr/local/lib/p0/fipsmodule.cnf
+
+          # Update openssl.cnf to reference the bundled fipsmodule.cnf
+          sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf
 
           # Update binary to look for libraries in the bundled location
           install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @executable_path/../lib/p0/libssl.3.dylib build/sea/root/usr/local/bin/p0
