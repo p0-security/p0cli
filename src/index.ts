@@ -30,9 +30,10 @@ if (isSea()) {
 
     try {
       // Enable FIPS mode
-      crypto.setFips(1);
-    } catch (error) {
-      console.error("Error: Failed to enable FIPS mode:", error.message);
+      crypto.setFips(true);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Error: Failed to enable FIPS mode:", message);
       console.error("FIPS mode is required for this application.");
       process.exit(1);
     }
