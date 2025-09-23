@@ -30,7 +30,18 @@ export const asyncSpawn = async (
   writeStdin?: string
 ) =>
   new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, options);
+    // Create clean environment for child processes, excluding FIPS OpenSSL config
+    // to prevent external tools (like gcloud) from being affected by our FIPS setup
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.OPENSSL_CONF;
+    delete cleanEnv.OPENSSL_MODULES;
+
+    const spawnOptions = {
+      ...options,
+      env: options?.env || cleanEnv,
+    };
+
+    const child = spawn(command, args, spawnOptions);
 
     child.on("error", (error: Error) => {
       if (debug) {

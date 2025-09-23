@@ -19,8 +19,6 @@ import { loadConfig } from "./drivers/config";
 import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
-import * as crypto from "crypto";
-import { print2 } from "./drivers/stdio";
 
 // Set up FIPS configuration when running as Single Executable Application
 if (isSea()) {
