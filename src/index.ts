@@ -22,23 +22,11 @@ import { noop } from "lodash";
 import * as crypto from "crypto";
 import { print2 } from "./drivers/stdio";
 
-// Enable FIPS mode when running as Single Executable Application
+// Set up FIPS configuration when running as Single Executable Application
 if (isSea()) {
-  if (!crypto.getFips()) {
-    // Set OpenSSL environment variables for bundled FIPS configuration
-    process.env.OPENSSL_CONF = "/usr/local/lib/p0/openssl.cnf";
-    process.env.OPENSSL_MODULES = "/usr/local/lib/p0/ossl-modules";
-
-    try {
-      // Enable FIPS mode
-      crypto.setFips(true);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      print2(`Error: Failed to enable FIPS mode: ${message}`);
-      print2(`FIPS mode is required for this application.`);
-      process.exit(1);
-    }
-  }
+  // Set OpenSSL environment variables for bundled FIPS configuration
+  process.env.OPENSSL_CONF = "/usr/local/lib/p0/openssl.cnf";
+  process.env.OPENSSL_MODULES = "/usr/local/lib/p0/ossl-modules";
 }
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
