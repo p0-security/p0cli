@@ -10,8 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print1, print2 } from "../drivers/stdio";
 import { isa } from "../types";
+import { spawnWithCleanEnv } from "../util";
 import { compact } from "lodash";
-import { spawn } from "node:child_process";
 import os from "node:os";
 import { sys } from "typescript";
 import which from "which";
@@ -124,7 +124,9 @@ export const guidedInstall = async <
   print2("");
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("bash", ["-c", combined], { stdio: "inherit" });
+    const child = spawnWithCleanEnv("bash", ["-c", combined], {
+      stdio: "inherit",
+    });
     child.on("exit", (code) => {
       if (code === 0) resolve();
       else reject(`Shell exited with code ${code}`);

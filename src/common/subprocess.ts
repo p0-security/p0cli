@@ -9,7 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../drivers/stdio";
-import { spawn, SpawnOptionsWithoutStdio } from "node:child_process";
+import { spawnWithCleanEnv } from "../util";
+import { SpawnOptionsWithoutStdio } from "node:child_process";
 
 export type SubprocessArgs = {
   debug?: boolean;
@@ -30,18 +31,7 @@ export const asyncSpawn = async (
   writeStdin?: string
 ) =>
   new Promise<string>((resolve, reject) => {
-    // Create clean environment for child processes, excluding FIPS OpenSSL config
-    // to prevent external tools (like gcloud) from being affected by our FIPS setup
-    const cleanEnv = { ...process.env };
-    delete cleanEnv.OPENSSL_CONF;
-    delete cleanEnv.OPENSSL_MODULES;
-
-    const spawnOptions = {
-      ...options,
-      env: options?.env || cleanEnv,
-    };
-
-    const child = spawn(command, args, spawnOptions);
+    const child = spawnWithCleanEnv(command, args, options);
 
     child.on("error", (error: Error) => {
       if (debug) {

@@ -27,7 +27,7 @@ import {
   SshRequest,
   SupportedSshProvider,
 } from "../../types/ssh";
-import { delay } from "../../util";
+import { delay, createCleanChildEnv } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
   ChildProcessByStdio,
@@ -172,7 +172,7 @@ async function spawnSshNode(
 
     const child = spawn(options.command, options.args, {
       env: {
-        ...process.env,
+        ...createCleanChildEnv(),
         ...options.credential,
       },
       stdio: options.stdio,
