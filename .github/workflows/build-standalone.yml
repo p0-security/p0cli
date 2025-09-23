@@ -94,11 +94,9 @@ jobs:
 
             [openssl_init]
             providers = provider_sect
-            alg_section = algorithm_sect
 
             [nodejs_init]
             providers = provider_sect
-            alg_section = algorithm_sect
 
             [provider_sect]
             fips = fips_sect
@@ -107,8 +105,8 @@ jobs:
             [base_sect]
             activate = 1
 
-            [algorithm_sect]
-            default_properties = fips=yes
+            [fips_sect]
+            activate = 1
           EOF
           echo "==========================="
       - name: Build FIPS-compliant Node.js
