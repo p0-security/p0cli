@@ -192,10 +192,11 @@ jobs:
 
           # Create updated FIPS configuration files with correct bundled paths
 
-          # Update fipsmodule.cnf to point to bundled FIPS module
-          sed -e 's|module = .*/fips\.dylib|module = /usr/local/lib/p0/ossl-modules/fips.dylib|g' \
-              -e 's|moduledir = .*/ossl-modules|moduledir = /usr/local/lib/p0/ossl-modules|g' \
-              $HOME/fips-node/openssl/fipsmodule.cnf > build/sea/root/usr/local/lib/p0/fipsmodule.cnf
+          # Regenerate fipsmodule.cnf for the bundled FIPS module location
+          # This ensures the self-test checksums are correct for the final location
+          $HOME/fips-node/openssl/bin/openssl fipsinstall \
+            -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
+            -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
 
           # Update openssl.cnf to reference the bundled fipsmodule.cnf
           sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf

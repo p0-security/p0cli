@@ -20,6 +20,7 @@ import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
 import crypto from "node:crypto";
+import { print2 } from "./drivers/stdio";
 
 // Set up FIPS configuration when running as Single Executable Application
 if (isSea()) {
@@ -30,12 +31,15 @@ if (isSea()) {
   // Enable FIPS mode and verify it's working
   try {
     crypto.setFips(true);
-    if (!crypto.getFips()) {
+    const fipsEnabled = crypto.getFips();
+    print2(`FIPS mode enabled: ${fipsEnabled}`);
+    if (!fipsEnabled) {
       throw new Error("FIPS mode failed to enable");
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to enable FIPS mode: ${errorMessage}`);
+    print2(`Failed to enable FIPS mode: ${errorMessage}`);
+    process.exit(1);
   }
 }
 
