@@ -32,9 +32,9 @@ if (isSea()) {
   try {
     crypto.setFips(true);
     const fipsEnabled = crypto.getFips();
-    print2(`FIPS mode enabled: ${fipsEnabled}`);
     if (!fipsEnabled) {
-      throw new Error("FIPS mode failed to enable");
+      print2(`Failed to enable FIPS mode`);
+      process.exit(1);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
