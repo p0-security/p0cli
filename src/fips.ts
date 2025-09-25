@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
+import https from "node:https";
 import tls from "node:tls";
 
 /**
@@ -39,24 +40,37 @@ const enableFipsMode = () => {
 };
 
 /**
- * Configure TLS for FIPS compliance - restrict to TLS 1.2 with FIPS-approved cipher suites
- * Disable TLS 1.3 to avoid ChaCha20-Poly1305 and X25519 which may not be FIPS-approved
+ * Create a FIPS-compliant HTTPS agent that forces TLS 1.2 and FIPS-approved algorithms
+ */
+const createFipsAgent = () => {
+  return new https.Agent({
+    minVersion: "TLSv1.2",
+    maxVersion: "TLSv1.2",
+    // Only FIPS-approved cipher suites
+    ciphers: [
+      "ECDHE-RSA-AES256-GCM-SHA384",
+      "ECDHE-RSA-AES128-GCM-SHA256",
+      "ECDHE-ECDSA-AES256-GCM-SHA384",
+      "ECDHE-ECDSA-AES128-GCM-SHA256",
+      "AES256-GCM-SHA384",
+      "AES128-GCM-SHA256",
+    ].join(":"),
+    honorCipherOrder: true,
+    // Only FIPS-approved elliptic curves (P-256, P-384)
+    ecdhCurve: "prime256v1:secp384r1",
+    // Force disable TLS 1.3 at the socket level
+    secureOptions: crypto.constants.SSL_OP_NO_TLSv1_3,
+  });
+};
+
+/**
+ * Configure TLS for FIPS compliance by setting global HTTPS agent
  */
 const configureFipsTls = () => {
-  tls.DEFAULT_MAX_VERSION = "TLSv1.2";
-  tls.DEFAULT_MIN_VERSION = "TLSv1.2";
-  tls.DEFAULT_CIPHERS = [
-    "ECDHE-RSA-AES256-GCM-SHA384",
-    "ECDHE-RSA-AES128-GCM-SHA256",
-    "ECDHE-ECDSA-AES256-GCM-SHA384",
-    "ECDHE-ECDSA-AES128-GCM-SHA256",
-    "AES256-GCM-SHA384",
-    "AES128-GCM-SHA256",
-  ].join(":");
+  const fipsAgent = createFipsAgent();
 
-  // Restrict elliptic curves to FIPS-approved ones only (P-256, P-384)
-  // This prevents the client from offering X25519 during handshake
-  tls.DEFAULT_ECDH_CURVE = "prime256v1:secp384r1";
+  // Set the global HTTPS agent - this affects all HTTPS requests including fetch()
+  https.globalAgent = fipsAgent;
 };
 
 /**
