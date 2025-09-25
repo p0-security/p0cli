@@ -11,7 +11,26 @@ You should have received a copy of the GNU General Public License along with @p0
 import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
 import https from "node:https";
-import tls from "node:tls";
+import { setGlobalDispatcher, Agent } from "undici";
+
+/**
+ * FIPS-approved TLS configuration shared by both HTTPS and Undici agents
+ */
+const FIPS_TLS_CONFIG = {
+  minVersion: "TLSv1.2" as const,
+  maxVersion: "TLSv1.2" as const,
+  ciphers: [
+    "ECDHE-RSA-AES256-GCM-SHA384",
+    "ECDHE-RSA-AES128-GCM-SHA256",
+    "ECDHE-ECDSA-AES256-GCM-SHA384",
+    "ECDHE-ECDSA-AES128-GCM-SHA256",
+    "AES256-GCM-SHA384",
+    "AES128-GCM-SHA256",
+  ].join(":"),
+  honorCipherOrder: true,
+  ecdhCurve: "prime256v1:secp384r1",
+  secureOptions: crypto.constants.SSL_OP_NO_TLSv1_3,
+} as const;
 
 /**
  * Configure OpenSSL environment variables for bundled FIPS configuration
@@ -40,37 +59,16 @@ const enableFipsMode = () => {
 };
 
 /**
- * Create a FIPS-compliant HTTPS agent that forces TLS 1.2 and FIPS-approved algorithms
- */
-const createFipsAgent = () => {
-  return new https.Agent({
-    minVersion: "TLSv1.2",
-    maxVersion: "TLSv1.2",
-    // Only FIPS-approved cipher suites
-    ciphers: [
-      "ECDHE-RSA-AES256-GCM-SHA384",
-      "ECDHE-RSA-AES128-GCM-SHA256",
-      "ECDHE-ECDSA-AES256-GCM-SHA384",
-      "ECDHE-ECDSA-AES128-GCM-SHA256",
-      "AES256-GCM-SHA384",
-      "AES128-GCM-SHA256",
-    ].join(":"),
-    honorCipherOrder: true,
-    // Only FIPS-approved elliptic curves (P-256, P-384)
-    ecdhCurve: "prime256v1:secp384r1",
-    // Force disable TLS 1.3 at the socket level
-    secureOptions: crypto.constants.SSL_OP_NO_TLSv1_3,
-  });
-};
-
-/**
- * Configure TLS for FIPS compliance by setting global HTTPS agent
+ * Configure TLS for FIPS compliance using Undici dispatcher and HTTPS agent
  */
 const configureFipsTls = () => {
-  const fipsAgent = createFipsAgent();
+  // Create FIPS-compliant Undici agent and set as global dispatcher for fetch() calls
+  const undiciAgent = new Agent({ connect: FIPS_TLS_CONFIG });
+  setGlobalDispatcher(undiciAgent);
 
-  // Set the global HTTPS agent - this affects all HTTPS requests including fetch()
-  https.globalAgent = fipsAgent;
+  // Create FIPS-compliant HTTPS agent for traditional https.request() calls
+  const httpsAgent = new https.Agent(FIPS_TLS_CONFIG);
+  https.globalAgent = httpsAgent;
 };
 
 /**
