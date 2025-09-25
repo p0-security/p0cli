@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
 import https from "node:https";
-import { setGlobalDispatcher, Agent } from "undici";
+import { setGlobalDispatcher, Agent, buildConnector } from "undici";
 
 /**
  * FIPS-approved TLS configuration shared by both HTTPS and Undici agents
@@ -62,8 +62,12 @@ const enableFipsMode = () => {
  * Configure TLS for FIPS compliance using Undici dispatcher and HTTPS agent
  */
 const configureFipsTls = () => {
-  // Create FIPS-compliant Undici agent and set as global dispatcher for fetch() calls
-  const undiciAgent = new Agent({ connect: FIPS_TLS_CONFIG });
+  // Create FIPS-compliant Undici connector and agent for fetch() calls
+  const connector = buildConnector({
+    // @ts-expect-error - `tls` is valid at runtime in Undici 6.21.x
+    tls: FIPS_TLS_CONFIG,
+  });
+  const undiciAgent = new Agent({ connect: connector });
   setGlobalDispatcher(undiciAgent);
 
   // Create FIPS-compliant HTTPS agent for traditional https.request() calls
