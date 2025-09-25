@@ -19,28 +19,11 @@ import { loadConfig } from "./drivers/config";
 import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
-import crypto from "node:crypto";
-import { print2 } from "./drivers/stdio";
+import { initializeFips } from "./fips";
 
 // Set up FIPS configuration when running as Single Executable Application
 if (isSea()) {
-  // Set OpenSSL environment variables for bundled FIPS configuration
-  process.env.OPENSSL_CONF = "/usr/local/lib/p0/openssl.cnf";
-  process.env.OPENSSL_MODULES = "/usr/local/lib/p0/ossl-modules";
-
-  // Enable FIPS mode and verify it's working
-  try {
-    crypto.setFips(true);
-    const fipsEnabled = crypto.getFips();
-    if (!fipsEnabled) {
-      print2(`Failed to enable FIPS mode`);
-      process.exit(1);
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    print2(`Failed to enable FIPS mode: ${errorMessage}`);
-    process.exit(1);
-  }
+  initializeFips();
 }
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
