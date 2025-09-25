@@ -53,6 +53,10 @@ const configureFipsTls = () => {
     "AES256-GCM-SHA384",
     "AES128-GCM-SHA256",
   ].join(":");
+
+  // Restrict elliptic curves to FIPS-approved ones only (P-256, P-384)
+  // This prevents the client from offering X25519 during handshake
+  tls.DEFAULT_ECDH_CURVE = "prime256v1:secp384r1";
 };
 
 /**
