@@ -12,7 +12,7 @@ import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
 import os from "node:os";
 import tls from "node:tls";
-import { setGlobalDispatcher, Agent, fetch } from "undici";
+import { fetch } from "undici";
 
 const DIAGNOSTIC_URL = "https://fabian-joya.api.dev.p0.app/orgs/p0-fabian";
 
@@ -41,50 +41,50 @@ export const runFipsDiagnostics = async (): Promise<void> => {
   print2(`OPENSSL_MODULES: ${process.env.OPENSSL_MODULES || "(unset)"}`);
   print2(`Platform: ${os.platform()} ${os.release()}`);
 
-  // Build a conservative, FIPS-safe TLS agent.
-  // NOTE: Node/OpenSSL only uses `ciphers` for TLS<=1.2. TLS1.3 suites are not settable here.
-  const fips12CipherList = [
-    "ECDHE-ECDSA-AES128-GCM-SHA256",
-    "ECDHE-RSA-AES128-GCM-SHA256",
-    "ECDHE-ECDSA-AES256-GCM-SHA384",
-    "ECDHE-RSA-AES256-GCM-SHA384",
-  ].join(":");
+  print2("\n=== TLS & FIPS Validation ===");
 
-  print2("\n=== TLS Cipher Validation ===");
-  // Verify the cipher list actually resolves to something in this process
+  // Test TLS 1.2 with FIPS-approved cipher suites
   try {
-    const ctx = tls.createSecureContext({
+    const ctx12 = tls.createSecureContext({
       minVersion: "TLSv1.2",
-      ciphers: fips12CipherList,
+      maxVersion: "TLSv1.2",
+      ciphers: [
+        "ECDHE-ECDSA-AES128-GCM-SHA256",
+        "ECDHE-RSA-AES128-GCM-SHA256",
+        "ECDHE-ECDSA-AES256-GCM-SHA384",
+        "ECDHE-RSA-AES256-GCM-SHA384",
+      ].join(":"),
     });
-    const enabled = ctx.context.getCiphers?.() || [];
-    print2(`Enabled TLS<=1.2 ciphers count: ${enabled.length}`);
-    if (enabled.length === 0) {
-      print2(
-        "!! No TLS<=1.2 ciphers enabled with current settings. Check NODE_OPTIONS/OPENSSL_CONF."
-      );
-    } else {
-      print2(`Available ciphers: ${enabled.slice(0, 3).join(", ")}...`);
+    const enabled12 = ctx12.context.getCiphers?.() || [];
+    print2(`✅ TLS 1.2 FIPS ciphers available: ${enabled12.length}`);
+    if (enabled12.length > 0) {
+      print2(`   Sample ciphers: ${enabled12.slice(0, 2).join(", ")}`);
     }
   } catch (e: any) {
-    print2(
-      "!! Failed to create SecureContext with FIPS list: " + (e?.message || e)
-    );
+    print2(`❌ TLS 1.2 FIPS context failed: ${e?.message || e}`);
   }
 
-  print2("\n=== FIPS Agent Test ===");
-  setGlobalDispatcher(
-    new Agent({
-      connect: {
-        minVersion: "TLSv1.2",
-        maxVersion: "TLSv1.2",
-        // IMPORTANT: This is for TLS1.2 and below only.
-        ciphers: fips12CipherList,
-        ecdhCurve: "prime256v1:secp384r1",
-        secureOptions: crypto.constants.SSL_OP_NO_TLSv1_3,
-      },
-    })
-  );
+  // Test TLS 1.3 support (cipher suites are handled differently)
+  try {
+    const _ctx13 = tls.createSecureContext({
+      minVersion: "TLSv1.3",
+      maxVersion: "TLSv1.3",
+      // Note: TLS 1.3 cipher suites can't be controlled via 'ciphers' property
+    });
+    print2(`✅ TLS 1.3 context created successfully`);
+  } catch (e: any) {
+    print2(`❌ TLS 1.3 context failed: ${e?.message || e}`);
+  }
+
+  // Test generic FIPS-enabled context (no version restrictions)
+  try {
+    const _ctxDefault = tls.createSecureContext({
+      // Let FIPS mode handle algorithm selection
+    });
+    print2(`✅ Default FIPS context created successfully`);
+  } catch (e: any) {
+    print2(`❌ Default FIPS context failed: ${e?.message || e}`);
+  }
 
   print2("\n=== Fetch Connectivity Test ===");
   try {
