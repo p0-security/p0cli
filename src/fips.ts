@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "./drivers/stdio";
-import { runFipsDiagnostics } from "./fips-diagnose";
+import { probeTlsSupport } from "./probe-tls";
 import crypto from "node:crypto";
 import https from "node:https";
 import { setGlobalDispatcher, Agent, buildConnector } from "undici";
@@ -62,7 +62,7 @@ const enableFipsMode = () => {
 /**
  * Configure TLS for FIPS compliance using Undici dispatcher and HTTPS agent
  */
-const configureFipsTls = () => {
+const _configureFipsTls = () => {
   // Create FIPS-compliant Undici connector and agent for fetch() calls
   const connector = buildConnector({
     // @ts-expect-error - `tls` is valid at runtime in Undici 6.21.x
@@ -83,6 +83,7 @@ const configureFipsTls = () => {
 export const initializeFips = () => {
   setupFipsEnvironment();
   enableFipsMode();
-  runFipsDiagnostics();
-  configureFipsTls();
+  probeTlsSupport();
+  // runFipsDiagnostics();
+  // configureFipsTls();
 };

@@ -33,7 +33,7 @@ export const runFipsDiagnostics = async (): Promise<void> => {
   try {
     print2(`crypto.getFips(): ${crypto.getFips()}`);
   } catch (error) {
-    print2(`crypto.getFips(): Error - ${error}`);
+    print2(`crypto.getFips(): Error - ${String(error)}`);
   }
 
   print2(`NODE_OPTIONS: ${process.env.NODE_OPTIONS || "(unset)"}`);
