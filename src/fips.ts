@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "./drivers/stdio";
+import { runFipsDiagnostics } from "./fips-diagnose";
 import crypto from "node:crypto";
 import https from "node:https";
 import { setGlobalDispatcher, Agent, buildConnector } from "undici";
@@ -82,5 +83,6 @@ const configureFipsTls = () => {
 export const initializeFips = () => {
   setupFipsEnvironment();
   enableFipsMode();
+  runFipsDiagnostics();
   configureFipsTls();
 };
