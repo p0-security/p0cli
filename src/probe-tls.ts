@@ -103,12 +103,3 @@ export function probeTlsSupport(
 
   return info;
 }
-
-// CommonJS-friendly "run if main"
-if (
-  typeof require !== "undefined" &&
-  typeof module !== "undefined" &&
-  require.main === module
-) {
-  probeTlsSupport();
-}
