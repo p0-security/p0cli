@@ -20,10 +20,14 @@ import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
 import { initializeFips } from "./fips";
+import { print2 } from "./drivers/stdio";
 
 // Set up FIPS configuration when running as Single Executable Application
 if (isSea()) {
-  initializeFips();
+  initializeFips().catch((error) => {
+    print2(`Failed to initialize FIPS: ${error}`);
+    process.exit(1);
+  });
 }
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
