@@ -8,11 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "./drivers/stdio";
 import { getFips } from "crypto";
 import * as tls from "tls";
-
-// Let TS know print2 exists in your runtime.
-declare function print2(...args: any[]): void;
 
 export interface TlsProbeInfo {
   node: string;
