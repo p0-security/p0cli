@@ -87,6 +87,12 @@ export const signInToTenant = async (
     throw `Can not sign in: this user has previously signed in with a different identity provider.\n${getContactMessage()}`;
   }
 
+  if (options?.debug) {
+    print2(
+      `Authenticated to Firebase as user ${userCredential.user.email} in tenant ${tenantId}`
+    );
+  }
+
   return userCredential;
 };
 
