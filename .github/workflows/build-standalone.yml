@@ -93,7 +93,7 @@ jobs:
             providers = provider_sect
 
             [provider_sect]
-            fips = fips_sect
+            # fips = fips_sect
             base = base_sect
             default = default_sect
 
@@ -103,8 +103,8 @@ jobs:
             [default_sect]
             activate = 1
 
-            [fips_sect]
-            activate = 1
+            # [fips_sect]
+            # activate = 1
           EOF
           echo "==========================="
       - name: Build FIPS-compliant Node.js

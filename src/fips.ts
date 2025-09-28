@@ -44,7 +44,7 @@ const setupFipsEnvironment = () => {
 /**
  * Enable FIPS mode and verify it's working
  */
-const enableFipsMode = () => {
+const _enableFipsMode = () => {
   try {
     crypto.setFips(true);
     const fipsEnabled = crypto.getFips();
@@ -83,7 +83,7 @@ const _configureFipsTls = () => {
  */
 export const initializeFips = async () => {
   setupFipsEnvironment();
-  enableFipsMode();
+  // enableFipsMode(); // Temporarily disabled for provider testing
   // probeTlsSupport();
   await runFipsDiagnostics();
   // configureFipsTls();
