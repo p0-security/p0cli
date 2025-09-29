@@ -84,7 +84,7 @@ jobs:
             openssl_conf = openssl_init
             nodejs_conf = nodejs_init
 
-            # .include $HOME/fips-node/openssl/fipsmodule.cnf
+            .include $HOME/fips-node/openssl/fipsmodule.cnf
 
             [openssl_init]
             providers = provider_sect
@@ -131,7 +131,7 @@ jobs:
             --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
             --shared-openssl-includes=$HOME/fips-node/openssl/include \
             --shared-openssl-libname=crypto,ssl \
-            # --openssl-is-fips \
+            --openssl-is-fips \
             --prefix=$HOME/fips-node
 
           # Build Node.js
