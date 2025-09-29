@@ -43,34 +43,17 @@ export const runFipsDiagnostics = async (): Promise<void> => {
   print2(`OPENSSL_MODULES: ${process.env.OPENSSL_MODULES || "(unset)"}`);
   print2(`Platform: ${os.platform()} ${os.release()}`);
 
-  // print2("\n=== Cipher List ===");
-
-  // const ciphers: string[] = tls.getCiphers();
-  // for (const cipher of ciphers) {
-  //   print2(`Cipher: ${cipher}`);
-  // }
-
   print2("\n=== TLS & FIPS Validation ===");
 
-  // Test TLS 1.2 with FIPS-approved cipher suites
+  // Test TLS 1.2 support
   try {
-    const ctx12 = tls.createSecureContext({
+    tls.createSecureContext({
       minVersion: "TLSv1.2",
       maxVersion: "TLSv1.2",
-      ciphers: [
-        "ECDHE-ECDSA-AES128-GCM-SHA256",
-        "ECDHE-RSA-AES128-GCM-SHA256",
-        "ECDHE-ECDSA-AES256-GCM-SHA384",
-        "ECDHE-RSA-AES256-GCM-SHA384",
-      ].join(":"),
     });
-    const enabled12 = ctx12.context.getCiphers?.() || [];
-    print2(`✅ TLS 1.2 FIPS ciphers available: ${enabled12.length}`);
-    if (enabled12.length > 0) {
-      print2(`   Sample ciphers: ${enabled12.slice(0, 2).join(", ")}`);
-    }
+    print2(`✅ TLS 1.2 context created successfully`);
   } catch (e: any) {
-    print2(`❌ TLS 1.2 FIPS context failed: ${e?.message || e}`);
+    print2(`❌ TLS 1.2 context failed: ${e?.message || e}`);
   }
 
   // Test TLS 1.3 support (cipher suites are handled differently)
