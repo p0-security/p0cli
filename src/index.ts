@@ -33,7 +33,6 @@ const enableFipsMode = () => {
       print2(`Failed to enable FIPS mode`);
       process.exit(1);
     }
-    print2(`FIPS mode enabled: ${fipsEnabled ? 1 : 0}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     print2(`Failed to enable FIPS mode: ${errorMessage}`);
