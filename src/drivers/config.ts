@@ -34,8 +34,12 @@ export const getGoogleTenantConfig = () => {
   throw `Login failed!\nThis organization is configured to use Google login but the required OAuth client parameters are missing.\n${getContactMessage()}`;
 };
 
-export const saveConfig = async (orgId: string) => {
+export const saveConfig = async (orgId: string, debug?: boolean) => {
   const orgData = await getOrgData(orgId);
+
+  if (debug) {
+    print2(`Retrieved org data: ${JSON.stringify(orgData)}`);
+  }
 
   const config = orgData.config ?? defaultConfig;
 

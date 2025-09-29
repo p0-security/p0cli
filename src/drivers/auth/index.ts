@@ -161,6 +161,10 @@ export const authenticate = async (options?: {
   debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
+  if (options?.debug) {
+    print2(`Loaded identity for user for org ${identity.org.slug}`);
+    print2(`Token expires in ${remainingTokenTime(identity)} seconds`);
+  }
   let authn: Authn;
 
   if (identity.org.useProviderToken) {
