@@ -189,14 +189,7 @@ jobs:
           cp -r $HOME/fips-node/openssl/lib/ossl-modules build/sea/root/usr/local/lib/p0/
           cp $HOME/fips-node/openssl/bin/openssl build/sea/root/usr/local/lib/p0/
 
-          # Create updated FIPS configuration files with correct bundled paths
-
-          # Regenerate fipsmodule.cnf for the bundled FIPS module location
-          # This ensures the self-test checksums are correct for the final location
-          $HOME/fips-node/openssl/bin/openssl fipsinstall \
-            -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
-            -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
-
+          # Create OpenSSL configuration (fipsmodule.cnf will be generated after code-signing)
           # Update openssl.cnf to reference the bundled fipsmodule.cnf
           sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf
 
@@ -233,6 +226,12 @@ jobs:
           # Verify all OpenSSL modules
           find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verify --verbose {} \;
           echo "=== All signatures verified ==="
+
+          # Regenerate fipsmodule.cnf AFTER code-signing
+          # This ensures the checksum matches the signed FIPS module
+          build/sea/root/usr/local/lib/p0/openssl fipsinstall \
+            -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
+            -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
 
           # Create the signed package
           pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
