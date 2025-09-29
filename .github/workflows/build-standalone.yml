@@ -183,10 +183,11 @@ jobs:
           # Copy the binary
           cp build/sea/p0 build/sea/root/usr/local/bin/p0
 
-          # Copy required OpenSSL libraries
+          # Copy required OpenSSL libraries and binary
           cp $HOME/fips-node/openssl/lib/libssl.3.dylib build/sea/root/usr/local/lib/p0/
           cp $HOME/fips-node/openssl/lib/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/
           cp -r $HOME/fips-node/openssl/lib/ossl-modules build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/bin/openssl build/sea/root/usr/local/lib/p0/
 
           # Create updated FIPS configuration files with correct bundled paths
 
@@ -203,6 +204,10 @@ jobs:
           install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @executable_path/../lib/p0/libssl.3.dylib build/sea/root/usr/local/bin/p0
           install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @executable_path/../lib/p0/libcrypto.3.dylib build/sea/root/usr/local/bin/p0
 
+          # Update OpenSSL binary to look for libraries in the bundled location
+          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/openssl
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/openssl
+
           # Also update any interdependencies between the OpenSSL libraries themselves
           install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/libssl.3.dylib
       - name: Codesign binary and bundled libraries
@@ -210,9 +215,10 @@ jobs:
           # Codesign the main binary (after install_name_tool modifications)
           codesign --force --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/bin/p0
 
-          # Codesign bundled OpenSSL libraries for notarization
+          # Codesign bundled OpenSSL libraries and binary for notarization
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/openssl
 
           # Sign all OpenSSL modules (fips.dylib, legacy.dylib, etc.)
           find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" {} \;
@@ -222,6 +228,7 @@ jobs:
           codesign --verify --verbose build/sea/root/usr/local/bin/p0
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/openssl
 
           # Verify all OpenSSL modules
           find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verify --verbose {} \;
