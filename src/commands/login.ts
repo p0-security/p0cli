@@ -115,7 +115,7 @@ export const login = async (
   const orgWithSlug: OrgData = { ...orgData, slug: orgSlug };
 
   if (options?.debug) {
-    print2(`Org data with slug: ${JSON.stringify(orgWithSlug)}`);
+    print2(`Org data: ${JSON.stringify(orgWithSlug)}`);
   }
 
   if (!loggedIn) {
