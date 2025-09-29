@@ -229,6 +229,8 @@ jobs:
 
           # Regenerate fipsmodule.cnf AFTER code-signing
           # This ensures the checksum matches the signed FIPS module
+          OPENSSL_CONF=build/sea/root/usr/local/lib/p0/openssl.cnf \
+          OPENSSL_MODULES=build/sea/root/usr/local/lib/p0/ossl-modules \
           build/sea/root/usr/local/lib/p0/openssl fipsinstall \
             -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
             -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
