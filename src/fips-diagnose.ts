@@ -12,9 +12,6 @@ import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
 import os from "node:os";
 import tls from "node:tls";
-import { fetch } from "undici";
-
-const DIAGNOSTIC_URL = "https://fabian-joya.api.dev.p0.app/orgs/p0-fabian";
 
 /**
  * Run comprehensive FIPS diagnostics to test TLS configuration and connectivity
@@ -96,29 +93,5 @@ export const runFipsDiagnostics = async (): Promise<void> => {
     print2(`✅ Default FIPS context created successfully`);
   } catch (e: any) {
     print2(`❌ Default FIPS context failed: ${e?.message || e}`);
-  }
-
-  print2("\n=== Fetch Connectivity Test ===");
-  try {
-    const res = await fetch(DIAGNOSTIC_URL, { method: "GET" });
-    print2(`✅ Status: ${res.status}`);
-    const body = await res.text();
-    print2(`✅ Body (first 200 chars): ${body.slice(0, 200)}...`);
-  } catch (e: any) {
-    print2(
-      `❌ Fetch error: ${e && (e.cause?.code || e.code)} ${e?.message || e}`
-    );
-
-    // Helpful hints for common failures
-    if ((e?.message || "").includes("no ciphers")) {
-      print2(
-        "\n💡 HINT: You likely have an invalid/empty TLS cipher list. Avoid TLS_AES_* in --tls-cipher-list; use AES-GCM suites above."
-      );
-    }
-    if ((e?.message || "").includes("X25519")) {
-      print2(
-        "\n💡 HINT: X25519 key exchange is not FIPS-approved. Ensure ecdhCurve is set to P-256/P-384 only."
-      );
-    }
   }
 };
