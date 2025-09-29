@@ -30,6 +30,11 @@ export const runFipsDiagnostics = async (): Promise<void> => {
   print2(`Node: ${process.versions.node}`);
   print2(`OpenSSL: ${process.versions.openssl}`);
 
+  const vars = process.config.variables as any;
+  print2(`openssl_is_fips: ${vars.openssl_is_fips}`);
+  print2(`node_shared_openssl: ${vars.node_shared_openssl}`);
+  print2(`node_use_openssl: ${vars.node_use_openssl}`);
+
   try {
     print2(`crypto.getFips(): ${crypto.getFips()}`);
   } catch (error) {
