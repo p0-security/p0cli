@@ -41,12 +41,12 @@ export const runFipsDiagnostics = async (): Promise<void> => {
   print2(`OPENSSL_MODULES: ${process.env.OPENSSL_MODULES || "(unset)"}`);
   print2(`Platform: ${os.platform()} ${os.release()}`);
 
-  print2("\n=== Cipher List ===");
+  // print2("\n=== Cipher List ===");
 
-  const ciphers: string[] = tls.getCiphers();
-  for (const cipher of ciphers) {
-    print2(`Cipher: ${cipher}`);
-  }
+  // const ciphers: string[] = tls.getCiphers();
+  // for (const cipher of ciphers) {
+  //   print2(`Cipher: ${cipher}`);
+  // }
 
   print2("\n=== TLS & FIPS Validation ===");
 
