@@ -157,16 +157,15 @@ jobs:
 
           echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
 
-          # FIPS verification temporarily disabled for diagnostic testing
           # Check FIPS mode and fail if not enabled
-          # FIPS_STATUS=$($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")
+          FIPS_STATUS=$($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")
 
-          # if [ "$FIPS_STATUS" != "1" ]; then
-          #   echo "❌ FIPS mode is not enabled! Expected '1', got '$FIPS_STATUS'"
-          #   exit 1
-          # fi
+          if [ "$FIPS_STATUS" != "1" ]; then
+            echo "❌ FIPS mode is not enabled! Expected '1', got '$FIPS_STATUS'"
+            exit 1
+          fi
 
-          echo "✅ FIPS verification skipped for diagnostic build"
+          echo "✅ FIPS enabled: $FIPS_STATUS"
       - name: Install dependencies
         run: yarn install
       - name: Build
@@ -191,12 +190,11 @@ jobs:
 
           # Create updated FIPS configuration files with correct bundled paths
 
-          # FIPS module regeneration disabled for diagnostic testing
           # Regenerate fipsmodule.cnf for the bundled FIPS module location
           # This ensures the self-test checksums are correct for the final location
-          # $HOME/fips-node/openssl/bin/openssl fipsinstall \
-          #   -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
-          #   -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
+          $HOME/fips-node/openssl/bin/openssl fipsinstall \
+            -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
+            -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
 
           # Update openssl.cnf to reference the bundled fipsmodule.cnf
           sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf
