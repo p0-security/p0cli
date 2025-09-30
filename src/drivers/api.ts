@@ -242,7 +242,7 @@ export const fetchWithStreaming = async function* <T>(
               buffer
           );
         }
-        handleResponse(response, buffer);
+        handleResponse(response, buffer, debug);
       } catch (err) {
         // If this is a json parse error then we have received a partial response
         // we could throw an error saying incomplete response from the server
@@ -344,7 +344,7 @@ const baseFetch = async <T>(args: {
   const attemptFetch = async () => {
     const response = await fetch(url, fetchOptions);
     const text = await response.text();
-    return handleResponse(response, text) as T;
+    return handleResponse(response, text, args.debug) as T;
   };
 
   try {
@@ -381,7 +381,11 @@ const authFetch = async <T>(
   });
 };
 
-const handleResponse = (response: Response, responseText: string) => {
+const handleResponse = (
+  response: Response,
+  responseText: string,
+  debug?: boolean
+) => {
   let data;
   try {
     data = JSON.parse(responseText);
@@ -389,6 +393,9 @@ const handleResponse = (response: Response, responseText: string) => {
     if ("ok" in response && !response.ok) {
       throw `HTTP Error: ${response.status} ${response.statusText}`;
     } else {
+      if (debug) {
+        print2(`Parse error: ${String(err)}\nin response: ${responseText}`);
+      }
       throw "Invalid response from the server";
     }
   }
