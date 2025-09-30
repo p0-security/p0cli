@@ -382,10 +382,17 @@ const authFetch = async <T>(
 };
 
 const handleResponse = (response: Response, responseText: string) => {
-  if ("ok" in response && !response.ok) {
-    throw `HTTP Error: ${response.status} ${response.statusText}`;
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (err) {
+    if ("ok" in response && !response.ok) {
+      throw `HTTP Error: ${response.status} ${response.statusText}`;
+    } else {
+      throw "Invalid response from the server";
+    }
   }
-  const data = JSON.parse(responseText);
+
   if ("error" in data) {
     throw data.error;
   }
