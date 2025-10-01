@@ -22,6 +22,7 @@ import { isSea } from "node:sea";
 import { noop } from "lodash";
 import crypto from "node:crypto";
 import { runFipsDiagnostics } from "./fips-diagnose";
+import { getOperatingSystem } from "./util";
 
 /**
  * Enable FIPS mode and verify it's working
@@ -47,8 +48,7 @@ const enableFipsMode = async () => {
 };
 
 // Set up FIPS configuration when running as a Single Executable Application
-if (isSea()) void enableFipsMode();
-
+if (isSea() && getOperatingSystem() === "mac") void enableFipsMode();
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
 // It is not the version of the P0 CLI itself or the version of the OpenTelemetry library.
