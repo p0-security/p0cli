@@ -13,7 +13,7 @@ import { Identity } from "../types/identity";
 import { OrgData } from "../types/org";
 import { getContactMessage, loadConfig } from "./config";
 import { print2 } from "./stdio";
-import { EXPIRED_CREDENTIALS_MESSAGE } from "./util";
+import { getExpiredCredentialsMessage } from "./util";
 import { FirebaseApp, FirebaseError, initializeApp } from "firebase/app";
 import {
   EmailAuthCredential,
@@ -70,7 +70,7 @@ export const signInToTenant = async (
       error instanceof FirebaseError &&
       error.code === "auth/invalid-credential"
     ) {
-      throw EXPIRED_CREDENTIALS_MESSAGE;
+      throw getExpiredCredentialsMessage();
     } else {
       if (options?.debug) {
         if (error instanceof Error) {
@@ -85,6 +85,12 @@ export const signInToTenant = async (
 
   if (!userCredential?.user?.email) {
     throw `Can not sign in: this user has previously signed in with a different identity provider.\n${getContactMessage()}`;
+  }
+
+  if (options?.debug) {
+    print2(
+      `Authenticated to Firebase as user ${userCredential.user.email} in tenant ${tenantId}`
+    );
   }
 
   return userCredential;

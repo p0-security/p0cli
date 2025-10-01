@@ -13,10 +13,11 @@ import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
 import { Authn, Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
+import { getAppName } from "../../util";
 import { tracesUrl } from "../api";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
-import { EXPIRED_CREDENTIALS_MESSAGE } from "../util";
+import { getExpiredCredentialsMessage } from "../util";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -96,7 +97,7 @@ export const loadCredentials = async (): Promise<Identity> => {
     return JSON.parse(buffer.toString());
   } catch (error: any) {
     if (error?.code === "ENOENT") {
-      throw "Please run `p0 login <organization>` to use the P0 CLI.";
+      throw `Please run \`${getAppName()} login <organization>\`.`;
     }
     throw error;
   }
@@ -115,7 +116,7 @@ const loadCredentialsWithAutoLogin = async (options?: {
   }
 
   if (options?.noRefresh) {
-    throw EXPIRED_CREDENTIALS_MESSAGE;
+    throw getExpiredCredentialsMessage();
   }
 
   await login(
@@ -161,6 +162,10 @@ export const authenticate = async (options?: {
   debug?: boolean;
 }): Promise<Authn> => {
   const identity = await loadCredentialsWithAutoLogin(options);
+  if (options?.debug) {
+    print2(`Loaded identity for user for org ${identity.org.slug}`);
+    print2(`Token expires in ${remainingTokenTime(identity)} seconds`);
+  }
   let authn: Authn;
 
   if (identity.org.useProviderToken) {

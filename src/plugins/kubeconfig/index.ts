@@ -14,7 +14,7 @@ import { request } from "../../commands/shared/request";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { assertNever } from "../../util";
+import { assertNever, getAppName } from "../../util";
 import { getAwsConfig } from "../aws/config";
 import { assumeRoleWithIdc } from "../aws/idc";
 import { AwsCredentials } from "../aws/types";
@@ -60,7 +60,7 @@ export const getAndValidateK8sIntegration = async (
   if (hosting.type !== "aws") {
     throw (
       `This command currently only supports AWS EKS clusters, and ${clusterId} is not configured as one.\n` +
-      "You can request access to the cluster using the `p0 request k8s` command."
+      `You can request access to the cluster using the \`${getAppName()} request k8s\` command.`
     );
   }
 
@@ -71,7 +71,7 @@ export const getAndValidateK8sIntegration = async (
 
   // Verify that the AWS auth type is supported before issuing the requests
   if (!awsLogin?.type || awsLogin?.type === "iam") {
-    throw "This AWS account is not configured for kubectl access via the P0 CLI.\nYou can request access to the cluster using the `p0 request k8s` command.";
+    throw `This AWS account is not configured for kubectl access.\nYou can request access to the cluster using the \`${getAppName()} request k8s\` command.`;
   }
 
   return {

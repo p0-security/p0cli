@@ -12,6 +12,7 @@ import { AnsiSgr } from "../drivers/ansi";
 import { fetchAdminLsCommand, fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { print1, print2, spinUntil } from "../drivers/stdio";
+import { getAppName } from "../util";
 import { max, orderBy, slice } from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
@@ -117,7 +118,7 @@ const ls = async (
     const postfixPart = data.term
       ? ` matching '${data.term}'`
       : data.isTruncated
-        ? ` (use \`p0 ${allArguments.join(" ")} <like>\` to narrow results)`
+        ? ` (use \`${getAppName()} ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
     print2(

@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { createKeyPair } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
+import { getAppName } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
 import { generateSelfHostedCertificate } from "./keygen";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
@@ -40,7 +41,9 @@ export const selfHostedSshProvider: SshProvider<
 
   friendlyName: "Self-hosted",
 
-  loginRequiredMessage: "Please login to P0 CLI with 'p0 login'",
+  get loginRequiredMessage() {
+    return `Please login with '${getAppName()} login'`;
+  },
 
   propagationTimeoutMs: PROPAGATION_TIMEOUT_LIMIT_MS,
 

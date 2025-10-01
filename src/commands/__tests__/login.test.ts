@@ -27,6 +27,10 @@ jest.mock("../../drivers/auth/path", () => ({
 jest.mock("../../drivers/stdio");
 jest.mock("../../plugins/login");
 jest.mock("../../drivers/api");
+jest.mock("../../util", () => ({
+  ...jest.requireActual("../../util"),
+  getAppName: () => "p0",
+}));
 
 const mockIdentity: Identity = {
   // @ts-expect-error credential has more fields, this is enough for tests
@@ -57,7 +61,7 @@ describe("login", () => {
 
   it("prints a friendly error if the org is not provided", async () => {
     await expect(login({} as any)).rejects.toMatchInlineSnapshot(
-      `"The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."`
+      `"The organization ID is required. Please provide it as an argument or set the P0_ORG environment variable."`
     );
   });
 
@@ -100,7 +104,7 @@ describe("login", () => {
 
     it("it should ask user to log in", async () => {
       await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
-        `"Please run \`p0 login <organization>\` to use the P0 CLI."`
+        `"Please run \`p0 login <organization>\`."`
       );
     });
   });

@@ -27,10 +27,14 @@ import yargs from "yargs";
 
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
 
-const doActualLogin = async (orgWithSlug: OrgData) => {
+const doActualLogin = async (orgWithSlug: OrgData, debug?: boolean) => {
   const plugin =
     orgWithSlug?.ssoProvider ??
     (orgWithSlug.usePassword ? "password" : undefined);
+
+  if (debug) {
+    print2(`Using login method: ${plugin ?? "unknown"}`);
+  }
 
   const loginFn = plugin && pluginLoginMap[plugin];
 
@@ -78,7 +82,7 @@ export const login = async (
         `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
       );
     } else {
-      throw "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
+      throw "The organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
     }
   } else {
     if (identity && loggedIn) {
@@ -94,8 +98,14 @@ export const login = async (
     }
   }
 
+  if (options?.debug) {
+    print2(
+      `Current login status: ${loggedIn ? "logged in" : "not logged in"}, org: ${orgSlug}`
+    );
+  }
+
   if (!loggedIn) {
-    await saveConfig(orgSlug);
+    await saveConfig(orgSlug, options?.debug);
   }
 
   await initializeFirebase();
@@ -104,8 +114,15 @@ export const login = async (
 
   const orgWithSlug: OrgData = { ...orgData, slug: orgSlug };
 
+  if (options?.debug) {
+    print2(`Org data: ${JSON.stringify(orgWithSlug)}`);
+  }
+
   if (!loggedIn) {
-    await doActualLogin(orgWithSlug);
+    if (options?.debug) {
+      print2(`Proceeding with actual login for org ${orgSlug}`);
+    }
+    await doActualLogin(orgWithSlug, options?.debug);
   }
 
   if (!options?.skipAuthenticate) {
@@ -123,12 +140,12 @@ export const login = async (
 export const loginCommand = (yargs: yargs.Argv) =>
   yargs.command<{ org: string }>(
     "login [org]",
-    "Log in to p0 using a web browser",
+    "Log in using a web browser",
     (yargs) =>
       yargs
         .positional("org", {
           type: "string",
-          describe: "Your P0 organization ID",
+          describe: "Your organization ID",
         })
         .option("refresh", {
           type: "boolean",
