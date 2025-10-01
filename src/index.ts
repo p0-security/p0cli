@@ -21,17 +21,23 @@ import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
 import crypto from "node:crypto";
+import { runFipsDiagnostics } from "./fips-diagnose";
 
 /**
  * Enable FIPS mode and verify it's working
  */
-const enableFipsMode = () => {
+const enableFipsMode = async () => {
   try {
     crypto.setFips(true);
     const fipsEnabled = crypto.getFips();
     if (!fipsEnabled) {
       print2(`Failed to enable FIPS mode`);
       process.exit(1);
+    }
+
+    // Run diagnostics if --debug flag is present
+    if (process.argv.includes("--debug")) {
+      await runFipsDiagnostics();
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -41,7 +47,7 @@ const enableFipsMode = () => {
 };
 
 // Set up FIPS configuration when running as a Single Executable Application
-if (isSea()) enableFipsMode();
+if (isSea()) void enableFipsMode();
 
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
