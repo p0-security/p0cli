@@ -181,7 +181,7 @@ jobs:
           # These must be set BEFORE Node.js initializes to ensure OpenSSL loads the correct
           # configuration and FIPS provider during crypto module initialization
           cat > build/sea/root/usr/local/bin/p0 << 'EOF'
-          #!/bin/sh
+          #!/bin/bash
           export OPENSSL_CONF="/usr/local/lib/p0/openssl.cnf"
           export OPENSSL_MODULES="/usr/local/lib/p0/ossl-modules"
           # Preserve original command name for help text
