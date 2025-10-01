@@ -175,7 +175,7 @@ jobs:
           mkdir -p build/sea/root/usr/local/lib/p0
 
           # Copy the binary to lib directory (will be called by wrapper script)
-          cp build/sea/p0 build/sea/root/usr/local/lib/p0/p0-bin
+          cp build/sea/p0 build/sea/root/usr/local/lib/p0/p0
 
           # Create wrapper script that sets FIPS environment variables before Node.js starts
           # These must be set BEFORE Node.js initializes to ensure OpenSSL loads the correct
@@ -184,8 +184,7 @@ jobs:
           #!/bin/bash
           export OPENSSL_CONF="/usr/local/lib/p0/openssl.cnf"
           export OPENSSL_MODULES="/usr/local/lib/p0/ossl-modules"
-          # Preserve original command name for help text
-          exec -a "$0" /usr/local/lib/p0/p0-bin "$@"
+          exec /usr/local/lib/p0/p0 "$@"
           EOF
           chmod +x build/sea/root/usr/local/bin/p0
 
@@ -200,8 +199,8 @@ jobs:
           sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf
 
           # Update binary to look for libraries in the bundled location
-          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/p0-bin
-          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/p0-bin
+          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/p0
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/p0
 
           # Update OpenSSL binary to look for libraries in the bundled location
           install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/openssl
@@ -212,7 +211,7 @@ jobs:
       - name: Codesign binary and bundled libraries
         run: |
           # Codesign the main binary and wrapper script (after install_name_tool modifications)
-          codesign --force --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/p0-bin
+          codesign --force --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/p0
           codesign --force --verbose=5 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/bin/p0
 
           # Codesign bundled OpenSSL libraries and binary for notarization
@@ -225,7 +224,7 @@ jobs:
 
           # Verify all signatures before packaging
           echo "::debug::Verifying signatures"
-          codesign --verify --verbose build/sea/root/usr/local/lib/p0/p0-bin
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/p0
           codesign --verify --verbose build/sea/root/usr/local/bin/p0
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
