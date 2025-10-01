@@ -101,6 +101,10 @@ jobs:
             [fips_sect]
             activate = 1
           EOF
+      - name: Set OpenSSL environment variables
+        run: |
+          echo "OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf" >> $GITHUB_ENV
+          echo "OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules" >> $GITHUB_ENV
       - name: Build FIPS-compliant Node.js
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
@@ -115,11 +119,12 @@ jobs:
 
           echo "===== Starting building Node.js ====="
 
-          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          # export DYLD_LIBRARY_PATH=$HOME/fips-node/openssl/lib:$DYLD_LIBRARY_PATH
-          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
-
           # Configure Node.js with FIPS support using our custom OpenSSL 3.1.2
+          # NOTE: We use --shared-openssl instead of --fully-static because:
+          # 1. OpenSSL 3.x FIPS provider MUST be dynamically loaded (cannot be statically linked)
+          # 2. The FIPS module (fips.dylib) must be a separate library for integrity verification
+          # 3. Static linking is fundamentally incompatible with OpenSSL 3.x provider architecture
+          # See: https://github.com/openssl/openssl/issues/20840
           ./configure \
             --shared-openssl \
             --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
@@ -140,15 +145,9 @@ jobs:
           echo "$HOME/fips-node/bin" >> $GITHUB_PATH
       - name: Install yarn
         run: |
-          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
-
           npm install -g yarn
       - name: Verify FIPS Node.js
         run: |
-          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
-
           echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
 
           # Check FIPS mode and fail if not enabled
@@ -164,9 +163,6 @@ jobs:
         run: yarn install
       - name: Build
         run: |
-          export OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf
-          export OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules
-
           yarn build:macos
           ./mac/build-macOS.sh
       - name: Package application
