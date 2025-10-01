@@ -104,7 +104,7 @@ export const loadCredentials = async (): Promise<Identity> => {
 };
 
 export const remainingTokenTime = (identity: Identity) =>
-  identity.credential.expires_at - Date.now() * 1e-3;
+  Math.floor(identity.credential.expires_at - Date.now() * 1e-3);
 
 const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;

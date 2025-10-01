@@ -16,9 +16,11 @@ startTracing();
 
 import { getCli } from "./commands";
 import { loadConfig } from "./drivers/config";
+import { print2 } from "./drivers/stdio";
 import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
+
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
 // It is not the version of the P0 CLI itself or the version of the OpenTelemetry library.
@@ -55,6 +57,18 @@ const run = async () => {
   // We can suppress output here, as .fail() already print2 errors
   void (cli.parse() as any).catch(noop);
 };
+
+// Global error handlers, to avoid ungraceful crashes and to log errors that aren't caught elsewhere.
+// We still exit with a non-zero code to indicate failure.
+process.on("uncaughtException", (error) => {
+  print2("Uncaught Exception: " + error.message);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  print2("Unhandled Rejection: " + (reason instanceof Error ? reason.message : String(reason)));
+  process.exit(1);
+});
 
 if (require.main === module || isSea()) {
   void main();

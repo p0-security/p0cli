@@ -83,7 +83,11 @@ export const exec = async (
         });
         child.stdout.on("data", (d) => out.push(d));
         child.stderr.on("data", (d) => err.push(d));
-        child.on("exit", (code) => {
+
+        // The close event is emitted after the child process has exited (the 'exit' event) and all of its
+        // stdio (standard input, standard output, and standard error) streams have been closed.
+        // See https://nodejs.org/api/child_process.html#event-close
+        child.on("close", (code) => {
           const stdout = out.join("\n");
           const stderr = err.join("\n");
           const result = { code, stdout, stderr };
@@ -92,6 +96,13 @@ export const exec = async (
               Object.assign(new Error("Sub-process exited with code"), result)
             );
           resolve(result);
+        });
+
+        // without a handler for the "error" event, an uncaught exception will be thrown that will crash
+        // the process entirely. This can happen if the process fails to spawn, for example, due to the
+        // command not being found
+        child.on("error", (error) => {
+          reject(error);
         });
       } catch (error) {
         reject(error);
