@@ -69,7 +69,6 @@ jobs:
           echo "===== Finished building OpenSSL ====="
       - name: Configure FIPS
         run: |
-          # Configure OpenSSL FIPS (always run to ensure fresh checksums)
           cd $HOME/fips-node/openssl
 
           # Debug: Verify FIPS module exists
@@ -77,6 +76,7 @@ jobs:
           ls -la lib/ossl-modules/
           echo "=========================="
 
+          # Create OpenSSL configuration (fipsmodule.cnf will be regenerated after code-signing)
           echo "=== Create OpenSSL Config ==="
           tee openssl.cnf <<-EOF
             config_diagnostics = 1
@@ -136,7 +136,7 @@ jobs:
           # Build Node.js
           make -j$(getconf _NPROCESSORS_ONLN)
 
-          # Install OpenSSL into $HOME/fips-node directory
+          # Install Node.js into $HOME/fips-node directory
           make install
 
           echo "===== Finished building Node.js ====="
@@ -182,7 +182,9 @@ jobs:
           # Copy the binary to lib directory (will be called by wrapper script)
           cp build/sea/p0 build/sea/root/usr/local/lib/p0/p0-bin
 
-          # Create wrapper script that sets FIPS environment variables
+          # Create wrapper script that sets FIPS environment variables before Node.js starts
+          # These must be set BEFORE Node.js initializes to ensure OpenSSL loads the correct
+          # configuration and FIPS provider during crypto module initialization
           cat > build/sea/root/usr/local/bin/p0 << 'EOF'
           #!/bin/sh
           export OPENSSL_CONF="/usr/local/lib/p0/openssl.cnf"
