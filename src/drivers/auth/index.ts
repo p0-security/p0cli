@@ -163,7 +163,9 @@ export const authenticate = async (options?: {
   const identity = await loadCredentialsWithAutoLogin(options);
   if (options?.debug) {
     print2(`Loaded identity for user for org ${identity.org.slug}`);
-    print2(`Token expires in ${remainingTokenTime(identity)} seconds`);
+    print2(
+      `Token expires in ${Math.floor(remainingTokenTime(identity))} seconds`
+    );
   }
   let authn: Authn;
 
