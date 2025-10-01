@@ -16,10 +16,10 @@ startTracing();
 
 import { getCli } from "./commands";
 import { loadConfig } from "./drivers/config";
+import { print2 } from "./drivers/stdio";
 import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
-import { print2 } from "./drivers/stdio";
 import crypto from "node:crypto";
 
 /**
