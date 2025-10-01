@@ -117,7 +117,7 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
         );
       }
     } else if (isDebug) {
-      print2("Your version of the P0 CLI is up to date.");
+      print2("Your version of the CLI is up to date.");
     }
   } catch (error: any) {
     if (isDebug) {

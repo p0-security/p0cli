@@ -104,7 +104,7 @@ export const loadCredentials = async (): Promise<Identity> => {
 };
 
 export const remainingTokenTime = (identity: Identity) =>
-  identity.credential.expires_at - Date.now() * 1e-3;
+  Math.floor(identity.credential.expires_at - Date.now() * 1e-3);
 
 const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
@@ -164,9 +164,7 @@ export const authenticate = async (options?: {
   const identity = await loadCredentialsWithAutoLogin(options);
   if (options?.debug) {
     print2(`Loaded identity for user for org ${identity.org.slug}`);
-    print2(
-      `Token expires in ${Math.floor(remainingTokenTime(identity))} seconds`
-    );
+    print2(`Token expires in ${remainingTokenTime(identity)} seconds`);
   }
   let authn: Authn;
 
