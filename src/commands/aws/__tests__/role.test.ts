@@ -29,6 +29,10 @@ jest.mock("typescript", () => ({
 jest.mock("../../shared/request", () => ({
   provisionRequest: jest.fn(),
 }));
+jest.mock("../../../util", () => ({
+  ...jest.requireActual("../../../util"),
+  getAppName: () => "p0",
+}));
 
 const mockFetch = jest.spyOn(global, "fetch");
 const mockPrint1 = print1 as jest.Mock;

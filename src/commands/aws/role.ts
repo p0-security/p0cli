@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
 import { Authn } from "../../types/identity";
+import { getAppName } from "../../util";
 import { provisionRequest } from "../shared/request";
 import { AssumeRoleCommandArgs } from "./types";
 import { printAwsCredentials } from "./util";
@@ -68,7 +69,7 @@ const oktaAwsAssumeRole = async (
     argv.debug
   );
 
-  const command = `p0 aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role}`;
+  const command = `${getAppName()} aws${argv.account ? ` --account ${argv.account}` : ""} role assume ${argv.role}`;
   printAwsCredentials(awsCredential, command);
 };
 

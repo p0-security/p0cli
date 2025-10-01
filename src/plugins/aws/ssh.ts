@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { PRIVATE_KEY_PATH, saveHostKeys } from "../../common/keys";
 import { submitPublicKey } from "../../drivers/api";
 import { SshProvider } from "../../types/ssh";
-import { throwAssertNever } from "../../util";
+import { getAppName, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
@@ -64,7 +64,7 @@ export const awsSshProvider: SshProvider<
   cloudProviderLogin: async (authn, request, debug) => {
     const { config } = await getAwsConfig(authn, request.accountId, debug);
     if (!config.login?.type || config.login?.type === "iam") {
-      throw "This account is not configured for SSH access via the P0 CLI";
+      throw "This account is not configured for SSH access";
     }
 
     return config.login?.type === "idc"
@@ -120,7 +120,7 @@ export const awsSshProvider: SshProvider<
     // TODO: Add manual commands for IDC login
     if (request.access !== "idc") {
       return [
-        `eval $(p0 aws role assume ${request.role} --account ${request.accountId})`,
+        `eval $(${getAppName()} aws role assume ${request.role} --account ${request.accountId})`,
       ];
     }
     return undefined;

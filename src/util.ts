@@ -12,10 +12,13 @@ import { defaultConfig } from "./drivers/env";
 import child_process from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { env } from "node:process";
+import process from "node:process";
 import { sys } from "typescript";
 
-export const getAppPath = () => env.P0_APP_PATH ?? "p0";
+export const getAppPath = () =>
+  process.env.P0_APP_PATH ?? process.argv[1] ?? "p0";
+
+export const getAppName = () => path.basename(getAppPath());
 
 export const P0_PATH = path.join(
   os.homedir(),

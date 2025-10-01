@@ -57,7 +57,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
       if (isSea()) {
         print2(
           `╔═══════════════════════════════════════════════╗
-║ A new version of P0 CLI is available          ║
+║ A new version is available                    ║
 ║                                               ║
 ║ To install, download the latest version       ║
 ║ from the GitHub releases page:                ║
@@ -68,7 +68,7 @@ export const checkVersion = async (_yargs: yargs.ArgumentsCamelCase) => {
       } else {
         print2(
           `╔══════════════════════════════════════╗
-║ A new version of P0 CLI is available ║
+║ A new version is available           ║
 ║                                      ║
 ║ To install, run                      ║
 ║   npm -g update ${name.padEnd(20)} ║

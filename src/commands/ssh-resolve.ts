@@ -12,7 +12,12 @@ import { sanitizeAsFileName } from "../common/destination";
 import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
-import { conditionalAbortBeforeThrow, getAppPath, P0_PATH } from "../util";
+import {
+  conditionalAbortBeforeThrow,
+  getAppPath,
+  getAppName,
+  P0_PATH,
+} from "../util";
 import {
   prepareRequest,
   SshResolveCommandArgs,
@@ -83,7 +88,7 @@ const sshResolveAction = async (
       err.toLowerCase().includes("reason is required")
     ) {
       print2(
-        `Please set the ${ENV_PREFIX}_REASON environment variable or request access with "p0 request ssh ... --reason ..." to the destination first.`
+        `Please set the ${ENV_PREFIX}_REASON environment variable or request access with "${getAppName()} request ssh ... --reason ..." to the destination first.`
       );
     }
 
