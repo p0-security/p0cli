@@ -66,7 +66,7 @@ const buildArgv = async () => {
 // Skip the version check for these non-interactive commands
 const skipVersionCheckFor = ["ssh-proxy", "ssh-resolve"];
 
-function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
+async function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
   const invokedCommand = argv._[0];
 
   if (typeof invokedCommand !== "string") {
@@ -76,7 +76,7 @@ function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
   if (skipVersionCheckFor.includes(invokedCommand)) {
     return;
   } else {
-    return checkVersion(argv);
+    return await checkVersion(argv);
   }
 }
 
