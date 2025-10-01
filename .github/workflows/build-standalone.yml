@@ -72,13 +72,8 @@ jobs:
         run: |
           cd $HOME/fips-node/openssl
 
-          # Debug: Verify FIPS module exists
-          echo "=== FIPS Module Check ==="
-          ls -la lib/ossl-modules/
-          echo "=========================="
-
           # Create OpenSSL configuration (fipsmodule.cnf will be regenerated after code-signing)
-          echo "=== Create OpenSSL Config ==="
+          echo "::debug::Creating OpenSSL Config"
           tee openssl.cnf <<-EOF
             config_diagnostics = 1
             openssl_conf = openssl_init
@@ -106,7 +101,6 @@ jobs:
             [fips_sect]
             activate = 1
           EOF
-          echo "==========================="
       - name: Build FIPS-compliant Node.js
         if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
@@ -190,7 +184,8 @@ jobs:
           #!/bin/sh
           export OPENSSL_CONF="/usr/local/lib/p0/openssl.cnf"
           export OPENSSL_MODULES="/usr/local/lib/p0/ossl-modules"
-          exec /usr/local/lib/p0/p0-bin "$@"
+          # Preserve original command name for help text
+          exec -a "$0" /usr/local/lib/p0/p0-bin "$@"
           EOF
           chmod +x build/sea/root/usr/local/bin/p0
 
@@ -228,8 +223,8 @@ jobs:
           # Sign all OpenSSL modules (fips.dylib, legacy.dylib, etc.)
           find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" {} \;
 
-          # Debug: Verify all signatures before packaging
-          echo "=== Verifying signatures ==="
+          # Verify all signatures before packaging
+          echo "::debug::Verifying signatures"
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/p0-bin
           codesign --verify --verbose build/sea/root/usr/local/bin/p0
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
@@ -238,7 +233,7 @@ jobs:
 
           # Verify all OpenSSL modules
           find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verify --verbose {} \;
-          echo "=== All signatures verified ==="
+          echo "::debug::All signatures verified"
 
           # Regenerate fipsmodule.cnf AFTER code-signing
           # This ensures the checksum matches the signed FIPS module
