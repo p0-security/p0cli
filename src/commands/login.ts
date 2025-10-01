@@ -82,7 +82,7 @@ export const login = async (
         `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
       );
     } else {
-      throw "The P0 organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
+      throw "The organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
     }
   } else {
     if (identity && loggedIn) {
@@ -140,12 +140,12 @@ export const login = async (
 export const loginCommand = (yargs: yargs.Argv) =>
   yargs.command<{ org: string }>(
     "login [org]",
-    "Log in to p0 using a web browser",
+    "Log in using a web browser",
     (yargs) =>
       yargs
         .positional("org", {
           type: "string",
-          describe: "Your P0 organization ID",
+          describe: "Your organization ID",
         })
         .option("refresh", {
           type: "boolean",
