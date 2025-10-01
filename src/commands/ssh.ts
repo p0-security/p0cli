@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { sshOrScp } from "../plugins/ssh";
+import { getAppName } from "../util";
 import { prepareRequest, SshCommandArgs } from "./shared/ssh";
 import yargs from "yargs";
 
@@ -66,7 +67,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
   Options passed to the underlying ssh implementation.
   The '--' argument must be specified between P0-specific args on the left and SSH_ARGS on the right. Example;
 
-  $ p0 ssh example-instance --provider gcloud -- -NR '*:8080:localhost:8088' -o 'GatewayPorts yes'`
+  $ ${getAppName()} ssh example-instance --provider gcloud -- -NR '*:8080:localhost:8088' -o 'GatewayPorts yes'`
         ),
 
     sshAction

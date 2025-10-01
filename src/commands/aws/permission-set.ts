@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getAwsConfig } from "../../plugins/aws/config";
 import { assumeRoleWithIdc } from "../../plugins/aws/idc";
 import { Authn } from "../../types/identity";
+import { getAppName } from "../../util";
 import { provisionRequest } from "../shared/request";
 import { AssumeCommandArgs, AssumePermissionSetCommandArgs } from "./types";
 import { printAwsCredentials } from "./util";
@@ -63,7 +64,7 @@ const oktaAwsAssumePermissionSet = async (
     idc: { id: login.identityStoreId, region: login.idcRegion },
   });
 
-  const command = `p0 aws${argv.account ? ` --account ${argv.account}` : ""} permission-set assume ${argv.permissionSet}`;
+  const command = `${getAppName()} aws${argv.account ? ` --account ${argv.account}` : ""} permission-set assume ${argv.permissionSet}`;
   printAwsCredentials(awsCredential, command);
 };
 

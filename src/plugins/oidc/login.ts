@@ -112,7 +112,7 @@ export const oidcLoginSteps = (
 ) => {
   const { deviceAuthorizationUrl, tokenUrl } = urls();
   if (org.providerType === undefined) {
-    throw "Your organization's login configuration does not support this access. Your P0 admin will need to install a supported OIDC provider in order for you to use this command.";
+    throw "Your organization's login configuration does not support this access. Your admin will need to install a supported OIDC provider in order for you to use this command.";
   }
   const buildOidcAuthorizeRequest = () => {
     validateProviderDomain(org);

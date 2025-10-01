@@ -119,7 +119,7 @@ const validateSshInstall = async (
   );
 
   if (items.length === 0) {
-    throw "This organization is not configured for SSH access via the P0 CLI";
+    throw "This organization is not configured for SSH access";
   }
 };
 
