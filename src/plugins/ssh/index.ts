@@ -70,7 +70,7 @@ const accessPropagationGuard = (
   let isLoginException = false;
   let isValidError = false;
 
-  child.stderr.on("data", (chunk) => {
+  const stderrHandler = (chunk: Buffer) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
 
@@ -98,13 +98,18 @@ const accessPropagationGuard = (
     if (isLoginException) {
       isEphemeralAccessDeniedException = false; // always overwrite to false so we don't retry the access
     }
-  });
+  };
+
+  child.stderr.on("data", stderrHandler);
 
   return {
     isAccessPropagated: () =>
       !isEphemeralAccessDeniedException &&
       (!validAccessPatterns || isValidError),
     isLoginException: () => isLoginException,
+    cleanup: () => {
+      child.stderr.removeListener("data", stderrHandler);
+    },
   };
 };
 
@@ -162,11 +167,9 @@ async function spawnSshNode(
       const gerund = options.isAccessPropagationPreTest
         ? "Pre-testing"
         : "Trying";
-      const remainingSeconds = ((options.endTime - Date.now()) / 1e3).toFixed(
-        1
-      );
+      const remaining = ((options.endTime - Date.now()) / 1e3).toFixed(1);
       print2(
-        `Waiting for access to propagate. ${gerund} SSH session... (will wait up to ${remainingSeconds} seconds)`
+        `Waiting for access to propagate. ${gerund} SSH session... (will wait up to ${remaining} seconds)`
       );
     }
 
@@ -180,8 +183,9 @@ async function spawnSshNode(
     });
 
     // Make sure if the parent process is killed, we kill the child process too
+    const signalHandlers = new Map<string, () => void>();
     ["exit", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"].forEach((signal) => {
-      process.on(signal, () => {
+      const handler = () => {
         try {
           child.kill();
         } catch {
@@ -189,11 +193,17 @@ async function spawnSshNode(
         }
         // Resolving the promise so that we don't hang the process forever.
         resolve(0);
-      });
+      };
+      signalHandlers.set(signal, handler);
+      process.on(signal, handler);
     });
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
-    const { isAccessPropagated, isLoginException } = accessPropagationGuard(
+    const {
+      isAccessPropagated,
+      isLoginException,
+      cleanup: cleanupStderr,
+    } = accessPropagationGuard(
       provider.unprovisionedAccessPatterns,
       options.isAccessPropagationPreTest
         ? provider.provisionedAccessPatterns
@@ -208,8 +218,21 @@ async function spawnSshNode(
 
     options.abortController?.signal.addEventListener("abort", onAbort);
 
+    const cleanupAllListeners = () => {
+      // Remove process signal handlers
+      signalHandlers.forEach((handler, signal) => {
+        process.removeListener(signal, handler);
+      });
+      // Remove abort listener
+      options.abortController?.signal.removeEventListener("abort", onAbort);
+      // Remove stderr data listener
+      cleanupStderr();
+    };
+
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
+      cleanupAllListeners();
+
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
@@ -219,8 +242,6 @@ async function spawnSshNode(
           );
           return;
         }
-
-        options.abortController?.signal.removeEventListener("abort", onAbort);
 
         delay(RETRY_DELAY_MS)
           .then(() => spawnSshNode(options))
@@ -239,11 +260,13 @@ async function spawnSshNode(
         options.audit?.("end");
         print2(`SSH session terminated`);
       }
+
       if (options.isAccessPropagationPreTest && isAccessPropagated()) {
         // override the exit code to 0 if the expected error was found, this means access is ready.
         resolve(0);
         return;
       }
+
       resolve(code);
     });
   });
