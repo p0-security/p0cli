@@ -20,7 +20,35 @@ import { print2 } from "./drivers/stdio";
 import { trace } from "@opentelemetry/api";
 import { isSea } from "node:sea";
 import { noop } from "lodash";
+import crypto from "node:crypto";
+import { runFipsDiagnostics } from "./fips-diagnose";
+import { getOperatingSystem } from "./util";
 
+/**
+ * Enable FIPS mode and verify it's working
+ */
+const enableFipsMode = async () => {
+  try {
+    crypto.setFips(true);
+    const fipsEnabled = crypto.getFips();
+    if (!fipsEnabled) {
+      print2(`Failed to enable FIPS mode`);
+      process.exit(1);
+    }
+
+    // Run diagnostics if --debug flag is present
+    if (process.argv.includes("--debug")) {
+      await runFipsDiagnostics();
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    print2(`Failed to enable FIPS mode: ${errorMessage}`);
+    process.exit(1);
+  }
+};
+
+// Set up FIPS configuration when running as a Single Executable Application
+if (isSea() && getOperatingSystem() === "mac") void enableFipsMode();
 
 // The tracer version number is the version of the manual P0 CLI instrumentation.
 // It is not the version of the P0 CLI itself or the version of the OpenTelemetry library.
