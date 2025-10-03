@@ -27,7 +27,7 @@ import {
   SshRequest,
   SupportedSshProvider,
 } from "../../types/ssh";
-import { delay } from "../../util";
+import { delay, getOperatingSystem } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
   ChildProcessByStdio,
@@ -378,6 +378,12 @@ const addCommonArgs = (
 
   if (sshHostKeys && !hostKeyAliasOptionExists)
     sshOptions.push("-o", `HostKeyAlias=${sshHostKeys.alias}`);
+
+  if (getOperatingSystem() === "win") {
+    // Explicitly set the MAC algorithms to avoid certain MACs whose
+    // Windows OpenSSH implementation is unreliable (e.g. umacs-128-etm@openssh.com)
+    sshOptions.push("-o", "MACs=hmac-sha2-256-etm@openssh.com,hmac-sha2-256");
+  }
 
   // Force verbose output from SSH so we can parse the output
   const verboseOptionExists = sshOptions.some((opt) => opt === "-v");
