@@ -209,7 +209,7 @@ export const provisionRequest = async (
 
 const pluginToCliRequest = async (
   request: PermissionRequest<PluginSshRequest>,
-  options?: { debug?: boolean }
+  options: { debug?: boolean; publicKey: string }
 ): Promise<PermissionRequest<CliSshRequest>> =>
   await SSH_PROVIDERS[request.permission.provider].toCliRequest(
     request as any,
@@ -241,7 +241,10 @@ export const prepareRequest = async (
 
   await sshProvider.ensureInstall();
 
-  const cliRequest = await pluginToCliRequest(provisionedRequest, args);
+  const cliRequest = await pluginToCliRequest(provisionedRequest, {
+    ...args,
+    publicKey,
+  });
 
   const request = sshProvider.requestToSsh(cliRequest);
 

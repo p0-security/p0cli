@@ -173,7 +173,7 @@ export type SshProvider<
   /** Converts a backend request to a CLI request */
   toCliRequest: (
     request: PermissionRequest<PR>,
-    options?: { debug?: boolean }
+    options: { debug?: boolean; publicKey: string }
   ) => Promise<PermissionRequest<CliSshRequest>>;
 };
 

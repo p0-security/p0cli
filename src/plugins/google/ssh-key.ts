@@ -50,6 +50,13 @@ export const importSshKey = async (
     print2(
       `Retrieved access token ${accessToken.slice(0, 10)}... for account ${account}`
     );
+    print2(
+      `Importing public key: ${publicKey || "<invalid>"} for account ${account}`
+    );
+  }
+
+  if (!publicKey) {
+    throw "Missing SSH public key. Import failed.";
   }
 
   const url = `https://oslogin.googleapis.com/v1/users/${account}:importSshPublicKey`;
