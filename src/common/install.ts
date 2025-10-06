@@ -129,6 +129,11 @@ export const guidedInstall = async <
       if (code === 0) resolve();
       else reject(`Shell exited with code ${code}`);
     });
+    child.on("error", (error) => {
+      reject(
+        `Error spawning process for guided installation: ${error.message}`
+      );
+    });
   });
 
   print2("");

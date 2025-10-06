@@ -269,6 +269,11 @@ async function spawnSshNode(
 
       resolve(code);
     });
+
+    child.on("error", (error: Error) => {
+      cleanupAllListeners();
+      reject(`Failed to start SSH process: ${error.message}`);
+    });
   });
 }
 
