@@ -129,12 +129,7 @@ export const gcpSshProvider: SshProvider<
   toCliRequest: async (request, options) => ({
     ...request,
     cliLocalData: {
-      linuxUserName: await importSshKey(
-        // fallback to the local public key if the one in the request object is missing, which
-        // can happen if, for example, the request was created using the Slack modal or web app
-        request.permission.publicKey ?? options.publicKey,
-        options
-      ),
+      linuxUserName: await importSshKey(options.publicKey, options),
     },
   }),
 };
