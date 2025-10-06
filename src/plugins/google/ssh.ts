@@ -129,7 +129,7 @@ export const gcpSshProvider: SshProvider<
   toCliRequest: async (request, options) => ({
     ...request,
     cliLocalData: {
-      linuxUserName: await importSshKey(request.permission.publicKey, options),
+      linuxUserName: await importSshKey(options.publicKey, options),
     },
   }),
 };
