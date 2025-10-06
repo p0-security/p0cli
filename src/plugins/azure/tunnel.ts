@@ -105,6 +105,13 @@ const spawnBastionTunnelInBackground = (
       );
     });
 
+    child.on("error", (error: Error) => {
+      if (debug) {
+        print2(`Failed to run Azure Bastion tunnel: ${error.message}`);
+      }
+      return reject(`Failed to run Azure Bastion tunnel: ${error.message}`);
+    });
+
     child.stdout.on("data", (data) => {
       const str = data.toString("utf-8");
       stdout += str;
