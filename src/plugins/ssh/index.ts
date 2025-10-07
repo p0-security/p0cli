@@ -180,23 +180,55 @@ async function spawnSshNode(
       },
       stdio: options.stdio,
       shell: false,
+      detached: process.platform !== "win32", // Create new process group on Unix
     });
 
-    // Make sure if the parent process is killed, we kill the child process too
-    const signalHandlers = new Map<string, () => void>();
-    ["exit", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"].forEach((signal) => {
-      const handler = () => {
-        try {
-          child.kill();
-        } catch {
-          // Ignore errors
+    // Fix for orphaned session-manager-plugin processes that prevent CLI exit.
+    // Problem: SSH's ProxyCommand spawns `aws ssm start-session`, which spawns
+    // `session-manager-plugin`. When SSH exits (especially during retry attempts),
+    // these child processes may not terminate, leaving them holding the stderr pipe
+    // and preventing Node.js from exiting. This is particularly problematic during
+    // the access propagation retry loop where multiple failed attempts accumulate
+    // orphaned processes. See: https://github.com/aws/amazon-ssm-agent/issues/173
+    //
+    // Solution: Spawn SSH in its own process group (detached mode on Unix) so we
+    // can kill the entire process tree with process.kill(-pid). This ensures that
+    // aws ssm start-session and session-manager-plugin are terminated along with SSH.
+
+    const killProcessTree = (signal: NodeJS.Signals = "SIGTERM") => {
+      try {
+        if (process.platform === "win32") {
+          // Kill direct child only (can use taskkill /T if needed)
+          child.kill(signal);
+        } else {
+          // Kill entire process group
+          process.kill(-child.pid!, signal);
         }
+      } catch {
+        // Process already dead, ignore
+      }
+    };
+
+    // Kill process tree on parent termination (Ctrl+C, etc.)
+    const signalHandlers = new Map<string, () => void>();
+    (["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const).forEach((signal) => {
+      const handler = () => {
+        killProcessTree(signal);
         // Resolving the promise so that we don't hang the process forever.
         resolve(0);
       };
       signalHandlers.set(signal, handler);
       process.on(signal, handler);
     });
+
+    // Handle process exit separately (not a signal)
+    const exitHandler = () => {
+      killProcessTree();
+      resolve(0);
+    };
+
+    signalHandlers.set("exit", exitHandler);
+    process.on("exit", exitHandler);
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const {
@@ -232,6 +264,9 @@ async function spawnSshNode(
     const exitListener = child.on("exit", (code) => {
       exitListener.unref();
       cleanupAllListeners();
+
+      // Kill orphaned processes from failed attempt before retrying
+      killProcessTree("SIGKILL");
 
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
