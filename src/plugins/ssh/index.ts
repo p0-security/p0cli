@@ -180,17 +180,40 @@ async function spawnSshNode(
       },
       stdio: options.stdio,
       shell: false,
+      detached: process.platform !== "win32", // Create new process group on Unix
     });
 
-    // Make sure if the parent process is killed, we kill the child process too
+    // Fix for orphaned session-manager-plugin processes that prevent CLI exit.
+    // Problem: SSH's ProxyCommand spawns `aws ssm start-session`, which spawns
+    // `session-manager-plugin`. When SSH exits (especially during retry attempts),
+    // these child processes may not terminate, leaving them holding the stderr pipe
+    // and preventing Node.js from exiting. This is particularly problematic during
+    // the access propagation retry loop where multiple failed attempts accumulate
+    // orphaned processes. See: https://github.com/aws/amazon-ssm-agent/issues/173
+    //
+    // Solution: Spawn SSH in its own process group (detached mode on Unix) so we
+    // can kill the entire process tree with process.kill(-pid). This ensures that
+    // aws ssm start-session and session-manager-plugin are terminated along with SSH.
+
+    const killProcessTree = () => {
+      try {
+        if (process.platform === "win32") {
+          // Kill direct child only (can use taskkill /T if needed)
+          child.kill("SIGTERM");
+        } else {
+          // Kill entire process group
+          process.kill(-child.pid!, "SIGTERM");
+        }
+      } catch {
+        // Process already dead, ignore
+      }
+    };
+
+    // Kill process tree on parent termination (Ctrl+C, etc.)
     const signalHandlers = new Map<string, () => void>();
     ["exit", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"].forEach((signal) => {
       const handler = () => {
-        try {
-          child.kill();
-        } catch {
-          // Ignore errors
-        }
+        killProcessTree();
         // Resolving the promise so that we don't hang the process forever.
         resolve(0);
       };
@@ -242,6 +265,9 @@ async function spawnSshNode(
           );
           return;
         }
+
+        // Kill orphaned processes from failed attempt before retrying
+        killProcessTree();
 
         delay(RETRY_DELAY_MS)
           .then(() => spawnSshNode(options))
