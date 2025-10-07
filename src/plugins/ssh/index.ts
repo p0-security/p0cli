@@ -195,14 +195,14 @@ async function spawnSshNode(
     // can kill the entire process tree with process.kill(-pid). This ensures that
     // aws ssm start-session and session-manager-plugin are terminated along with SSH.
 
-    const killProcessTree = () => {
+    const killProcessTree = (signal: NodeJS.Signals = "SIGTERM") => {
       try {
         if (process.platform === "win32") {
           // Kill direct child only (can use taskkill /T if needed)
-          child.kill("SIGTERM");
+          child.kill(signal);
         } else {
           // Kill entire process group
-          process.kill(-child.pid!, "SIGTERM");
+          process.kill(-child.pid!, signal);
         }
       } catch {
         // Process already dead, ignore
@@ -211,15 +211,24 @@ async function spawnSshNode(
 
     // Kill process tree on parent termination (Ctrl+C, etc.)
     const signalHandlers = new Map<string, () => void>();
-    ["exit", "SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"].forEach((signal) => {
+    (["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const).forEach((signal) => {
       const handler = () => {
-        killProcessTree();
+        killProcessTree(signal);
         // Resolving the promise so that we don't hang the process forever.
         resolve(0);
       };
       signalHandlers.set(signal, handler);
       process.on(signal, handler);
     });
+
+    // Handle process exit separately (not a signal)
+    const exitHandler = () => {
+      killProcessTree();
+      resolve(0);
+    };
+
+    signalHandlers.set("exit", exitHandler);
+    process.on("exit", exitHandler);
 
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const {
@@ -256,6 +265,9 @@ async function spawnSshNode(
       exitListener.unref();
       cleanupAllListeners();
 
+      // Kill orphaned processes from failed attempt before retrying
+      killProcessTree("SIGKILL");
+
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
@@ -265,9 +277,6 @@ async function spawnSshNode(
           );
           return;
         }
-
-        // Kill orphaned processes from failed attempt before retrying
-        killProcessTree();
 
         delay(RETRY_DELAY_MS)
           .then(() => spawnSshNode(options))
