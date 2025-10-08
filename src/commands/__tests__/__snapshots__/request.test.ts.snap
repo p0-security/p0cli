@@ -1,8 +1,8 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`request when error should handle stream errors 1`] = `[TypeError: terminated]`;
+exports[`request > when error > should handle stream errors 1`] = `[TypeError: terminated]`;
 
-exports[`request when error should print error message 1`] = `
+exports[`request > when error > should print error message 1`] = `
 {
   "error": "p0 request
 
@@ -20,7 +20,7 @@ Unknown argument: foo",
 }
 `;
 
-exports[`request when valid request command preexisting=false persistent=false should print request response 1`] = `
+exports[`request > when valid request command > preexisting=%p persistent=%p false false > should print request response 1`] = `
 [
   [
     "a message",
@@ -28,7 +28,7 @@ exports[`request when valid request command preexisting=false persistent=false s
 ]
 `;
 
-exports[`request when valid request command preexisting=false persistent=true should print request response 1`] = `
+exports[`request > when valid request command > preexisting=%p persistent=%p false true > should print request response 1`] = `
 [
   [
     "a message",
@@ -36,7 +36,7 @@ exports[`request when valid request command preexisting=false persistent=true sh
 ]
 `;
 
-exports[`request when valid request command preexisting=true persistent=false should print request response 1`] = `
+exports[`request > when valid request command > preexisting=%p persistent=%p true false > should print request response 1`] = `
 [
   [
     "a message",
@@ -44,7 +44,7 @@ exports[`request when valid request command preexisting=true persistent=false sh
 ]
 `;
 
-exports[`request when valid request command should wait for access 1`] = `
+exports[`request > when valid request command > should wait for access 1`] = `
 [
   [
     "a message",
