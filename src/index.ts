@@ -44,11 +44,14 @@ const run = async () => {
   // Try to load the config early here to get the custom help/contact messages (if any)
   try {
     await loadConfig();
-  } catch (error: any) {
+  } catch (error) {
     // The config file may not be present if the user has not yet logged in,
     //  or has deleted the config. In that case, ignore the error and continue.
     // It will use the default messages instead.
-    if (error?.code !== "ENOENT") {
+    if (typeof error !== 'string') {
+      throw error;
+    }
+    if (!error.startsWith("Missing config file")) {
       throw error;
     }
   }
