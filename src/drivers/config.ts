@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Config } from "../types/org";
+import { getAppName } from "../util";
 import { getConfigFilePath } from "./auth/path";
 import { defaultConfig } from "./env";
 import { getOrgData } from "./org";
@@ -35,6 +36,9 @@ export const getGoogleTenantConfig = () => {
 };
 
 export const saveConfig = async (orgId: string, debug?: boolean) => {
+  // Reset tenantConfig to ensure org data is loaded from p0-prod
+  tenantConfig = defaultConfig;
+
   const orgData = await getOrgData(orgId);
 
   if (debug) {
@@ -45,8 +49,6 @@ export const saveConfig = async (orgId: string, debug?: boolean) => {
 
   const configFilePath = getConfigFilePath();
 
-  print2(`Saving config to ${configFilePath}.`);
-
   const dir = path.dirname(configFilePath);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(configFilePath, JSON.stringify(config), { mode: "600" });
@@ -55,7 +57,15 @@ export const saveConfig = async (orgId: string, debug?: boolean) => {
 };
 
 export const loadConfig = async () => {
-  const buffer = await fs.readFile(getConfigFilePath());
-  tenantConfig = JSON.parse(buffer.toString());
-  return tenantConfig;
+  try {
+    const buffer = await fs.readFile(getConfigFilePath());
+    tenantConfig = JSON.parse(buffer.toString());
+    return tenantConfig;
+  } catch (error: any) {
+    if (error?.code == "ENOENT") {
+      throw `Missing config file. Please login again using '${getAppName()} login <organization>'.`;
+    } else {
+      throw error;
+    }
+  }
 };
