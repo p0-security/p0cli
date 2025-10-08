@@ -27,14 +27,9 @@ import {
   SshRequest,
   SupportedSshProvider,
 } from "../../types/ssh";
-import { delay, getOperatingSystem } from "../../util";
+import { delay, getOperatingSystem, spawnWithCleanEnv } from "../../util";
 import { AwsCredentials } from "../aws/types";
-import {
-  ChildProcessByStdio,
-  StdioNull,
-  StdioPipe,
-  spawn,
-} from "node:child_process";
+import { ChildProcessByStdio, StdioNull, StdioPipe } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 
@@ -173,7 +168,7 @@ async function spawnSshNode(
       );
     }
 
-    const child = spawn(options.command, options.args, {
+    const child = spawnWithCleanEnv(options.command, options.args, {
       env: {
         ...process.env,
         ...options.credential,
