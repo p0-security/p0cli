@@ -12,6 +12,7 @@ You should have received a copy of the GNU General Public License along with @p0
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
 import { sleep } from "../../util";
 import express from "express";
+import { noop } from "lodash";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import { join, resolve } from "node:path";
@@ -96,9 +97,7 @@ export const withRedirectServer = async <S, T, U>(
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
-    }).catch(() => {
-      // Ignore errors during cleanup (e.g., server already closed)
-    });
+    }).catch(noop);
   };
 
   // Register signal handlers to ensure cleanup on interruption
