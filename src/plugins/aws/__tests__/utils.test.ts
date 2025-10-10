@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { parseArn } from "../utils";
+import { describe, expect, it } from "vitest";
 
 describe("parseArn() function", () => {
   it.each([

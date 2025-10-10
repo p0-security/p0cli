@@ -14,29 +14,30 @@ import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
 import { sleep } from "../../util";
 import { requestCommand } from "../request";
+import { beforeAll, beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
-jest.mock("../../drivers/api", () => ({
-  ...jest.requireActual("../../drivers/api"),
-  fetchCommand: jest.fn(),
-  fetchStreamingCommand: jest.fn(), // Add this
-  streamingApiFetch: jest.fn(),
+vi.mock("../../drivers/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../drivers/api")>()),
+  fetchCommand: vi.fn(),
+  fetchStreamingCommand: vi.fn(), // Add this
+  streamingApiFetch: vi.fn(),
 }));
-jest.mock("../../drivers/auth");
-jest.mock("../../drivers/stdio", () => ({
-  ...jest.requireActual("../../drivers/stdio"),
-  print1: jest.fn(),
-  print2: jest.fn(),
+vi.mock("../../drivers/auth");
+vi.mock("../../drivers/stdio", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../drivers/stdio")>()),
+  print1: vi.fn(),
+  print2: vi.fn(),
 }));
 
-const mockFetchCommand = fetchCommand as jest.Mock;
-const mockFetchStreamingCommand = fetchStreamingCommand as jest.Mock;
-const mockPrint1 = print1 as jest.Mock;
-const mockPrint2 = print2 as jest.Mock;
+const mockFetchCommand = fetchCommand as Mock;
+const mockFetchStreamingCommand = fetchStreamingCommand as Mock;
+const mockPrint1 = print1 as Mock;
+const mockPrint2 = print2 as Mock;
 
 describe("request", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("when valid request command", () => {

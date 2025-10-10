@@ -57,10 +57,11 @@ module.exports = {
   ignorePatterns: [
     ".eslintrc.js",
     "prettier.config.js",
-    "jest.config.js",
+    "vitest.config.mts",
     "public/**",
     "build/**",
-    "__mocks__/**",
+    "**/__mocks__/**",
+    "**/__tests__/**",
     "node_modules/**",
     "esbuild.js",
     "win",

@@ -14,33 +14,34 @@ import { print1, print2 } from "../../../drivers/stdio";
 import { failure } from "../../../testing/yargs";
 import { samlResponse } from "./__input__/saml-response";
 import { stsResponse } from "./__input__/sts-response";
+import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
-jest.mock("fs/promises");
-jest.mock("../../../drivers/auth");
-jest.mock("../../../drivers/stdio");
-jest.mock("../../../drivers/api");
-jest.mock("typescript", () => ({
-  ...jest.requireActual("typescript"),
+vi.mock("fs/promises");
+vi.mock("../../../drivers/auth");
+vi.mock("../../../drivers/stdio");
+vi.mock("../../../drivers/api");
+vi.mock("typescript", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("typescript")>()),
   sys: {
     writeOutputIsTTY: () => true,
   },
 }));
-jest.mock("../../shared/request", () => ({
-  provisionRequest: jest.fn(),
+vi.mock("../../shared/request", () => ({
+  provisionRequest: vi.fn(),
 }));
-jest.mock("../../../util", () => ({
-  ...jest.requireActual("../../../util"),
+vi.mock("../../../util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../util")>()),
   getAppName: () => "p0",
 }));
 
-const mockFetch = jest.spyOn(global, "fetch");
-const mockPrint1 = print1 as jest.Mock;
-const mockPrint2 = print2 as jest.Mock;
-const mockIntegrationConfigFetch = fetchIntegrationConfig as jest.Mock;
+const mockFetch = vi.spyOn(global, "fetch");
+const mockPrint1 = print1 as Mock;
+const mockPrint2 = print2 as Mock;
+const mockIntegrationConfigFetch = fetchIntegrationConfig as Mock;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   mockFetch.mockImplementation(
     async (url: RequestInfo | URL) =>
       ({
@@ -64,17 +65,15 @@ describe("aws role", () => {
       mockIntegrationConfigFetch.mockResolvedValue({
         config: { "iam-write": { "1": item } },
       });
-      describe.each([["assume", "aws role assume Role1"]])(
-        "%s",
-        (_, command) => {
-          it("should print a friendly error message", async () => {
-            const error = await failure(awsCommand(yargs()), command);
-            expect(error).toMatchInlineSnapshot(
-              `"Account test is not configured for Okta SAML login."`
-            );
-          });
-        }
-      );
+      describe("assume", () => {
+        const command = "aws role assume Role1";
+        it("should print a friendly error message", async () => {
+          const error = await failure(awsCommand(yargs()), command);
+          expect(error).toBe(
+            "Account test is not configured for Okta SAML login."
+          );
+        });
+      });
     });
     describe("with Okta SAML", () => {
       beforeEach(() => {

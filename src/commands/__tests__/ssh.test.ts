@@ -19,23 +19,24 @@ import { sshOrScp } from "../../plugins/ssh";
 import { sleep } from "../../util";
 import { sshCommand } from "../ssh";
 import { noop, omit } from "lodash";
+import { afterEach, beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
-jest.mock("../../drivers/api");
-jest.mock("../../drivers/auth");
-jest.mock("../../drivers/stdio", () => ({
-  ...jest.requireActual("../../drivers/stdio"),
-  print1: jest.fn(),
-  print2: jest.fn(),
+vi.mock("../../drivers/api");
+vi.mock("../../drivers/auth");
+vi.mock("../../drivers/stdio", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../drivers/stdio")>()),
+  print1: vi.fn(),
+  print2: vi.fn(),
 }));
-jest.mock("../../plugins/ssh");
-jest.mock("../../common/keys");
+vi.mock("../../plugins/ssh");
+vi.mock("../../common/keys");
 
-const mockSshOrScp = sshOrScp as jest.Mock;
-const mockPrint1 = print1 as jest.Mock;
-const mockPrint2 = print2 as jest.Mock;
-const mockIntegrationConfig = fetchIntegrationConfig as jest.Mock;
-const mockFetchStreamingCommand = fetchStreamingCommand as jest.Mock;
+const mockSshOrScp = sshOrScp as Mock;
+const mockPrint1 = print1 as Mock;
+const mockPrint2 = print2 as Mock;
+const mockIntegrationConfig = fetchIntegrationConfig as Mock;
+const mockFetchStreamingCommand = fetchStreamingCommand as Mock;
 
 const MOCK_PERMISSION: AwsSshPermission = {
   provider: "aws",
@@ -117,7 +118,7 @@ describe("ssh", () => {
     ["ephemeral", false],
   ])("%s access", (_, isPersistent) => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     afterEach(() => {
@@ -131,7 +132,7 @@ describe("ssh", () => {
       // await for the first response to yield
       await sleep(10);
       const hiddenFilenameRequestArgs = omit(
-        mockFetchStreamingCommand.mock.calls[0][1],
+        mockFetchStreamingCommand.mock.calls[0]?.[1],
         "$0"
       );
       expect(hiddenFilenameRequestArgs).toMatchSnapshot("args");

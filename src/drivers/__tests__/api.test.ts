@@ -10,29 +10,30 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { Authn } from "../../types/identity";
 import { fetchWithStreaming } from "../api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
-jest.mock("../config");
-jest.mock("../env");
-jest.mock("../../version", () => ({
+vi.mock("../config");
+vi.mock("../env");
+vi.mock("../../version", () => ({
   p0VersionInfo: { version: "1.0.0" },
 }));
 
 describe("fetchWithStreaming", () => {
   const mockAuthn: Authn = {
-    getToken: jest.fn().mockResolvedValue("mock-token"),
+    getToken: vi.fn().mockResolvedValue("mock-token"),
     identity: {
       org: { slug: "test-org" },
     },
   } as unknown as Authn;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
   afterEach(() => {
     // Clear all mocks after each test
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   const createMockStreamingResponse = (chunks: string[]) => {
@@ -40,7 +41,7 @@ describe("fetchWithStreaming", () => {
     let chunkIndex = 0;
 
     const mockReader = {
-      read: jest.fn().mockImplementation(async () => {
+      read: vi.fn().mockImplementation(async () => {
         if (chunkIndex < chunks.length) {
           const chunk = chunks[chunkIndex++];
           return {
@@ -54,13 +55,13 @@ describe("fetchWithStreaming", () => {
 
     return {
       body: {
-        getReader: jest.fn().mockReturnValue(mockReader),
+        getReader: vi.fn().mockReturnValue(mockReader),
       },
     };
   };
 
   it("should yield data from streaming response", async () => {
-    const mockFetch = jest.spyOn(global, "fetch").mockResolvedValue(
+    const mockFetch = vi.spyOn(global, "fetch").mockResolvedValue(
       createMockStreamingResponse([
         JSON.stringify({
           type: "data",
@@ -114,9 +115,9 @@ describe("fetchWithStreaming", () => {
         type: "heartbeat",
       }) + "\n",
     ];
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -138,9 +139,9 @@ describe("fetchWithStreaming", () => {
         error: "Something went wrong",
       }) + "\n",
     ];
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -161,9 +162,9 @@ describe("fetchWithStreaming", () => {
         data: { error: "Data error occurred" },
       }) + "\n",
     ];
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -184,9 +185,9 @@ describe("fetchWithStreaming", () => {
         someData: "invalid",
       }) + "\n",
     ];
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -207,9 +208,9 @@ describe("fetchWithStreaming", () => {
         JSON.stringify({ type: "data", data: { id: "2" } }) +
         "\n",
     ];
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -230,9 +231,9 @@ describe("fetchWithStreaming", () => {
       'ta","data":{"id":"2"}}\n', // Completes the JSON
     ];
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -256,9 +257,9 @@ describe("fetchWithStreaming", () => {
       'nk"}}\n', // Completes second JSON
     ];
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -281,9 +282,9 @@ describe("fetchWithStreaming", () => {
     const jsonString = '{"type":"data","data":{"id":"test"}}\n';
     const chunks = jsonString.split("");
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -303,9 +304,9 @@ describe("fetchWithStreaming", () => {
       '{"type":"data","data":{"id":"1"}', // No newlines
     ];
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -327,9 +328,9 @@ describe("fetchWithStreaming", () => {
       '{"type":"data","data":{"id":"2"}}\n',
     ];
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -347,9 +348,9 @@ describe("fetchWithStreaming", () => {
   it("should throw errors if there is leftover error chunk without new-line and a type", async () => {
     const chunks = ['{"error":"Something went wrong"}'];
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(createMockStreamingResponse(chunks) as any);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      createMockStreamingResponse(chunks) as any
+    );
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -364,7 +365,7 @@ describe("fetchWithStreaming", () => {
   });
 
   it("should throw network error for terminated", async () => {
-    jest.spyOn(global, "fetch").mockRejectedValue(new TypeError("terminated"));
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("terminated"));
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -380,7 +381,7 @@ describe("fetchWithStreaming", () => {
 
   it("should rethrow other errors", async () => {
     const customError = new Error("Custom error");
-    jest.spyOn(global, "fetch").mockRejectedValue(customError);
+    vi.spyOn(global, "fetch").mockRejectedValue(customError);
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -395,9 +396,7 @@ describe("fetchWithStreaming", () => {
   });
 
   it("should throw network error for fetch failed", async () => {
-    jest
-      .spyOn(global, "fetch")
-      .mockRejectedValue(new TypeError("fetch failed"));
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("fetch failed"));
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -412,7 +411,7 @@ describe("fetchWithStreaming", () => {
   });
 
   it("should throw error when no reader available", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValue({
+    vi.spyOn(global, "fetch").mockResolvedValue({
       body: null,
     } as any);
 
@@ -436,7 +435,7 @@ describe("fetchWithStreaming", () => {
       }) + "\n",
     ];
 
-    const mockFetch = jest
+    const mockFetch = vi
       .spyOn(global, "fetch")
       .mockResolvedValue(createMockStreamingResponse(chunks) as any);
 

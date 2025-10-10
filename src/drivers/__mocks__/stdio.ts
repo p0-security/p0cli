@@ -8,10 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { vi } from "vitest";
 
-export const print1 = jest.fn();
-export const print2 = jest.fn();
+export const print1 = vi.fn();
+export const print2 = vi.fn();
 
-export const spinUntil = jest.fn(
+export const spinUntil = vi.fn(
   async <T>(_message: string, promise: Promise<T>) => await promise
 );

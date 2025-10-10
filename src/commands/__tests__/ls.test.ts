@@ -12,19 +12,20 @@ import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { failure } from "../../testing/yargs";
 import { lsCommand } from "../ls";
+import { beforeAll, beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
-jest.mock("../../drivers/api");
-jest.mock("../../drivers/auth");
-jest.mock("../../drivers/stdio");
-jest.spyOn(process, "exit");
+vi.mock("../../drivers/api");
+vi.mock("../../drivers/auth");
+vi.mock("../../drivers/stdio");
+vi.spyOn(process, "exit");
 
-const mockFetchCommand = fetchCommand as jest.Mock;
-const mockPrint1 = print1 as jest.Mock;
-const mockPrint2 = print2 as jest.Mock;
+const mockFetchCommand = fetchCommand as Mock;
+const mockPrint1 = print1 as Mock;
+const mockPrint2 = print2 as Mock;
 
 describe("ls", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   describe("when valid ls command", () => {
     const command = "ls ssh destination";
