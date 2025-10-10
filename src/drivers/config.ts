@@ -28,7 +28,7 @@ export const getHelpMessage = () =>
   tenantConfig?.helpMessage ?? defaultConfig.helpMessage;
 
 export const shouldSkipCheckVersion = () =>
-  tenantConfig.skipVersionCheck ??
+  tenantConfig?.skipVersionCheck ??
   (defaultConfig.skipVersionCheck === "true" ? true : false);
 
 /** Use only if the organization is configured with Google login to P0 */
