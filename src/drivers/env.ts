@@ -15,7 +15,7 @@ dotenv.config();
 
 const { env } = process;
 
-const versionCheck = env.VERSION_CHECK;
+const skipVersionCheck = env.SKIP_VERSION_CHECK;
 
 export const defaultConfig: GoogleApplicationConfig = {
   fs: {
@@ -46,5 +46,5 @@ export const defaultConfig: GoogleApplicationConfig = {
   environment: env.P0_ENV ?? "production",
   contactMessage: "Please contact support@p0.dev for assistance.",
   helpMessage: "For additional support, please contact support@p0.dev.",
-  versionCheck: !versionCheck || versionCheck === "true" ? true : false,
+  skipVersionCheck,
 };

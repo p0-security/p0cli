@@ -26,8 +26,8 @@ export const getContactMessage = () =>
 export const getHelpMessage = () =>
   tenantConfig?.helpMessage ?? defaultConfig.helpMessage;
 
-export const shouldCheckVersion = () =>
-  tenantConfig?.versionCheck ?? defaultConfig.versionCheck;
+export const shouldSkipCheckVersion = () =>
+  defaultConfig.skipVersionCheck === "true" ? true : false;
 
 /** Use only if the organization is configured with Google login to P0 */
 export const getGoogleTenantConfig = () => {

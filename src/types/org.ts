@@ -21,7 +21,7 @@ type ApplicationConfig = {
   environment: string;
   contactMessage: string;
   helpMessage: string;
-  versionCheck?: boolean;
+  skipVersionCheck?: string;
 };
 
 export type GoogleApplicationConfig = ApplicationConfig & {
