@@ -180,7 +180,6 @@ async function spawnSshNode(
       },
       stdio: options.stdio,
       shell: false,
-      detached: process.platform !== "win32", // Create new process group on Unix
     });
 
     // Fix for orphaned session-manager-plugin processes that prevent CLI exit.
@@ -191,19 +190,14 @@ async function spawnSshNode(
     // the access propagation retry loop where multiple failed attempts accumulate
     // orphaned processes. See: https://github.com/aws/amazon-ssm-agent/issues/173
     //
-    // Solution: Spawn SSH in its own process group (detached mode on Unix) so we
-    // can kill the entire process tree with process.kill(-pid). This ensures that
-    // aws ssm start-session and session-manager-plugin are terminated along with SSH.
+    // Solution: Kill both the child process directly and its entire process group
+    // using process.kill(-pid) to ensure all descendants are terminated.
 
     const killProcessTree = (signal: NodeJS.Signals = "SIGTERM") => {
       try {
-        if (process.platform === "win32") {
-          // Kill direct child only (can use taskkill /T if needed)
-          child.kill(signal);
-        } else {
-          // Kill entire process group
-          process.kill(-child.pid!, signal);
-        }
+        // try to kill the child directly and the entire process group
+        process.kill(-child.pid!, signal);
+        child.kill(signal);
       } catch {
         // Process already dead, ignore
       }
