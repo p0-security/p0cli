@@ -18,19 +18,47 @@ import { Identity } from "../../types/identity";
 import { login } from "../login";
 import { signInWithCredential } from "firebase/auth";
 import { readFile, writeFile } from "fs/promises";
+import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
 
-jest.spyOn(Date, "now").mockReturnValue(1.6e12);
-jest.mock("fs/promises");
-jest.mock("../../drivers/auth/path", () => ({
-  getIdentityFilePath: jest.fn(() => "/dummy/identity/file/path"),
+vi.spyOn(Date, "now").mockReturnValue(1.6e12);
+vi.mock("fs/promises");
+vi.mock("../../drivers/auth/path", () => ({
+  getIdentityFilePath: vi.fn(() => "/dummy/identity/file/path"),
 }));
-jest.mock("../../drivers/stdio");
-jest.mock("../../plugins/login");
-jest.mock("../../drivers/api");
-jest.mock("../../util", () => ({
-  ...jest.requireActual("../../util"),
+vi.mock("../../drivers/stdio");
+vi.mock("../../plugins/login");
+vi.mock("../../drivers/api");
+vi.mock("../../util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../util")>()),
   getAppName: () => "p0",
 }));
+vi.mock("firebase/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("firebase/auth")>();
+
+  const mockFirebaseAuth = {
+    tenantId: "test-tenant",
+    apiKey: "test-api-key",
+    appName: "test-app",
+    authDomain: "test.firebaseapp.com",
+  };
+
+  const mockFirebaseCredential = {
+    providerId: "google.com",
+    signInMethod: "google.com",
+    accessToken: "test-access-token",
+    idToken: "test-id-token",
+  };
+
+  return {
+    ...actual,
+    signInWithCredential: vi.fn(),
+    OAuthProvider: vi.fn().mockImplementation(() => ({
+      credential: vi.fn().mockReturnValue(mockFirebaseCredential),
+    })),
+    getAuth: vi.fn().mockReturnValue(mockFirebaseAuth),
+    initializeAuth: vi.fn().mockReturnValue(mockFirebaseAuth),
+  };
+});
 
 const mockIdentity: Identity = {
   // @ts-expect-error credential has more fields, this is enough for tests
@@ -46,16 +74,16 @@ const mockIdentity: Identity = {
   token: "test",
 };
 
-const mockSignInWithCredential = signInWithCredential as jest.Mock;
-const mockReadFile = readFile as jest.Mock;
-const mockWriteFile = writeFile as jest.Mock;
-const mockFetchOrgData = fetchOrgData as jest.Mock;
+const mockSignInWithCredential = signInWithCredential as Mock;
+const mockReadFile = readFile as Mock;
+const mockWriteFile = writeFile as Mock;
+const mockFetchOrgData = fetchOrgData as Mock;
 
 describe("login", () => {
   beforeEach(() => {
-    jest.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
-    jest.spyOn(config, "saveConfig").mockImplementation(jest.fn());
-    jest.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
+    vi.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
+    vi.spyOn(config, "saveConfig").mockImplementation(vi.fn());
+    vi.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
     // do NOT spyOn getContactMessage — you want the real one
   });
 
@@ -87,7 +115,7 @@ describe("login", () => {
 
   describe("identity file does not exist", () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Mock `readFile` to throw an "ENOENT" error
       mockReadFile.mockImplementation(() => {
@@ -114,8 +142,8 @@ describe("login", () => {
 
     beforeEach(() => {
       credentialData = "";
-      jest.clearAllMocks();
-      jest.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
+      vi.clearAllMocks();
+      vi.spyOn(config, "loadConfig").mockResolvedValueOnce(defaultConfig);
       mockReadFile.mockImplementation(async () =>
         Buffer.from(credentialData, "utf-8")
       );
@@ -127,7 +155,7 @@ describe("login", () => {
           Promise.resolve({
             user: {
               email: "user@p0.dev",
-              getIdToken: jest.fn().mockResolvedValue("mock-id-token"),
+              getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
             },
           })
       );
@@ -150,7 +178,7 @@ describe("login", () => {
 
     it("validates authentication", async () => {
       await login({ org: "test-org" });
-      expect((signInWithCredential as jest.Mock).mock.calls).toMatchSnapshot();
+      expect((signInWithCredential as Mock).mock.calls).toMatchSnapshot();
     });
 
     it("returns an error message if firebase cannot determine the user email", async () => {
@@ -165,9 +193,23 @@ Please contact support@p0.dev for assistance."
 
     describe("already logged in", () => {
       beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
 
-        jest.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
+        // Mock credentials file on disk (needed for loadCredentials to read existing identity)
+        mockReadFile.mockResolvedValue(
+          Buffer.from(JSON.stringify(mockIdentity), "utf-8")
+        );
+        // Mock Firebase re-authentication (needed when login is called with --refresh or different org)
+        mockSignInWithCredential.mockImplementation(
+          async (_auth, _firebaseCredential) =>
+            Promise.resolve({
+              user: {
+                email: "user@p0.dev",
+                getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
+              },
+            })
+        );
+        vi.spyOn(auth, "loadCredentials").mockResolvedValue(mockIdentity);
         mockFetchOrgData.mockResolvedValue({
           slug: "test-org",
           tenantId: "test-tenant",

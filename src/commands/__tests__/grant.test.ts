@@ -11,18 +11,19 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { grantCommand } from "../grant";
+import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
-jest.mock("../../drivers/api");
-jest.mock("../../drivers/auth");
-jest.mock("../../drivers/stdio");
+vi.mock("../../drivers/api");
+vi.mock("../../drivers/auth");
+vi.mock("../../drivers/stdio");
 
-const mockFetchCommand = fetchCommand as jest.Mock;
-const mockPrint1 = print1 as jest.Mock;
-const mockPrint2 = print2 as jest.Mock;
+const mockFetchCommand = fetchCommand as Mock;
+const mockPrint1 = print1 as Mock;
+const mockPrint2 = print2 as Mock;
 
 describe("grant", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   describe("when valid grant command", () => {
     const command =
