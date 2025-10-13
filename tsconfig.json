@@ -105,5 +105,5 @@
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
 
-  "exclude": ["vitest.config.mts"],
+  "exclude": ["build", "node_modules", "vitest.config.mts"],
 }
