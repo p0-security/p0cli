@@ -104,9 +104,7 @@ export const login = async (
     );
   }
 
-  if (!loggedIn) {
-    await saveConfig(orgSlug, options?.debug);
-  }
+  await saveConfig(orgSlug, options?.debug);
 
   await initializeFirebase();
 

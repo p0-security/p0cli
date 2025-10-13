@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { shouldSkipCheckVersion } from "../drivers/config";
 import { print2 } from "../drivers/stdio";
 import { P0_PATH, exec, getOperatingSystem, timeout } from "../util";
 import { p0VersionInfo } from "../version";
@@ -39,7 +40,12 @@ type NpmPackageOutput = {
  */
 export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
   const isDebug = Boolean(yargs["debug"]);
-
+  if (shouldSkipCheckVersion()) {
+    if (isDebug) {
+      print2("Skipping version check");
+    }
+    return;
+  }
   try {
     const latestFile = path.join(P0_PATH, LATEST_VERSION_FILE);
     try {
