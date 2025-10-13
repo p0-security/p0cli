@@ -47,6 +47,7 @@
     // "maxNodeModuleJsDepth": 1,                        /* Specify the maximum folder depth used for checking JavaScript files from 'node_modules'. Only applicable with 'allowJs'. */
 
     /* Emit */
+    "noEmit": true,                                   /* Disable emitting files from a compilation. */
     "declaration": true,                              /* Generate .d.ts files from TypeScript and JavaScript files in your project. */
     // "declarationMap": true,                           /* Create sourcemaps for d.ts files. */
     // "emitDeclarationOnly": true,                      /* Only output d.ts files and not JavaScript files. */
@@ -104,5 +105,5 @@
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
 
-  "exclude": ["build/", "__mocks__/", "node_modules/"],
+  "exclude": ["build", "node_modules", "vitest.config.mts"],
 }

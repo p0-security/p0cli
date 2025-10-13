@@ -28,9 +28,10 @@ const loadCurrentVersion = (): {
     // Note that package.json is installed at <root>/package.json,
     // whereas this gets compiled to <root>/build/dist/version.js
     // in the build. We also need to adjust the path when running tests
-    const packageJsonPath = process.env.TS_JEST
-      ? `${__dirname}/../package.json`
-      : `${__dirname}/../../package.json`;
+    const packageJsonPath =
+      process.env.NODE_ENV === "unit"
+        ? `${__dirname}/../package.json`
+        : `${__dirname}/../../package.json`;
     const { name, version } = JSON.parse(
       fs.readFileSync(packageJsonPath).toString("utf-8")
     );

@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`login organization exists should write the user's identity & config to the file system 1`] = `
+exports[`login > organization exists > should write the user's identity & config to the file system 1`] = `
 [
   [
     "/dummy/identity/file/path",
@@ -28,13 +28,21 @@ exports[`login organization exists should write the user's identity & config to 
 ]
 `;
 
-exports[`login organization exists validates authentication 1`] = `
+exports[`login > organization exists > validates authentication 1`] = `
 [
   [
     {
+      "apiKey": "test-api-key",
+      "appName": "test-app",
+      "authDomain": "test.firebaseapp.com",
       "tenantId": "test-tenant",
     },
-    "test-credential",
+    {
+      "accessToken": "test-access-token",
+      "idToken": "test-id-token",
+      "providerId": "google.com",
+      "signInMethod": "google.com",
+    },
   ],
 ]
 `;
