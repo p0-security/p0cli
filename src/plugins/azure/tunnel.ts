@@ -10,14 +10,13 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
-import { sleep } from "../../util";
+import { sleep, spawnWithCleanEnv } from "../../util";
 import {
   ABORT_AUTHORIZATION_FAILED_MESSAGE,
   AUTHORIZATION_FAILED_PATTERN,
   USER_NOT_IN_CACHE_PATTERN,
 } from "./auth";
 import { AzureSshRequest } from "./types";
-import { spawn } from "node:child_process";
 
 const TUNNEL_READY_STRING = "Tunnel is ready";
 
@@ -85,7 +84,7 @@ const spawnBastionTunnelInBackground = (
 
     // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
     // descendent processes together.
-    const child = spawn(command, args, { detached: true });
+    const child = spawnWithCleanEnv(command, args, { detached: true });
 
     child.on("exit", (code) => {
       processExited = true;

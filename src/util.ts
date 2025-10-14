@@ -9,10 +9,21 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { defaultConfig } from "./drivers/env";
-import child_process from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessByStdio,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptions,
+  type SpawnOptionsWithoutStdio,
+  type SpawnOptionsWithStdioTuple,
+  type StdioNull,
+  type StdioPipe,
+} from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import type { Readable } from "node:stream";
 import { sys } from "typescript";
 
 export const getAppPath = () =>
@@ -26,6 +37,55 @@ export const P0_PATH = path.join(
     ? ".p0"
     : `.p0-${defaultConfig.environment}`
 );
+
+/**
+ * Creates a clean environment for child processes by removing environment
+ * variables that could interfere with external tools not designed for our
+ * custom setup.
+ */
+export const createCleanChildEnv = (
+  baseEnv?: NodeJS.ProcessEnv
+): NodeJS.ProcessEnv => {
+  const cleanEnv = { ...process.env, ...baseEnv };
+  delete cleanEnv.PYENV_ROOT;
+  delete cleanEnv.PYENV_SHELL;
+  delete cleanEnv.PYENV_VERSION;
+  return cleanEnv;
+};
+
+/**
+ * Wrapped spawn function that automatically provides clean environment for child processes
+ */
+export function spawnWithCleanEnv(
+  command: string,
+  args?: ReadonlyArray<string>,
+  options?: SpawnOptionsWithoutStdio
+): ChildProcessWithoutNullStreams;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioNull, StdioPipe>
+): ChildProcessByStdio<null, null, Readable>;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>
+): ChildProcessByStdio<null, Readable, Readable>;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptions
+): ChildProcess;
+export function spawnWithCleanEnv(
+  command: string,
+  args?: ReadonlyArray<string>,
+  options?: SpawnOptions
+): ChildProcess {
+  return spawn(command, args || [], {
+    ...options,
+    env: createCleanChildEnv(options?.env),
+  });
+}
 
 /** Waits the specified delay (in ms)
  *
@@ -67,7 +127,7 @@ export const timeout = async <T extends NonNullable<any>>(
 export const exec = async (
   command: string,
   args: string[],
-  options?: child_process.SpawnOptionsWithoutStdio & {
+  options?: SpawnOptionsWithoutStdio & {
     /** If true, throws an error if exit code is non-zero */
     check?: boolean;
   }
@@ -77,7 +137,7 @@ export const exec = async (
       try {
         const out: string[] = [];
         const err: string[] = [];
-        const child = child_process.spawn(command, args, {
+        const child = spawnWithCleanEnv(command, args, {
           ...(options ?? {}),
           stdio: "pipe",
         });
