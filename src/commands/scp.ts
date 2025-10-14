@@ -114,7 +114,10 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
 
   // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
   // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
-  process.exit(exitCode ?? 0);
+  // Skip in tests to avoid killing the test runner
+  if (process.env.NODE_ENV !== "unit") {
+    process.exit(exitCode ?? 0);
+  }
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
