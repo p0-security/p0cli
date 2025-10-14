@@ -98,7 +98,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
   // replace the host with the linuxUserName@instanceId
   const { source, destination } = replaceHostWithInstance(request, args);
 
-  await sshOrScp({
+  const exitCode = await sshOrScp({
     authn,
     request,
     requestId,
@@ -111,6 +111,10 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
     sshProvider,
     sshHostKeys,
   });
+
+  // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
+  // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
+  process.exit(exitCode ?? 0);
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
