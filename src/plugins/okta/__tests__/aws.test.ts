@@ -25,7 +25,7 @@ vi.mock("../../aws/assumeRole", () => ({
   assumeRoleWithSaml: vi.fn(),
 }));
 vi.mock("../login", () => ({
-  fetchOktaSamlAssertionForAws: vi.fn(),
+  fetchSamlAssertionForAws: vi.fn(),
 }));
 vi.mock("../../../common/xml", () => ({
   parseXml: vi.fn(),
