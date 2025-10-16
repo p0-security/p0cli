@@ -14,9 +14,7 @@ export const urlEncode = (data: Record<string, string>) =>
     .map((kv) => kv.map(encodeURIComponent).join("="))
     .join("&");
 
-/** Validates an HTTP response, throwing a friendly
- *  error message if invalid
- */
+/** Validates an HTTP response, throwing a friendly error message if invalid */
 export const validateResponse = async (response: Response) => {
   if (response.ok) return response;
   throw new Error(`Error in fetch request to ${response.url.split("?")[0]}:

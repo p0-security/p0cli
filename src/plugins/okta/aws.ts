@@ -15,7 +15,7 @@ import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
 import { AwsFederatedLogin, AwsItem } from "../aws/types";
-import { fetchOktaSamlAssertionForAws as fetchSamlAssertionForAws } from "./login";
+import { fetchSamlAssertionForAws } from "./login";
 import { flatten } from "lodash";
 
 // Retry configuration for handling Okta eventual consistency

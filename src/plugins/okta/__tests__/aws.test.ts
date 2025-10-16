@@ -13,7 +13,7 @@ import { Authn } from "../../../types/identity";
 import { assumeRoleWithSaml } from "../../aws/assumeRole";
 import { getAwsConfig } from "../../aws/config";
 import { assumeRoleWithOktaSaml } from "../aws";
-import { fetchOktaSamlAssertionForAws } from "../login";
+import { fetchSamlAssertionForAws } from "../login";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
@@ -79,7 +79,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       identity: {} as any,
       config: mockConfig as any,
     });
-    vi.mocked(fetchOktaSamlAssertionForAws).mockResolvedValue("base64-saml");
+    vi.mocked(fetchSamlAssertionForAws).mockResolvedValue("base64-saml");
     vi.mocked(assumeRoleWithSaml).mockResolvedValue({
       AWS_ACCESS_KEY_ID: "key",
       AWS_SECRET_ACCESS_KEY: "secret",
@@ -100,7 +100,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
     );
 
     expect(result).toBeDefined();
-    expect(fetchOktaSamlAssertionForAws).toHaveBeenCalledTimes(1);
+    expect(fetchSamlAssertionForAws).toHaveBeenCalledTimes(1);
     expect(parseXml).toHaveBeenCalledTimes(1);
   });
 
@@ -121,7 +121,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
     );
 
     expect(result).toBeDefined();
-    expect(fetchOktaSamlAssertionForAws).toHaveBeenCalledTimes(2);
+    expect(fetchSamlAssertionForAws).toHaveBeenCalledTimes(2);
     expect(parseXml).toHaveBeenCalledTimes(2);
   });
 });

@@ -69,6 +69,7 @@ const fetchSsoWebToken = async (
       }
     }
 
+    // Throw a friendly error message if response is invalid
     await validateResponse(response);
   }
 
@@ -130,10 +131,10 @@ export const oktaLogin = async (org: OrgData) =>
  * @throws Error if Okta session has expired or been terminated
  */
 // TODO: Inject Okta app
-export const fetchOktaSamlAssertionForAws = async (
+export const fetchSamlAssertionForAws = async (
   identity: Identity,
   config: AwsFederatedLogin
-) => {
+): Promise<string> => {
   const webTokenResponse = await fetchSsoWebToken(
     config.provider.appId,
     identity
