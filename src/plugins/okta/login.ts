@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
+import { deleteIdentity } from "../../drivers/auth";
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
@@ -27,7 +28,14 @@ const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
 const TOKEN_EXCHANGE_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange";
 const WEB_SSO_TOKEN_TYPE = "urn:okta:oauth:token-type:web_sso_token";
 
-/** Exchanges an Okta OIDC SSO token for an Okta app SSO token */
+/**
+ * Exchanges an Okta OIDC SSO token for an Okta app SSO token.
+ *
+ * Performs OAuth 2.0 Token Exchange (RFC 8693) to convert general-purpose
+ * OIDC tokens into an app-specific Web SSO token.
+ *
+ * @throws Error if Okta session has expired or been terminated
+ */
 const fetchSsoWebToken = async (
   appId: string,
   { org, credential }: Identity
@@ -51,7 +59,20 @@ const fetchSsoWebToken = async (
     `https:${org.providerDomain}/oauth2/v1/token`,
     init
   );
-  await validateResponse(response);
+
+  if (!response.ok) {
+    if (response.status === 400) {
+      const data = await response.json();
+      if (data.error === "invalid_grant") {
+        await deleteIdentity();
+        throw new Error("Your Okta session has expired. Please login again.");
+      }
+    }
+
+    // Throw a friendly error message if response is invalid
+    await validateResponse(response);
+  }
+
   return (await response.json()) as TokenResponse;
 };
 
@@ -90,12 +111,30 @@ export const oktaLogin = async (org: OrgData) =>
     })
   );
 
-/** Retrieves a SAML response for an okta app */
+/**
+ * Converts OIDC tokens into a SAML assertion for AWS federated authentication.
+ *
+ * This function bridges the gap between modern OIDC authentication (used by P0 CLI)
+ * and legacy SAML federation (required by AWS IAM). It performs a two-step process:
+ *
+ * 1. **Token Exchange (OIDC → Web SSO Token)**:
+ *    Exchanges the user's general-purpose OIDC tokens (access_token, id_token) for
+ *    an app-specific Web SSO token scoped to the Okta AWS integration app.
+ *
+ * 2. **SAML Extraction (Web SSO Token → SAML Assertion)**:
+ *    Uses the Web SSO token to initiate Okta's SSO flow and extracts the base64-encoded
+ *    SAML assertion from the resulting HTML response.
+ *
+ * @param identity - The user's P0 identity containing OIDC tokens from login
+ * @param config - AWS federated login configuration with Okta app details
+ * @returns Base64-encoded SAML assertion for AWS authentication
+ * @throws Error if Okta session has expired or been terminated
+ */
 // TODO: Inject Okta app
-export const getSamlResponse = async (
+export const fetchSamlAssertionForAws = async (
   identity: Identity,
   config: AwsFederatedLogin
-) => {
+): Promise<string> => {
   const webTokenResponse = await fetchSsoWebToken(
     config.provider.appId,
     identity
