@@ -19,11 +19,12 @@ import { getSamlResponse } from "./login";
 import { flatten } from "lodash";
 
 // Retry configuration for handling Okta eventual consistency
+// With exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s... ≈ 5 minutes total
 const ROLE_NOT_AVAILABLE_PATTERN = /^Role .+ not available\./;
-const RETRY_ATTEMPTS = 5;
+const RETRY_ATTEMPTS = 14;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const RETRY_MULTIPLIER = 2.0;
-const MAX_RETRY_DELAY_MS = 10000;
+const MAX_RETRY_DELAY_MS = 30000;
 
 /** Extracts all roles from a SAML assertion */
 const rolesFromSaml = (account: string, saml: string) => {
