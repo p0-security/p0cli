@@ -15,7 +15,7 @@ import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
 import { AwsFederatedLogin, AwsItem } from "../aws/types";
-import { getSamlResponse } from "./login";
+import { fetchOktaSamlAssertionForAws as fetchSamlAssertionForAws } from "./login";
 import { flatten } from "lodash";
 
 // Retry configuration for handling Okta eventual consistency
@@ -66,7 +66,7 @@ const initOktaSaml = async (
   const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
-  const samlResponse = await getSamlResponse(identity, config.login);
+  const samlResponse = await fetchSamlAssertionForAws(identity, config.login);
   return {
     samlResponse,
     config,
