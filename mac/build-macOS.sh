@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e  # Exit on any error
+
 # See https://nodejs.org/docs/latest-v20.x/api/single-executable-applications.html for more information.
 node --experimental-sea-config sea-config.json 
 cp $(node -p process.execPath) ./build/sea/p0
