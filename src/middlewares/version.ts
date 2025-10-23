@@ -93,7 +93,7 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
       } catch (error: any) {
         let errorDetails: string = error?.message || "Unknown error";
         if (error?.code != null) {
-          errorDetails += ` ${error.code}`;
+          errorDetails += `\nError Code: ${error.code}`;
         }
 
         if (error?.stderr) {
