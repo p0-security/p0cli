@@ -100,7 +100,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
   const { request, requestId, privateKey, sshProvider, sshHostKeys } =
     await prepareRequest(authn, args, args.destination);
 
-  await sshOrScp({
+  const exitCode = await sshOrScp({
     authn,
     request,
     requestId,
@@ -109,4 +109,11 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
     sshProvider,
     sshHostKeys,
   });
+
+  // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
+  // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
+  // Skip in tests to avoid killing the test runner
+  if (process.env.NODE_ENV !== "unit") {
+    process.exit(exitCode ?? 0);
+  }
 };

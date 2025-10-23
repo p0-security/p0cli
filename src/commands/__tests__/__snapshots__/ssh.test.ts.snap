@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] = `
+exports[`ssh > ephemeral access > should call p0 request with reason arg > args 1`] = `
 {
   "_": [
     "ssh",
@@ -21,7 +21,7 @@ exports[`ssh ephemeral access should call p0 request with reason arg: args 1`] =
 }
 `;
 
-exports[`ssh ephemeral access should call sshOrScp with interactive session: stderr 1`] = `
+exports[`ssh > ephemeral access > should call sshOrScp with interactive session > stderr 1`] = `
 [
   [
     "a message",
@@ -38,7 +38,7 @@ exports[`ssh ephemeral access should call sshOrScp with interactive session: std
 ]
 `;
 
-exports[`ssh ephemeral access should call sshOrScp with non-interactive command: stderr 1`] = `
+exports[`ssh > ephemeral access > should call sshOrScp with non-interactive command > stderr 1`] = `
 [
   [
     "a message",
@@ -55,7 +55,7 @@ exports[`ssh ephemeral access should call sshOrScp with non-interactive command:
 ]
 `;
 
-exports[`ssh persistent access should call p0 request with reason arg: args 1`] = `
+exports[`ssh > persistent access > should call p0 request with reason arg > args 1`] = `
 {
   "_": [
     "ssh",
@@ -76,7 +76,7 @@ exports[`ssh persistent access should call p0 request with reason arg: args 1`] 
 }
 `;
 
-exports[`ssh persistent access should call sshOrScp with interactive session: stderr 1`] = `
+exports[`ssh > persistent access > should call sshOrScp with interactive session > stderr 1`] = `
 [
   [
     "Waiting for access to be provisioned",
@@ -84,7 +84,7 @@ exports[`ssh persistent access should call sshOrScp with interactive session: st
 ]
 `;
 
-exports[`ssh persistent access should call sshOrScp with non-interactive command: stderr 1`] = `
+exports[`ssh > persistent access > should call sshOrScp with non-interactive command > stderr 1`] = `
 [
   [
     "Waiting for access to be provisioned",

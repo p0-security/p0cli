@@ -8,14 +8,23 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { retryWithSleep } from "../../common/retry";
 import { parseXml } from "../../common/xml";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
 import { AwsFederatedLogin, AwsItem } from "../aws/types";
-import { getSamlResponse } from "./login";
+import { fetchSamlAssertionForAws } from "./login";
 import { flatten } from "lodash";
+
+// Retry configuration for handling Okta eventual consistency
+// With exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s... ≈ 5 minutes total
+const ROLE_NOT_AVAILABLE_PATTERN = /^Role .+ not available\./;
+const RETRY_ATTEMPTS = 14;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const RETRY_MULTIPLIER = 2.0;
+const MAX_RETRY_DELAY_MS = 30000;
 
 /** Extracts all roles from a SAML assertion */
 const rolesFromSaml = (account: string, saml: string) => {
@@ -58,7 +67,7 @@ const initOktaSaml = async (
   const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
-  const samlResponse = await getSamlResponse(identity, config.login);
+  const samlResponse = await fetchSamlAssertionForAws(identity, config.login);
   return {
     samlResponse,
     config,
@@ -74,22 +83,44 @@ export const assumeRoleWithOktaSaml = async (
   await cached(
     `aws-okta-${args.accountId}-${args.role}`,
     async () => {
-      const { account, config, samlResponse } = await initOktaSaml(
-        authn,
-        args.accountId,
-        debug
-      );
-      const { roles } = rolesFromSaml(account, samlResponse);
-      if (!roles.includes(args.role))
-        throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
-      return await assumeRoleWithSaml({
-        account,
-        role: args.role,
-        saml: {
-          providerName: config.login.provider.identityProvider,
-          response: samlResponse,
+      // (Speculative) There could be a delay between Okta API role assignment and the role appearing
+      // in the SAML assertions due to eventual consistency in Okta's distributed infrastructure.
+      // Add retry logic to handle this race condition.
+      return await retryWithSleep(
+        async () => {
+          const { account, config, samlResponse } = await initOktaSaml(
+            authn,
+            args.accountId,
+            debug
+          );
+          const { roles } = rolesFromSaml(account, samlResponse);
+          if (!roles.includes(args.role)) {
+            throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
+          }
+          return await assumeRoleWithSaml({
+            account,
+            role: args.role,
+            saml: {
+              providerName: config.login.provider.identityProvider,
+              response: samlResponse,
+            },
+          });
         },
-      });
+        {
+          shouldRetry: (error: unknown) => {
+            // Only retry when the specific role is not available in the SAML response
+            return (
+              typeof error === "string" &&
+              ROLE_NOT_AVAILABLE_PATTERN.test(error)
+            );
+          },
+          retries: RETRY_ATTEMPTS,
+          delayMs: INITIAL_RETRY_DELAY_MS,
+          multiplier: RETRY_MULTIPLIER,
+          maxDelayMs: MAX_RETRY_DELAY_MS,
+          debug,
+        }
+      );
     },
     { duration: 3600e3 }
   );

@@ -1,3 +1,3 @@
-#!/usr/bin/env node --no-deprecation
+#!/usr/bin/env -S node --no-deprecation
 
 require(`${__dirname}/build/dist/index.js`).main();

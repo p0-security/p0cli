@@ -12,6 +12,7 @@ You should have received a copy of the GNU General Public License along with @p0
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
 import { sleep } from "../../util";
 import express from "express";
+import { noop } from "lodash";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import { join, resolve } from "node:path";
@@ -51,8 +52,8 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
 
 /** Waits for an OIDC authorization redirect using a locally mounted server */
 export const withRedirectServer = async <S, T, U>(
-  start: (server: http.Server) => Promise<S>,
-  complete: (value: S, token: T) => Promise<U>,
+  beginAuth: (server: http.Server) => Promise<S>,
+  completeAuth: (value: S, token: T) => Promise<U>,
   options?: { port?: number }
 ) => {
   const app = express();
@@ -65,20 +66,17 @@ export const withRedirectServer = async <S, T, U>(
     redirectReject = reject;
   });
 
-  // load static assets
   const pageBytes = await loadStaticAsset(LANDING_HTML_PATH);
   const faviconBytes = await loadStaticAsset(FAVICON_PATH);
 
-  // handle favicon
   app.get("/favicon.ico", (_, res) => {
     pipeToResponse(faviconBytes, res, "image/x-icon");
   });
 
-  // handle redirect
   const redirectRouter = express.Router();
   redirectRouter.get("/", (req, res) => {
     const token = req.query as T;
-    complete(value, token)
+    completeAuth(value, token)
       .then((result) => {
         pipeToResponse(pageBytes, res, "text/html; charset=utf-8");
         redirectResolve(result);
@@ -93,12 +91,38 @@ export const withRedirectServer = async <S, T, U>(
 
   const server = app.listen(options?.port ?? 0);
 
-  try {
-    value = await start(server);
-    return await redirectPromise;
-  } finally {
+  // Set up cleanup handler for process interruption
+  const cleanup = async () => {
     await sleep(SERVER_SHUTDOWN_WAIT_MILLIS);
     server.closeAllConnections();
-    server.unref();
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    }).catch(noop);
+  };
+
+  // Register signal handlers to ensure cleanup on interruption
+  const signalHandler = () => {
+    void cleanup().finally(() => process.exit(0));
+  };
+  process.once("SIGINT", signalHandler);
+  process.once("SIGTERM", signalHandler);
+
+  // Wait for server to start listening or fail
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", () => resolve());
+    server.once("error", (error) => {
+      redirectReject(error);
+      reject(error);
+    });
+  });
+
+  try {
+    value = await beginAuth(server);
+    return await redirectPromise;
+  } finally {
+    process.removeListener("SIGINT", signalHandler);
+    process.removeListener("SIGTERM", signalHandler);
+
+    await cleanup();
   }
 };
