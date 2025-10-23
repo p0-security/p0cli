@@ -8,24 +8,22 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-
 import { print1 } from "../drivers/stdio";
 import yargs from "yargs";
 
-const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => 
-    yargs
-        .help(false)
-        .option("debug", {
-            type: "boolean",
-        describe: "Print debug information.",
-        });
+const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => yargs.help(false);
 
 export const printBearerTokenCommand = (yargs: yargs.Argv) =>
-  yargs.command<{
-    debug: boolean;
-}>("print-bearer-token", "Prints bearer-token to stdout", printBearerTokenArgs, printBearerToken);
+  yargs.command<{}>(
+    "print-bearer-token",
+    "Prints bearer token to stdout",
+    printBearerTokenArgs,
+    printBearerToken
+  );
 
 export const printBearerToken = () => {
-    // TODO: fetch actual bearer token
-    print1("bearer-token-place-holder-value")
-}
+  // TODO: fetch actual bearer token
+  print1("bearer-token-place-holder-value");
+
+  // TODO: maybe print an error to stderr if we can't find token?
+};
