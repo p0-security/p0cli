@@ -9,21 +9,32 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print1 } from "../drivers/stdio";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 import yargs from "yargs";
 
 const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => yargs.help(false);
 
 export const printBearerTokenCommand = (yargs: yargs.Argv) =>
-  yargs.command<{}>(
+  yargs.command(
     "print-bearer-token",
     "Prints bearer token to stdout",
     printBearerTokenArgs,
     printBearerToken
   );
 
-export const printBearerToken = () => {
-  // TODO: fetch actual bearer token
-  print1("bearer-token-place-holder-value");
-
-  // TODO: maybe print an error to stderr if we can't find token?
+export const printBearerToken = async () => {
+  const identityFilePath = path.join(os.homedir(), ".p0", "identity.json");
+  try {
+    const rawData = await fs.readFile(identityFilePath);
+    const identityData = JSON.parse(rawData.toString());
+    print1(identityData.credential?.access_token);
+  } catch (error: any) {
+    if (error?.code == "ENOENT") {
+      throw `Missing identity file.`;
+    } else {
+      throw error;
+    }
+  }
 };
