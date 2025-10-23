@@ -24,6 +24,7 @@ import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
+import { printBearerTokenCommand } from "./print-bearer-token";
 import { sys } from "typescript";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -41,6 +42,7 @@ const commands = [
   sshResolveCommand,
   scpCommand,
   kubeconfigCommand,
+  printBearerTokenCommand,
 ];
 
 const buildArgv = async () => {
