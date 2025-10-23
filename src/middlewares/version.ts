@@ -86,10 +86,33 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
       ? ["/d", "/s", "/c", "npm", ...commonNpmArgs]
       : commonNpmArgs;
 
+    // wrap the exec call in a function to add enhanced error handling logic
+    const protectedExec = async () => {
+      try {
+        return await exec(npmCmd, npmArgs, { check: true });
+      } catch (error: any) {
+        let errorDetails: string = error?.message || "Unknown error";
+        if (error?.code != null) {
+          errorDetails += `\nError Code: ${error.code}`;
+        }
+
+        if (error?.stderr) {
+          errorDetails += `\nStderr: ${error.stderr.trim()}`;
+        }
+
+        if (error?.stdout) {
+          errorDetails += `\nStdout: ${error.stdout.trim()}`;
+        }
+
+        throw new Error(errorDetails);
+      }
+    };
+
     const processResult = await timeout(
-      exec(npmCmd, npmArgs, { check: true }),
+      protectedExec(),
       VERSION_CHECK_TIMEOUT_MILLIS
     );
+
     const npmPackage: NpmPackageOutput = JSON.parse(processResult.stdout);
     const { latest } = npmPackage["dist-tags"];
 
