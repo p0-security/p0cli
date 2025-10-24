@@ -19,6 +19,7 @@ import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
 import { logoutCommand } from "./logout";
 import { lsCommand } from "./ls";
+import { printBearerTokenCommand } from "./print-bearer-token";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
@@ -41,6 +42,7 @@ const commands = [
   sshResolveCommand,
   scpCommand,
   kubeconfigCommand,
+  printBearerTokenCommand,
 ];
 
 const buildArgv = async () => {
