@@ -9,30 +9,23 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { loadCredentials } from "../drivers/auth";
 import { print1 } from "../drivers/stdio";
 import yargs from "yargs";
 
 const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => yargs.help(false);
 
 export const printBearerTokenCommand = (yargs: yargs.Argv) =>
-  yargs
-    .command(
-      "print-bearer-token",
-      false, // hides command from --help output
-      printBearerTokenArgs,
-      printBearerToken
-    )
-    .option("debug", {
-      type: "boolean",
-      describe: "Print debug information.",
-    });
+  yargs.command(
+    "print-bearer-token",
+    false, // hides command from --help output
+    printBearerTokenArgs,
+    printBearerToken
+  );
 
 export const printBearerToken = async () => {
-  //const authn = await authenticate();
-  const identity = await loadCredentials();
+  const { getToken } = await authenticate();
 
-  const token = identity?.credential?.access_token;
+  const token = await getToken();
   if (!token) {
     console.error("No access token found in identity.");
     process.exit(1);
