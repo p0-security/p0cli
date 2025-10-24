@@ -23,9 +23,9 @@ export const printBearerTokenCommand = (yargs: yargs.Argv) =>
   );
 
 export const printBearerToken = async () => {
-  const { getToken } = await authenticate();
+  const authn = await authenticate();
 
-  const token = await getToken();
+  const token = authn?.identity?.credential?.access_token;
   if (!token) {
     console.error("No access token found in identity.");
     process.exit(1);
