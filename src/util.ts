@@ -75,8 +75,8 @@ export const exec = async (
   new Promise<{ code: number | null; stdout: string; stderr: string }>(
     (resolve, reject) => {
       try {
-        const out: string[] = [];
-        const err: string[] = [];
+        const out: (Buffer | string)[] = [];
+        const err: (Buffer | string)[] = [];
         const child = child_process.spawn(command, args, {
           ...(options ?? {}),
           stdio: "pipe",
@@ -88,8 +88,8 @@ export const exec = async (
         // stdio (standard input, standard output, and standard error) streams have been closed.
         // See https://nodejs.org/api/child_process.html#event-close
         child.on("close", (code) => {
-          const stdout = out.join("\n");
-          const stderr = err.join("\n");
+          const stdout = out.map((d) => d.toString()).join("");
+          const stderr = err.map((d) => d.toString()).join("");
           const result = { code, stdout, stderr };
           if (code !== 0 && options?.check)
             reject(
