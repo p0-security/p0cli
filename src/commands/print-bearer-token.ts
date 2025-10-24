@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { print1 } from "../drivers/stdio";
+import { print1, print2 } from "../drivers/stdio";
 import yargs from "yargs";
 
 const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => yargs.help(false);
@@ -25,9 +25,9 @@ export const printBearerTokenCommand = (yargs: yargs.Argv) =>
 export const printBearerToken = async () => {
   const authn = await authenticate();
 
-  const token = authn?.identity?.credential?.access_token;
+  const token = await authn.getToken();
   if (!token) {
-    console.error("No access token found in identity.");
+    print2("No access token found in identity.");
     process.exit(1);
   }
   print1(token);
