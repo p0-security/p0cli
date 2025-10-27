@@ -171,7 +171,7 @@ export const authenticate = async (options?: {
   if (identity.org.useProviderToken) {
     authn = {
       identity,
-      getToken: () => Promise.resolve(identity.credential.access_token),
+      getToken: () => Promise.resolve(identity.credential.id_token),
     };
   } else {
     // Note: if the `providerId` is "password", we already actually already

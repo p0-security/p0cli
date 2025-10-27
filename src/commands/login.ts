@@ -168,7 +168,8 @@ const validateTenantAccess = async (authn: Authn, debug?: boolean) => {
   try {
     await fetchAccountInfo(authn, debug);
     return true;
-  } catch (e) {
+  } catch (e: any) {
+    print2(`Error fetching account info: ${e}`);
     await deleteIdentity();
     throw "Could not find organization, logging out.";
   }
