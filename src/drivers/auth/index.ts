@@ -174,7 +174,7 @@ export const authenticate = async (options?: {
       getToken: () => Promise.resolve(identity.credential.access_token),
     };
   } else {
-    // Note: if the `providerId` is "password", we already actually already
+    // Note: if the `providerId` is "password", we've actually already
     // retrieved the UserCredential object in `loadCredentialsWithAutoLogin`.
     // This following call to `authenticateToFirebase` could be omitted.
     const userCredential = await authenticateToFirebase(identity, options);
