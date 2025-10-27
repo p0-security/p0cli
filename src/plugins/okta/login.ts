@@ -65,7 +65,7 @@ const fetchSsoWebToken = async (
       const data = await response.json();
       if (data.error === "invalid_grant") {
         await deleteIdentity();
-        throw new Error("Your Okta session has expired. Please login again.");
+        throw "Your Okta session has expired. Please login again.";
       }
     }
 
