@@ -9,11 +9,70 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { defaultConfig } from "./drivers/env";
-import child_process from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessByStdio,
+  type ChildProcessWithoutNullStreams,
+  type SpawnOptions,
+  type SpawnOptionsWithoutStdio,
+  type SpawnOptionsWithStdioTuple,
+  type StdioNull,
+  type StdioPipe,
+} from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import type { Readable } from "node:stream";
 import { sys } from "typescript";
+
+/**
+ * Creates a clean environment for child processes by removing FIPS OpenSSL configuration
+ * variables that could interfere with external tools not designed for our custom setup.
+ */
+export const createCleanChildEnv = (
+  baseEnv = process.env
+): NodeJS.ProcessEnv => {
+  const cleanEnv = { ...baseEnv };
+  delete cleanEnv.OPENSSL_CONF;
+  delete cleanEnv.OPENSSL_MODULES;
+  return cleanEnv;
+};
+
+/**
+ * Wrapped spawn function that automatically provides clean environment for child processes,
+ * preventing FIPS OpenSSL configuration from interfering with external tools.
+ */
+export function spawnWithCleanEnv(
+  command: string,
+  args?: ReadonlyArray<string>,
+  options?: SpawnOptionsWithoutStdio
+): ChildProcessWithoutNullStreams;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioNull, StdioPipe>
+): ChildProcessByStdio<null, null, Readable>;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptionsWithStdioTuple<StdioNull, StdioPipe, StdioPipe>
+): ChildProcessByStdio<null, Readable, Readable>;
+export function spawnWithCleanEnv(
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptions
+): ChildProcess;
+export function spawnWithCleanEnv(
+  command: string,
+  args?: ReadonlyArray<string>,
+  options?: SpawnOptions
+): ChildProcess {
+  return spawn(command, args || [], {
+    ...options,
+    env: options?.env || createCleanChildEnv(),
+  });
+}
 
 export const getAppPath = () =>
   process.env.P0_APP_PATH ?? process.argv[1] ?? "p0";
@@ -67,7 +126,7 @@ export const timeout = async <T extends NonNullable<any>>(
 export const exec = async (
   command: string,
   args: string[],
-  options?: child_process.SpawnOptionsWithoutStdio & {
+  options?: SpawnOptionsWithoutStdio & {
     /** If true, throws an error if exit code is non-zero */
     check?: boolean;
   }
@@ -77,7 +136,7 @@ export const exec = async (
       try {
         const out: (Buffer | string)[] = [];
         const err: (Buffer | string)[] = [];
-        const child = child_process.spawn(command, args, {
+        const child = spawnWithCleanEnv(command, args, {
           ...(options ?? {}),
           stdio: "pipe",
         });
