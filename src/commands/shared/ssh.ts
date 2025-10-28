@@ -170,7 +170,7 @@ export const provisionRequest = async (
         err.includes("@")
       ) {
         print2(
-          "Hint: The instance-name appears to contain a username AND a hostname; only the hostname is required."
+          "Hint: The instance name appears to contain a username AND a hostname; the username should be omitted."
         );
       }
     }
