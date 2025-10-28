@@ -162,12 +162,13 @@ export const provisionRequest = async (
     );
   };
 
+  // Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
   const requestErrorHandler = (err: any) => {
     if (typeof err === "string") {
       print2(err);
       if (
         err.startsWith("Could not find any instances matching") &&
-        err.includes("@")
+        destination.includes("@")
       ) {
         print2(
           "Hint: The instance name appears to contain a username AND a hostname; the username should be omitted."
