@@ -239,7 +239,7 @@ export const prepareRequest = async (
   destination: string,
   options?: SshRequestOptions
 ) => {
-  const result = await provisionRequest(authn, args, destination, options); // Seems to be the issue
+  const result = await provisionRequest(authn, args, destination, options);
   if (!result) {
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
