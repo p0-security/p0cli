@@ -162,21 +162,38 @@ export const provisionRequest = async (
     );
   };
 
+  const requestErrorHandler = (err: any) => {
+    if (typeof err === "string") {
+      print2(err);
+      if (
+        err.startsWith("Could not find any instances matching") &&
+        err.includes("@")
+      ) {
+        print2(
+          "Hint: The instance-name appears to contain a username AND a hostname; only the hostname is required."
+        );
+      }
+    }
+    sys.exit(1);
+  };
+
   let response;
   if (options?.approvedOnly) {
     // Try first with sudo
     try {
-      response = await makeRequest({ forceSudo: true });
+      response = await makeRequest({ forceSudo: true }).catch(
+        requestErrorHandler
+      );
     } catch (error) {
       // If that fails, try without sudo
       if (args.debug) {
         print2("Request with sudo failed, retrying without sudo");
       }
-      response = await makeRequest();
+      response = await makeRequest().catch(requestErrorHandler);
     }
   } else {
     // Normal behavior when not approvedOnly
-    response = await makeRequest();
+    response = await makeRequest().catch(requestErrorHandler);
   }
 
   if (!response) {
@@ -222,7 +239,7 @@ export const prepareRequest = async (
   destination: string,
   options?: SshRequestOptions
 ) => {
-  const result = await provisionRequest(authn, args, destination, options);
+  const result = await provisionRequest(authn, args, destination, options); // Seems to be the issue
   if (!result) {
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
