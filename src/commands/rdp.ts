@@ -17,7 +17,7 @@ import yargs from "yargs";
 
 export const rdpCommand = (yargs: yargs.Argv) =>
   yargs.command<RdpCommandArgs>(
-    "rdp session <destination>",
+    "rdp <destination>",
     "Connect to a Windows virtual machine via RDP",
     (yargs) =>
       yargs
