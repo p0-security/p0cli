@@ -173,7 +173,7 @@ const getUserPrincipalName = async ({ debug }: { debug?: boolean }) => {
  */
 export const azSetSubscription = async (
   request: AzureRdpRequest["permission"]["resource"] | AzureSshRequest,
-  options: { debug?: boolean; forceLogout?: boolean } = {}
+  options: { debug?: boolean; forceLogout?: boolean }
 ) => {
   const { debug, forceLogout } = options;
   if (debug) print2("Forming Azure connection...");
@@ -184,5 +184,5 @@ export const azSetSubscription = async (
 
   await performSetAccount(request, { ...options, attempts: 2 });
 
-  return await getUserPrincipalName(options);
+  return await getUserPrincipalName({ debug });
 };

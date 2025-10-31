@@ -17,7 +17,7 @@ import yargs from "yargs";
 
 export const rdpCommand = (yargs: yargs.Argv) =>
   yargs.command<RdpCommandArgs>(
-    "rdp session <destination>",
+    "rdp <destination>",
     "Connect to a Windows virtual machine via RDP",
     (yargs) =>
       yargs
@@ -39,12 +39,12 @@ export const rdpCommand = (yargs: yargs.Argv) =>
           describe: "Configure the RDP session before connecting",
           default: false,
         })
-        .usage("$0 rdp session <destination>")
+        .usage("$0 rdp <destination>")
         .epilogue(
           `Connect to a Windows virtual machine via RDP through Azure Bastion Host.
 
 Example:
-  $ ${getAppName()} rdp session my-windows-vm --reason "Reason for access"`
+  $ ${getAppName()} rdp my-windows-vm --reason "Reason for access"`
         ),
 
     rdpAction
