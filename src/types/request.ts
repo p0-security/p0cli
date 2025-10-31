@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { K8sPermissionSpec } from "../plugins/kubeconfig/types";
+import { AzureRdpRequest } from "./rdp";
 import { PluginSshRequest, SupportedSshProvider } from "./ssh";
 
 export const DONE_STATUSES = ["DONE", "DONE_NOTIFIED"] as const;
@@ -29,7 +30,10 @@ export type PermissionSpec<
   generated: G;
 };
 
-export type PluginRequest = K8sPermissionSpec | PluginSshRequest;
+export type PluginRequest =
+  | AzureRdpRequest
+  | K8sPermissionSpec
+  | PluginSshRequest;
 
 export type PermissionRequest<P extends PluginRequest> = P & {
   error?: { message: string };

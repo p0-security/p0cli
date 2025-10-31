@@ -10,7 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
-import { exec } from "../../util";
+import { AzureRdpRequest } from "../../types/rdp";
+import { exec, getOperatingSystem } from "../../util";
 import { AzureSshRequest } from "./types";
 
 const SUBSCRIPTION_NOT_FOUND_PATTERN =
@@ -26,31 +27,35 @@ export const NASCENT_ACCESS_GRANT_MESSAGE =
   "If access was recently granted, please try again in a few minutes.";
 export const ABORT_AUTHORIZATION_FAILED_MESSAGE = `Your Microsoft Token Cache is out of date. Run 'az account clear' and 'az login' to refresh your credentials. ${getContactMessage()}`;
 
-export const azLoginCommand = (tenantId: string) => ({
-  command: "az",
-  args: [
+export const azCommandArgs = (args: string[]) => {
+  const isWindows = getOperatingSystem() === "win";
+
+  // On Windows, when installing the Azure CLI, the main az file is
+  // a .cmd (shell script) file rather than a .exe (binary executable) file,
+  // so when calling spawn, it cannot be located except via cmd.exe
+  // Unlike in MacOS, the underlying Windows OS API that spawn uses doesn't
+  // resolve .CMD files by default
+  return isWindows
+    ? { command: "cmd.exe", args: ["/d", "/s", "/c", "az", ...args] }
+    : { command: "az", args };
+};
+
+export const azLoginCommand = (tenantId: string) =>
+  azCommandArgs([
     "login",
     "--scope",
     "https://management.core.windows.net//.default",
     "--tenant",
     tenantId,
-  ],
-});
+  ]);
 
-export const azAccountClearCommand = () => ({
-  command: "az",
-  args: ["account", "clear"],
-});
+export const azAccountClearCommand = () => azCommandArgs(["account", "clear"]);
 
-export const azAccountSetCommand = (subscriptionId: string) => ({
-  command: "az",
-  args: ["account", "set", "--subscription", subscriptionId],
-});
+export const azAccountSetCommand = (subscriptionId: string) =>
+  azCommandArgs(["account", "set", "--subscription", subscriptionId]);
 
-export const azAccountShowUserPrincipalName = () => ({
-  command: "az",
-  args: ["account", "show", "--query", "user.name", "-o", "tsv"],
-});
+export const azAccountShowUserPrincipalName = () =>
+  azCommandArgs(["account", "show", "--query", "user.name", "-o", "tsv"]);
 
 const performAccountClear = async ({ debug }: { debug?: boolean }) => {
   try {
@@ -167,7 +172,7 @@ const getUserPrincipalName = async ({ debug }: { debug?: boolean }) => {
  * the user is not logged in, this function will attempt to log in.
  */
 export const azSetSubscription = async (
-  request: AzureSshRequest,
+  request: AzureRdpRequest["permission"]["resource"] | AzureSshRequest,
   options: { debug?: boolean; forceLogout?: boolean } = {}
 ) => {
   const { debug, forceLogout } = options;
