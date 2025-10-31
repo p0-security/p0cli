@@ -21,11 +21,24 @@
 
     <Property Id="EXENAME" Value="p0" />
 
+    <Binary Id="RenameScript" SourceFile="win\RenameExe.vbs" />
+
+    <CustomAction Id="SetRenameExeData"
+                  Property="RenameExe"
+                  Value="INSTALLFOLDER=[INSTALLFOLDER];EXENAME=[EXENAME]" />
+
+    <CustomAction Id="RenameExe"
+                  BinaryKey="RenameScript"
+                  VBScriptCall="RenameExecutable"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="p0">
           <Component Id="AppComponent" Guid="96346EE4-FF78-4D40-A3E3-CC1906D649EE">
-            <File Id="AppExe" Source="build\sea\p0.exe" Name="[EXENAME].exe" KeyPath="yes" />
+            <File Id="AppExe" Source="build\sea\p0.exe" KeyPath="yes" />
           </Component>
           <Component Id="AddToPathComponent" Guid="A4218C43-2705-4E55-8CEE-EB583313F616">
             <CreateFolder />
@@ -46,6 +59,11 @@
       <ComponentRef Id="AppComponent" />
       <ComponentRef Id="AddToPathComponent" />
     </Feature>
+
+    <InstallExecuteSequence>
+      <Custom Action="SetRenameExeData" Before="RenameExe">NOT Installed</Custom>
+      <Custom Action="RenameExe" After="InstallFiles">NOT Installed</Custom>
+    </InstallExecuteSequence>
 
   </Product>
 </Wix>
