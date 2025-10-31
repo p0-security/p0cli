@@ -19,6 +19,21 @@
     
     <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
 
+    <Property Id="EXENAME" Value="p0" />
+
+    <Binary Id="RenameScript" SourceFile="win\RenameExe.vbs" />
+
+    <CustomAction Id="SetRenameExeData"
+                  Property="RenameExe"
+                  Value="INSTALLFOLDER=[INSTALLFOLDER];EXENAME=[EXENAME]" />
+
+    <CustomAction Id="RenameExe"
+                  BinaryKey="RenameScript"
+                  VBScriptCall="RenameExecutable"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="p0">
@@ -44,6 +59,11 @@
       <ComponentRef Id="AppComponent" />
       <ComponentRef Id="AddToPathComponent" />
     </Feature>
+
+    <InstallExecuteSequence>
+      <Custom Action="SetRenameExeData" Before="RenameExe">NOT Installed</Custom>
+      <Custom Action="RenameExe" After="InstallFiles">NOT Installed</Custom>
+    </InstallExecuteSequence>
 
   </Product>
 </Wix>
