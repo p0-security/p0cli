@@ -20,6 +20,7 @@ import { loginCommand } from "./login";
 import { logoutCommand } from "./logout";
 import { lsCommand } from "./ls";
 import { printBearerTokenCommand } from "./print-bearer-token";
+import { rdpCommand } from "./rdp";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
@@ -41,6 +42,7 @@ const commands = [
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
+  rdpCommand,
   kubeconfigCommand,
   printBearerTokenCommand,
 ];

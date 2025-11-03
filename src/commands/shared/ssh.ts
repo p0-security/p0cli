@@ -162,21 +162,39 @@ export const provisionRequest = async (
     );
   };
 
+  // Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
+  const requestErrorHandler = (err: any) => {
+    if (typeof err === "string") {
+      print2(err);
+      if (
+        err.startsWith("Could not find any instances matching") &&
+        destination.includes("@")
+      ) {
+        print2(
+          "Hint: The instance name appears to include a username. The username should be omitted."
+        );
+      }
+    }
+    sys.exit(1);
+  };
+
   let response;
   if (options?.approvedOnly) {
     // Try first with sudo
     try {
-      response = await makeRequest({ forceSudo: true });
+      response = await makeRequest({ forceSudo: true }).catch(
+        requestErrorHandler
+      );
     } catch (error) {
       // If that fails, try without sudo
       if (args.debug) {
         print2("Request with sudo failed, retrying without sudo");
       }
-      response = await makeRequest();
+      response = await makeRequest().catch(requestErrorHandler);
     }
   } else {
     // Normal behavior when not approvedOnly
-    response = await makeRequest();
+    response = await makeRequest().catch(requestErrorHandler);
   }
 
   if (!response) {
