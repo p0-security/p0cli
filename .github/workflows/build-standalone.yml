@@ -7,7 +7,7 @@ name: Build Standalone CLI
 jobs:
   build_macos:
     name: Build CLI on MacOS
-    runs-on: macos-latest
+    runs-on: macos-latest-xlarge
     env:
       APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
@@ -16,12 +16,6 @@ jobs:
       VERSION: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: yarn
-          cache-dependency-path: |
-            yarn.lock
       - name: Setup environment variables
         run: |
           KEYCHAIN_PASSWORD=$(openssl rand -hex 32)
@@ -40,24 +34,219 @@ jobs:
           security import codesign_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
           security import installer_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}" -T /usr/bin/pkgbuild
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-      - name: Yarn install
+
+          security set-keychain-settings -lut 3600 build.keychain
+      - name: Cache FIPS-compliant Node.js
+        id: cache-fips-node
+        uses: actions/cache@v4
+        with:
+          path: ~/fips-node
+          key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.1.2-v1
+      - name: Build FIPS-compliant OpenSSL
+        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        run: |
+          # Create build directory
+          mkdir -p ~/fips-node-build
+          cd ~/fips-node-build
+
+          # Download and extract OpenSSL source
+          curl -L https://www.openssl.org/source/openssl-3.1.2.tar.gz | tar -xz
+          cd openssl-3.1.2
+
+          echo "===== Starting building OpenSSL ====="
+
+          # Build OpenSSL 3.1.2 with FIPS support
+
+          # Configure OpenSSL build to built a FIPS-compliant openssl version
+          ./Configure darwin64-arm64-cc --prefix=$HOME/fips-node/openssl enable-fips
+
+          # Build OpenSSL
+          make -j$(getconf _NPROCESSORS_ONLN)
+
+          # Install OpenSSL into $HOME/fips-node/openssl directory
+          make install
+
+          echo "===== Finished building OpenSSL ====="
+      - name: Configure FIPS
+        run: |
+          cd $HOME/fips-node/openssl
+
+          # Create OpenSSL configuration (fipsmodule.cnf will be regenerated after code-signing)
+          echo "::debug::Creating OpenSSL Config"
+          tee openssl.cnf <<-EOF
+            config_diagnostics = 1
+            openssl_conf = openssl_init
+            nodejs_conf = nodejs_init
+
+            .include $HOME/fips-node/openssl/fipsmodule.cnf
+
+            [openssl_init]
+            providers = provider_sect
+
+            [nodejs_init]
+            providers = provider_sect
+
+            [provider_sect]
+            fips = fips_sect
+            base = base_sect
+            default = default_sect
+
+            [base_sect]
+            activate = 1
+
+            [default_sect]
+            activate = 1
+
+            [fips_sect]
+            activate = 1
+          EOF
+      - name: Set OpenSSL environment variables
+        run: |
+          echo "OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf" >> $GITHUB_ENV
+          echo "OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules" >> $GITHUB_ENV
+      - name: Build FIPS-compliant Node.js
+        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        run: |
+          cd ~/fips-node-build
+
+          # Get Node.js version from .nvmrc
+          NODE_VERSION=$(cat $GITHUB_WORKSPACE/.nvmrc)
+
+          # Download and extract Node.js source
+          curl -L https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.tar.gz | tar -xz
+          cd node-${NODE_VERSION}
+
+          echo "===== Starting building Node.js ====="
+
+          # Configure Node.js with FIPS support using our custom OpenSSL 3.1.2
+          # NOTE: We use --shared-openssl instead of --fully-static because:
+          # 1. OpenSSL 3.x FIPS provider MUST be dynamically loaded (cannot be statically linked)
+          # 2. The FIPS module (fips.dylib) must be a separate library for integrity verification
+          # 3. Static linking is fundamentally incompatible with OpenSSL 3.x provider architecture
+          # See: https://github.com/openssl/openssl/issues/20840
+          ./configure \
+            --shared-openssl \
+            --shared-openssl-libpath=$HOME/fips-node/openssl/lib \
+            --shared-openssl-includes=$HOME/fips-node/openssl/include \
+            --shared-openssl-libname=crypto,ssl \
+            --openssl-is-fips \
+            --prefix=$HOME/fips-node
+
+          # Build Node.js
+          make -j$(getconf _NPROCESSORS_ONLN)
+
+          # Install Node.js into $HOME/fips-node directory
+          make install
+
+          echo "===== Finished building Node.js ====="
+      - name: Setup FIPS Node.js in PATH
+        run: |
+          echo "$HOME/fips-node/bin" >> $GITHUB_PATH
+      - name: Install yarn
+        run: |
+          npm install -g yarn
+      - name: Verify FIPS Node.js
+        run: |
+          echo "✅ Node.js version: $($HOME/fips-node/bin/node --version)"
+
+          # Check FIPS mode and fail if not enabled
+          FIPS_STATUS=$($HOME/fips-node/bin/node --enable-fips -e "console.log(require('crypto').getFips())")
+
+          if [ "$FIPS_STATUS" != "1" ]; then
+            echo "❌ FIPS mode is not enabled! Expected '1', got '$FIPS_STATUS'"
+            exit 1
+          fi
+
+          echo "✅ FIPS enabled: $FIPS_STATUS"
+      - name: Install dependencies
         run: yarn install
       - name: Build
         run: |
           yarn build:macos
           ./mac/build-macOS.sh
-      - name: Codesign binary
-        run: |
-          codesign --verbose=4 --remove-signature build/sea/p0
-          codesign --verbose=4 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/p0
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
-          cp build/sea/p0 build/sea/root/usr/local/bin/p0
+          mkdir -p build/sea/root/usr/local/lib/p0
+
+          # Copy the binary to lib directory (will be called by wrapper script)
+          cp build/sea/p0 build/sea/root/usr/local/lib/p0/p0
+
+          # Create wrapper script that sets FIPS environment variables before Node.js starts
+          # These must be set BEFORE Node.js initializes to ensure OpenSSL loads the correct
+          # configuration and FIPS provider during crypto module initialization
+          cat > build/sea/root/usr/local/bin/p0 << 'EOF'
+          #!/bin/bash
+          export OPENSSL_CONF="/usr/local/lib/p0/openssl.cnf"
+          export OPENSSL_MODULES="/usr/local/lib/p0/ossl-modules"
+          exec /usr/local/lib/p0/p0 "$@"
+          EOF
+          chmod +x build/sea/root/usr/local/bin/p0
+
+          # Copy required OpenSSL libraries and binary
+          cp $HOME/fips-node/openssl/lib/libssl.3.dylib build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/lib/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/
+          cp -r $HOME/fips-node/openssl/lib/ossl-modules build/sea/root/usr/local/lib/p0/
+          cp $HOME/fips-node/openssl/bin/openssl build/sea/root/usr/local/lib/p0/
+
+          # Create OpenSSL configuration (fipsmodule.cnf will be generated after code-signing)
+          # Update openssl.cnf to reference the bundled fipsmodule.cnf
+          sed 's|\.include .*/fipsmodule\.cnf|.include /usr/local/lib/p0/fipsmodule.cnf|g' $HOME/fips-node/openssl/openssl.cnf > build/sea/root/usr/local/lib/p0/openssl.cnf
+
+          # Update binary to look for libraries in the bundled location
+          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/p0
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/p0
+
+          # Update OpenSSL binary to look for libraries in the bundled location
+          install_name_tool -change $HOME/fips-node/openssl/lib/libssl.3.dylib @loader_path/libssl.3.dylib build/sea/root/usr/local/lib/p0/openssl
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/openssl
+
+          # Also update any interdependencies between the OpenSSL libraries themselves
+          install_name_tool -change $HOME/fips-node/openssl/lib/libcrypto.3.dylib @loader_path/libcrypto.3.dylib build/sea/root/usr/local/lib/p0/libssl.3.dylib
+      - name: Codesign binary and bundled libraries
+        run: |
+          # Codesign the main binary and wrapper script (after install_name_tool modifications)
+          codesign --force --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/p0
+          codesign --force --verbose=5 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/bin/p0
+
+          # Codesign bundled OpenSSL libraries and binary for notarization
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/openssl
+
+          # Sign all OpenSSL modules (fips.dylib, legacy.dylib, etc.)
+          find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" {} \;
+
+          # Verify all signatures before packaging
+          echo "::debug::Verifying signatures"
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/p0
+          codesign --verify --verbose build/sea/root/usr/local/bin/p0
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
+          codesign --verify --verbose build/sea/root/usr/local/lib/p0/openssl
+
+          # Verify all OpenSSL modules
+          find build/sea/root/usr/local/lib/p0/ossl-modules/ -name "*.dylib" -exec codesign --verify --verbose {} \;
+          echo "::debug::All signatures verified"
+
+          # Regenerate fipsmodule.cnf AFTER code-signing
+          # This ensures the checksum matches the signed FIPS module
+          OPENSSL_CONF=build/sea/root/usr/local/lib/p0/openssl.cnf \
+          OPENSSL_MODULES=build/sea/root/usr/local/lib/p0/ossl-modules \
+          build/sea/root/usr/local/lib/p0/openssl fipsinstall \
+            -out build/sea/root/usr/local/lib/p0/fipsmodule.cnf \
+            -module build/sea/root/usr/local/lib/p0/ossl-modules/fips.dylib
+
+          # Create the signed package
           pkgbuild --identifier dev.p0.cli --version "${{ env.VERSION }}" --install-location / --sign "${{ env.APPLE_INSTALLER_CERT_NAME }}" --keychain "build.keychain" --root build/sea/root build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Notarize build artifact
         run: |
-          xcrun notarytool submit build/sea/p0-macOS-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --verbose
+          # Submit for notarization and capture the submission ID
+          SUBMISSION_ID=$(xcrun notarytool submit build/sea/p0-macOS-${{ env.VERSION }}.pkg --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID" --wait --output-format json | jq -r '.id')
+
+          # Get detailed log if notarization fails
+          xcrun notarytool log "$SUBMISSION_ID" --key app_store_connect_private_key.p8 --key-id "$APPLE_APP_STORE_CONNECT_KEY_ID" --issuer "$APPLE_APP_STORE_CONNECT_ISSUER_ID"
+
           xcrun stapler staple build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to workflow
         uses: actions/upload-artifact@v4
