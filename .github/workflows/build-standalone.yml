@@ -71,7 +71,13 @@ jobs:
         run: |
           cd $HOME/fips-node/openssl
 
-          # Create OpenSSL configuration (fipsmodule.cnf will be regenerated after code-signing)
+          # Generate fipsmodule.cnf (will be regenerated after code-signing)
+          echo "::debug::Generating fipsmodule.cnf"
+          $HOME/fips-node/openssl/bin/openssl fipsinstall \
+            -out $HOME/fips-node/openssl/fipsmodule.cnf \
+            -module $HOME/fips-node/openssl/lib/ossl-modules/fips.dylib
+
+          # Create OpenSSL configuration
           echo "::debug::Creating OpenSSL Config"
           tee openssl.cnf <<-EOF
             config_diagnostics = 1
