@@ -30,7 +30,7 @@ export type KubeconfigCommandArgs = {
   role: string;
   resource?: string;
   reason?: string;
-  requestedDuration?: string;
+  duration?: string;
   debug?: boolean;
 };
 
@@ -62,7 +62,7 @@ export const kubeconfigCommand = (yargs: yargs.Argv) =>
           type: "string",
           describe: "Reason access is needed",
         })
-        .option("requested-duration", {
+        .option("duration", {
           type: "string",
           // Copied from the P0 backend
           describe:
