@@ -21,11 +21,49 @@
 
     <Property Id="EXENAME" Value="p0" />
 
+    <!-- Binary for alias management VBScript -->
+    <Binary Id="ManageAliasScript" SourceFile="win\ManageAlias.vbs" />
+
+    <!-- Immediate action to prepare data for CreateAlias -->
+    <CustomAction Id="SetCreateAliasData"
+                  Property="CreateAlias"
+                  Value="INSTALLFOLDER=[INSTALLFOLDER];EXENAME=[EXENAME]" />
+
+    <!-- Deferred action to create/update alias (runs on install and upgrade) -->
+    <CustomAction Id="CreateAlias"
+                  BinaryKey="ManageAliasScript"
+                  VBScriptCall="CreateAlias"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <!-- Immediate action to prepare data for RemoveAlias -->
+    <CustomAction Id="SetRemoveAliasData"
+                  Property="RemoveAlias"
+                  Value="INSTALLFOLDER=[INSTALLFOLDER]" />
+
+    <!-- Deferred action to remove alias (runs on uninstall) -->
+    <CustomAction Id="RemoveAlias"
+                  BinaryKey="ManageAliasScript"
+                  VBScriptCall="RemoveAlias"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="p0">
           <Component Id="AppComponent" Guid="96346EE4-FF78-4D40-A3E3-CC1906D649EE">
-            <File Id="AppExe" Source="build\sea\p0.exe" Name="[EXENAME].exe" KeyPath="yes" />
+            <File Id="AppExe" Source="build\sea\p0.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="RegistryComponent" Guid="B8F3C4D2-1A9E-4F7B-A2C5-3E8D6A9B7C4F">
+            <RegistryKey Root="HKLM" Key="Software\P0 Security\P0 CLI">
+              <RegistryValue
+                Type="string"
+                Name="InstalledExeName"
+                Value="[EXENAME]"
+                KeyPath="yes" />
+            </RegistryKey>
           </Component>
           <Component Id="AddToPathComponent" Guid="A4218C43-2705-4E55-8CEE-EB583313F616">
             <CreateFolder />
@@ -45,7 +83,18 @@
     <Feature Id="DefaultFeature" Level="1">
       <ComponentRef Id="AppComponent" />
       <ComponentRef Id="AddToPathComponent" />
+      <ComponentRef Id="RegistryComponent" />
     </Feature>
+
+    <InstallExecuteSequence>
+      <!-- CREATE/UPDATE ALIAS (runs on fresh install and upgrade, but not uninstall) -->
+      <Custom Action="SetCreateAliasData" Before="CreateAlias">NOT REMOVE</Custom>
+      <Custom Action="CreateAlias" After="InstallFiles">NOT REMOVE</Custom>
+
+      <!-- REMOVE ALIAS (runs only on complete uninstall) -->
+      <Custom Action="SetRemoveAliasData" Before="RemoveAlias">REMOVE="ALL"</Custom>
+      <Custom Action="RemoveAlias" Before="RemoveFiles">REMOVE="ALL"</Custom>
+    </InstallExecuteSequence>
 
   </Product>
 </Wix>
