@@ -100,9 +100,7 @@ export const requestAccessToCluster = async (
         role,
         ...(args.resource ? ["--locator", args.resource] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
-        ...(args.requestedDuration
-          ? ["--requested-duration", args.requestedDuration]
-          : []),
+        ...(args.duration ? ["--duration", args.duration] : []),
       ],
       wait: true,
     },
