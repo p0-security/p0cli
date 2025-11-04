@@ -37,14 +37,15 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
           security set-keychain-settings -lut 3600 build.keychain
-      - name: Cache FIPS-compliant Node.js
-        id: cache-fips-node
-        uses: actions/cache@v4
-        with:
-          path: ~/fips-node
-          key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.1.2-v1
+      # Temporarily disabled to reproduce and verify fix for missing fipsmodule.cnf issue
+      # - name: Cache FIPS-compliant Node.js
+      #   id: cache-fips-node
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/fips-node
+      #     key: fips-node-${{ hashFiles('.nvmrc') }}-${{ runner.os }}-openssl3.1.2-v1
       - name: Build FIPS-compliant OpenSSL
-        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        # if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
           # Create build directory
           mkdir -p ~/fips-node-build
@@ -106,7 +107,7 @@ jobs:
           echo "OPENSSL_CONF=$HOME/fips-node/openssl/openssl.cnf" >> $GITHUB_ENV
           echo "OPENSSL_MODULES=$HOME/fips-node/openssl/lib/ossl-modules" >> $GITHUB_ENV
       - name: Build FIPS-compliant Node.js
-        if: steps.cache-fips-node.outputs.cache-hit != 'true'
+        # if: steps.cache-fips-node.outputs.cache-hit != 'true'
         run: |
           cd ~/fips-node-build
 
