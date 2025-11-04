@@ -1,6 +1,7 @@
 on:
-  release:
-    types: [created]
+  pull_request:
+    branches:
+      - main
 
 name: Build Standalone CLI
 
@@ -253,12 +254,12 @@ jobs:
         with:
           name: p0-macOS-${{ env.VERSION }}
           path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
-      - name: Upload artifact to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload artifact to release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Cleanup keychain
         run: |
           security delete-keychain build.keychain
@@ -316,9 +317,9 @@ jobs:
         with:
           name: p0-windows-${{ env.VERSION }}
           path: build\sea\p0-windows-${{ env.VERSION }}.msi
-      - name: Upload artifact to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/sea/p0-windows-${{ env.VERSION }}.msi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload artifact to release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: build/sea/p0-windows-${{ env.VERSION }}.msi
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
