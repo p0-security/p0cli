@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
+import { print2 } from "../../drivers/stdio";
 import { SshProvider } from "../../types/ssh";
 import { getOperatingSystem } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
@@ -52,6 +53,38 @@ const provisionedAccessPatterns = [
 // we want to be safe, so we set the timeout to 3 minutes. With a longer timeout a
 // user doesn't have to retry the command too many times.
 const PROPAGATION_TIMEOUT_LIMIT_MS = 3 * 60 * 1000;
+
+/**
+ * Generates a manual SSH command that can be run on Windows when automatic SSH session fails.
+ */
+const generateManualSshCommand = (
+  request: AzureSshRequest,
+  setupData: { identityFile: string; port: string }
+): string => {
+  const os = getOperatingSystem();
+
+  // Escape paths for Windows if needed - PowerShell needs backslashes escaped
+  const identityFile =
+    os === "win"
+      ? setupData.identityFile.replace(/\\/g, "\\\\")
+      : setupData.identityFile;
+
+  const certFile =
+    os === "win"
+      ? path
+          .join(path.dirname(setupData.identityFile), AD_CERT_FILENAME)
+          .replace(/\\/g, "\\\\")
+      : path.join(path.dirname(setupData.identityFile), AD_CERT_FILENAME);
+
+  const userKnownHostsFile = os === "win" ? "nul" : "/dev/null";
+
+  // Handle usernames with @ symbol by using -l flag
+  if (request.linuxUserName.includes("@")) {
+    return `ssh -p ${setupData.port} -i "${identityFile}" -o CertificateFile="${certFile}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=${userKnownHostsFile} -l "${request.linuxUserName}" localhost`;
+  } else {
+    return `ssh -p ${setupData.port} -i "${identityFile}" -o CertificateFile="${certFile}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=${userKnownHostsFile} ${request.linuxUserName}@localhost`;
+  }
+};
 
 export const azureSshProvider: SshProvider<
   AzureSshPermissionSpec,
@@ -206,7 +239,10 @@ export const azureSshProvider: SshProvider<
       await sshKeyPathCleanup();
     };
 
-    return {
+    const os = getOperatingSystem();
+    const userKnownHostsFile = os === "win" ? "nul" : "/dev/null";
+
+    const setupData = {
       sshOptions: [
         `CertificateFile=${sshCertificateKeyPath}`,
 
@@ -217,12 +253,27 @@ export const azureSshProvider: SshProvider<
         // security of the connection is ensured by the Azure Bastion Network tunnel, which utilizes HTTPS and thus has
         // its own MITM protection.
         "StrictHostKeyChecking=no",
-        "UserKnownHostsFile=/dev/null",
+        `UserKnownHostsFile=${userKnownHostsFile}`,
       ],
       identityFile: sshPrivateKeyPath,
       port: tunnelLocalPort,
       teardown,
     };
+
+    // On Windows, print the manual command as a fallback in case automatic SSH session doesn't start
+    if (os === "win") {
+      const manualCommand = generateManualSshCommand(request, {
+        identityFile: sshPrivateKeyPath,
+        port: tunnelLocalPort,
+      });
+      print2("\nAzure Bastion tunnel is ready.");
+      print2(
+        "SSH session will start automatically. If it doesn't, you can manually connect with:"
+      );
+      print2(`\n  ${manualCommand}\n`);
+    }
+
+    return setupData;
   },
 
   requestToSsh: (request) => ({

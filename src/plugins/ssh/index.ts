@@ -27,13 +27,13 @@ import {
   SshRequest,
   SupportedSshProvider,
 } from "../../types/ssh";
-import { delay, createCleanChildEnv, getOperatingSystem } from "../../util";
+import { createCleanChildEnv, delay, getOperatingSystem } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
   ChildProcessByStdio,
+  spawn,
   StdioNull,
   StdioPipe,
-  spawn,
 } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -312,11 +312,14 @@ const createCommand = (
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
       ...(port ? ["-p", port] : []),
-      `${request.linuxUserName}@${request.id}`,
+      // Handle usernames with @ symbol by using -l flag to avoid double @ issue
+      ...(request.linuxUserName.includes("@")
+        ? ["-l", request.linuxUserName, request.id]
+        : [`${request.linuxUserName}@${request.id}`]),
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>
-          // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"'` because we
+          // escape all double quotes (") in commands such as `p0 ssh <instance>> echo 'hello; "world"' because we
           // need to encapsulate command arguments in double quotes as we pass them along to the remote shell
           `"${String(argument).replace(/"/g, '\\"')}"`
       ),
