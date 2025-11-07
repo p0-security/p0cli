@@ -14,12 +14,15 @@ import {
   HomebrewItems,
   InstallMetadata,
 } from "../../common/install";
+import { getOperatingSystem } from "../../util";
 
-const AzItems = [...HomebrewItems, "az"] as const;
+const os = getOperatingSystem();
+const AzItems = os === "mac" ? [...HomebrewItems, "az"] : ["az"];
+
 type AzItem = (typeof AzItems)[number];
 
 const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
-  ...HomebrewInstall,
+  ...(os === "mac" ? HomebrewInstall : {}),
   az: {
     label: "Azure command-line interface",
     commands: {
