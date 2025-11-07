@@ -73,6 +73,7 @@ const spawnBastionTunnelInBackground = (
   return new Promise<BastionTunnelMeta>((resolve, reject) => {
     let processSignalledToExit = false;
     let processExited = false;
+    let tunnelReady = false;
     let stdout = "";
     let stderr = "";
 
@@ -111,37 +112,18 @@ const spawnBastionTunnelInBackground = (
       return reject(`Failed to run Azure Bastion tunnel: ${error.message}`);
     });
 
-    child.stdout.on("data", (data) => {
-      const str = data.toString("utf-8");
-      stdout += str;
+    // Helper function to check if tunnel is ready and resolve if so
+    const checkTunnelReady = () => {
+      // Prevent multiple resolves
+      if (tunnelReady) return;
+
+      // Check both stdout and stderr for the ready message, as it may appear in either stream
+      // Also check accumulated strings in case the message is split across chunks
       if (
-        debug &&
-        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
+        stdout.includes(TUNNEL_READY_STRING) ||
+        stderr.includes(TUNNEL_READY_STRING)
       ) {
-        print2(str);
-      }
-    });
-
-    child.stderr.on("data", (data) => {
-      const str = data.toString("utf-8");
-      stderr += str;
-      if (
-        debug &&
-        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
-      ) {
-        print2(str);
-      }
-
-      // If we get a message indicating that the user's authorization is invalid, we need to terminate all of our connection attempts.
-      if (AUTHORIZATION_FAILED_PATTERN.test(str)) {
-        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
-      }
-
-      if (USER_NOT_IN_CACHE_PATTERN.test(str)) {
-        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
-      }
-
-      if (str.includes(TUNNEL_READY_STRING)) {
+        tunnelReady = true;
         print2("Azure Bastion tunnel is ready.");
 
         resolve({
@@ -199,6 +181,42 @@ const spawnBastionTunnelInBackground = (
           tunnelLocalPort: port,
         });
       }
+    };
+
+    child.stdout.on("data", (data) => {
+      const str = data.toString("utf-8");
+      stdout += str;
+      if (
+        debug &&
+        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
+      ) {
+        print2(str);
+      }
+      // Check if tunnel is ready after each chunk
+      checkTunnelReady();
+    });
+
+    child.stderr.on("data", (data) => {
+      const str = data.toString("utf-8");
+      stderr += str;
+      if (
+        debug &&
+        !tunnelDebugOutputIgnorePatterns.some((regex) => str.match(regex))
+      ) {
+        print2(str);
+      }
+
+      // If we get a message indicating that the user's authorization is invalid, we need to terminate all of our connection attempts.
+      if (AUTHORIZATION_FAILED_PATTERN.test(str)) {
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
+      }
+
+      if (USER_NOT_IN_CACHE_PATTERN.test(str)) {
+        abortController.abort(ABORT_AUTHORIZATION_FAILED_MESSAGE);
+      }
+
+      // Check if tunnel is ready after each chunk
+      checkTunnelReady();
     });
   });
 };
