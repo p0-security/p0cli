@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getHelpMessage } from "../drivers/config";
 import { print1, print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
-import { p0VersionInfo } from "../version";
+import { p0VersionInfo, stringifyVersionInfo } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
@@ -48,8 +48,9 @@ const commands = [
 ];
 
 const buildArgv = async () => {
-  const { version } = p0VersionInfo;
-  const argv = yargs(hideBin(process.argv)).version(version);
+  const argv = yargs(hideBin(process.argv)).version(
+    stringifyVersionInfo(p0VersionInfo)
+  );
 
   // Override the default yargs showHelp() function to include a custom help message at the end
   const originalShowHelp = argv.showHelp.bind(argv);
