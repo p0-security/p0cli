@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
-import { sleep, spawnWithCleanEnv } from "../../util";
+import { osSafeCommand, sleep, spawnWithCleanEnv } from "../../util";
 import {
   ABORT_AUTHORIZATION_FAILED_MESSAGE,
   AUTHORIZATION_FAILED_PATTERN,
@@ -36,9 +36,8 @@ export type BastionTunnelMeta = {
 export const azBastionTunnelCommand = (
   request: AzureSshRequest,
   port: string
-) => ({
-  command: "az",
-  args: [
+) =>
+  osSafeCommand("az", [
     "network",
     "bastion",
     "tunnel",
@@ -54,8 +53,7 @@ export const azBastionTunnelCommand = (
     // to reauthenticate the user when access fails. The output is silenced if the user
     // doesn't pass the --debug flag to the p0 ssh process.
     "--debug",
-  ],
-});
+  ]);
 
 const selectRandomPort = (): string => {
   // The IANA ephemeral port range is 49152 to 65535, inclusive. Pick a random value in that range.
