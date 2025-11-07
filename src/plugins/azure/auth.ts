@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AzureRdpRequest } from "../../types/rdp";
-import { exec, getOperatingSystem } from "../../util";
+import { exec, osSafeCommand } from "../../util";
 import { AzureSshRequest } from "./types";
 
 const SUBSCRIPTION_NOT_FOUND_PATTERN =
@@ -27,21 +27,8 @@ export const NASCENT_ACCESS_GRANT_MESSAGE =
   "If access was recently granted, please try again in a few minutes.";
 export const ABORT_AUTHORIZATION_FAILED_MESSAGE = `Your Microsoft Token Cache is out of date. Run 'az account clear' and 'az login' to refresh your credentials. ${getContactMessage()}`;
 
-export const azCommandArgs = (args: string[]) => {
-  const isWindows = getOperatingSystem() === "win";
-
-  // On Windows, when installing the Azure CLI, the main az file is
-  // a .cmd (shell script) file rather than a .exe (binary executable) file,
-  // so when calling spawn, it cannot be located except via cmd.exe
-  // Unlike in MacOS, the underlying Windows OS API that spawn uses doesn't
-  // resolve .CMD files by default
-  return isWindows
-    ? { command: "cmd.exe", args: ["/d", "/s", "/c", "az", ...args] }
-    : { command: "az", args };
-};
-
 export const azLoginCommand = (tenantId: string) =>
-  azCommandArgs([
+  osSafeCommand("az", [
     "login",
     "--scope",
     "https://management.core.windows.net//.default",
@@ -49,13 +36,14 @@ export const azLoginCommand = (tenantId: string) =>
     tenantId,
   ]);
 
-export const azAccountClearCommand = () => azCommandArgs(["account", "clear"]);
+export const azAccountClearCommand = () =>
+  osSafeCommand("az", ["account", "clear"]);
 
 export const azAccountSetCommand = (subscriptionId: string) =>
-  azCommandArgs(["account", "set", "--subscription", subscriptionId]);
+  osSafeCommand("az", ["account", "set", "--subscription", subscriptionId]);
 
 export const azAccountShowUserPrincipalName = () =>
-  azCommandArgs(["account", "show", "--query", "user.name", "-o", "tsv"]);
+  osSafeCommand("az", ["account", "show", "--query", "user.name", "-o", "tsv"]);
 
 const performAccountClear = async ({ debug }: { debug?: boolean }) => {
   try {
