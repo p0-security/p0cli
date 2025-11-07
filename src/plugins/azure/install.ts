@@ -14,6 +14,7 @@ import {
   HomebrewItems,
   InstallMetadata,
 } from "../../common/install";
+import { getOperatingSystem } from "../../util";
 
 const AzItems = [...HomebrewItems, "az"] as const;
 type AzItem = (typeof AzItems)[number];
@@ -28,5 +29,11 @@ const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
   },
 };
 
-export const ensureAzInstall = async () =>
-  await ensureInstall(AzItems, AzInstall);
+export const ensureAzInstall = async () => {
+  // ENG-6471: Add ensureInstall check to windows CLI
+  const os = getOperatingSystem();
+  if (os === "mac") {
+    await ensureInstall(AzItems, AzInstall);
+  }
+  return true;
+};
