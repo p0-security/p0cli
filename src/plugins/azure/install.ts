@@ -16,11 +16,13 @@ import {
 } from "../../common/install";
 import { getOperatingSystem } from "../../util";
 
-const AzItems = [...HomebrewItems, "az"] as const;
+const os = getOperatingSystem();
+const AzItems = os === "mac" ? [...HomebrewItems, "az"] : ["az"];
+
 type AzItem = (typeof AzItems)[number];
 
 const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
-  ...HomebrewInstall,
+  ...(os === "mac" ? HomebrewInstall : {}),
   az: {
     label: "Azure command-line interface",
     commands: {
@@ -29,11 +31,5 @@ const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
   },
 };
 
-export const ensureAzInstall = async () => {
-  // ENG-6471: Add ensureInstall check to windows CLI
-  const os = getOperatingSystem();
-  if (os === "mac") {
-    await ensureInstall(AzItems, AzInstall);
-  }
-  return true;
-};
+export const ensureAzInstall = async () =>
+  await ensureInstall(AzItems, AzInstall);
