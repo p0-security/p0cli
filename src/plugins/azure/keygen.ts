@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../../drivers/stdio";
-import { exec } from "../../util";
+import { exec, osSafeCommand } from "../../util";
 import path from "node:path";
 
 // We pass in the name of the certificate file to generate
@@ -18,10 +18,13 @@ export const AD_CERT_FILENAME = "p0cli-azure-ad-ssh-cert.pub";
 // The `az ssh cert` command manages key generation, and generates SSH RSA keys with the standard names
 export const AD_SSH_KEY_PRIVATE = "id_rsa";
 
-export const azSshCertCommand = (keyPath: string) => ({
-  command: "az",
-  args: ["ssh", "cert", "--file", path.join(keyPath, AD_CERT_FILENAME)],
-});
+export const azSshCertCommand = (keyPath: string) =>
+  osSafeCommand("az", [
+    "ssh",
+    "cert",
+    "--file",
+    path.join(keyPath, AD_CERT_FILENAME),
+  ]);
 
 export const generateSshKeyAndAzureAdCert = async (
   keyPath: string,

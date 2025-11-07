@@ -12,10 +12,10 @@ import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
 import { createTempDirectoryForKeys } from "../ssh/shared";
 import {
-  azAccountSetCommand,
-  azSetSubscription,
-  azLoginCommand,
   azAccountClearCommand,
+  azAccountSetCommand,
+  azLoginCommand,
+  azSetSubscription,
 } from "./auth";
 import { ensureAzInstall } from "./install";
 import {

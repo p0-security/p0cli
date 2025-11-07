@@ -11,8 +11,8 @@ You should have received a copy of the GNU General Public License along with @p0
 import { print2 } from "../../drivers/stdio";
 import { AzureRdpRequest } from "../../types/rdp";
 import { PermissionRequest } from "../../types/request";
-import { exec } from "../../util";
-import { azCommandArgs, azSetSubscription } from "./auth";
+import { exec, osSafeCommand } from "../../util";
+import { azSetSubscription } from "./auth";
 
 const azBastionRdpCommand = (
   request: PermissionRequest<AzureRdpRequest>,
@@ -20,7 +20,7 @@ const azBastionRdpCommand = (
 ) => {
   const { configure, debug } = options;
   const { bastionName, bastionRg, instanceId } = request.permission.resource;
-  return azCommandArgs([
+  return osSafeCommand("az", [
     "network",
     "bastion",
     "rdp",

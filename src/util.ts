@@ -218,3 +218,23 @@ export const getOperatingSystem = (): OperatingSystem => {
     return "unknown";
   }
 };
+
+/**
+ * Wraps a command with the operating-system specific method
+ * executing it.
+ * @param command the command to wrap
+ * @param args the arguments to be passed to the command
+ * @returns the command and arguments to be passed to spawn
+ */
+export const osSafeCommand = (command: string, args: string[]) => {
+  const isWindows = getOperatingSystem() === "win";
+
+  // On Windows, when installing the Azure CLI, the main az file is
+  // a .cmd (shell script) file rather than a .exe (binary executable) file,
+  // so when calling spawn, it cannot be located except via cmd.exe
+  // Unlike in MacOS, the underlying Windows OS API that spawn uses doesn't
+  // resolve .CMD files by default
+  return isWindows
+    ? { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] }
+    : { command, args };
+};
