@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { shouldSkipCheckVersion } from "../drivers/config";
 import { print2 } from "../drivers/stdio";
-import { P0_PATH, exec, getOperatingSystem, timeout } from "../util";
+import { P0_PATH, exec, osSafeCommand, timeout } from "../util";
 import { p0VersionInfo } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -77,19 +77,12 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
       print2("Checking that your CLI is up to date with the latest version...");
     }
 
-    // On Windows, the main npm file is not an .exe (binary executable) file,
-    // so when calling spawn, it cannot be located except via cmd.exe
-    const isWindows = getOperatingSystem() === "win";
-    const npmCmd = isWindows ? "cmd.exe" : "npm";
-    const commonNpmArgs = ["view", name, "--json"];
-    const npmArgs = isWindows
-      ? ["/d", "/s", "/c", "npm", ...commonNpmArgs]
-      : commonNpmArgs;
+    const { command, args } = osSafeCommand("npm", ["view", name, "--json"]);
 
     // wrap the exec call in a function to add enhanced error handling logic
     const protectedExec = async () => {
       try {
-        return await exec(npmCmd, npmArgs, { check: true });
+        return await exec(command, args, { check: true });
       } catch (error: any) {
         let errorDetails: string = error?.message || "Unknown error";
         if (error?.code != null) {
