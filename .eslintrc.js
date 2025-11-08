@@ -66,6 +66,7 @@ module.exports = {
     "esbuild.js",
     "win",
     "mac",
+    "linux",
   ],
   overrides: [],
   parserOptions: {
