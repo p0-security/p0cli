@@ -14,7 +14,6 @@ import { P0_PATH, exec, osSafeCommand, timeout } from "../util";
 import { p0VersionInfo } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isSea } from "node:sea";
 import semver from "semver";
 import yargs from "yargs";
 
@@ -116,7 +115,7 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
     }
 
     if (semver.lt(current, latest)) {
-      if (isSea()) {
+      if (p0VersionInfo.build.standalone) {
         print2(
           `╔═══════════════════════════════════════════════╗
 ║ A new version is available                    ║

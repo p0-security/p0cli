@@ -66,6 +66,7 @@ module.exports = {
     "esbuild.js",
     "win",
     "mac",
+    "preprocess-sea.cjs",
   ],
   overrides: [],
   parserOptions: {

@@ -1,18 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <Product 
-    Id="__PRODUCT_ID__" 
-    Name="P0 Security CLI" 
-    Language="1033" 
-    Version="__VERSION__" 
-    Manufacturer="P0 Security, Inc." 
-    UpgradeCode="621A79A1-A277-4B50-977A-045070AF5180">
-
-    <Package 
-      InstallerVersion="500" 
-      Compressed="yes" 
-      InstallScope="perMachine" />
+  <Package
+    ProductCode="__PRODUCT_ID__"
+    Name="P0 Security CLI"
+    Language="1033"
+    Version="__VERSION__"
+    Manufacturer="P0 Security, Inc."
+    UpgradeCode="621A79A1-A277-4B50-977A-045070AF5180"
+    InstallerVersion="500"
+    Compressed="yes"
+    Scope="perMachine">
 
     <MajorUpgrade 
       DowngradeErrorMessage="A newer version of the P0 Security CLI is already installed." />
@@ -45,5 +43,5 @@
       <ComponentRef Id="AddToPathComponent" />
     </Feature>
 
-  </Product>
+  </Package>
 </Wix>

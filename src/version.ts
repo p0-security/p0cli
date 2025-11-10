@@ -9,20 +9,33 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import fs from "node:fs";
+import os from "node:os";
 import { getAsset, isSea } from "node:sea";
 
-const loadCurrentVersion = (): {
+type VersionInfo = {
   name: string;
   version: string;
-} => {
+  build: { standalone: false } | { standalone: true; os: string; arch: string };
+};
+
+const loadCurrentVersion = (): VersionInfo => {
   try {
     if (isSea()) {
       // When building with the standalone CLI, we need to manually include the package.json as a
       // static asset in sea-config.json, as it is not included in the build by default.
       const packageJsonText = getAsset("package.json", "utf-8");
       const json = JSON.parse(packageJsonText);
-      const { name, version } = json;
-      return { name, version };
+      const { name, version, $build } = json;
+
+      return {
+        name,
+        version,
+        build: {
+          standalone: true,
+          os: $build?.os || os.platform(),
+          arch: $build?.arch || os.arch(),
+        },
+      };
     }
 
     // Note that package.json is installed at <root>/package.json,
@@ -36,9 +49,26 @@ const loadCurrentVersion = (): {
       fs.readFileSync(packageJsonPath).toString("utf-8")
     );
 
-    return { name, version };
+    return {
+      name,
+      version,
+      build: { standalone: false },
+    };
   } catch {
-    return { name: "@p0security/cli", version: "unknown" };
+    return {
+      name: "@p0security/cli",
+      version: "unknown",
+      build: { standalone: false },
+    };
+  }
+};
+
+export const stringifyVersionInfo = (info: VersionInfo): string => {
+  const { version, build } = info;
+  if (build.standalone) {
+    return `P0 Security CLI ${version} (built for ${build.os}/${build.arch})`;
+  } else {
+    return `P0 Security CLI ${version}`;
   }
 };
 
