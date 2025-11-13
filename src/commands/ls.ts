@@ -14,6 +14,7 @@ import { authenticate } from "../drivers/auth";
 import { print1, print2, spinUntil } from "../drivers/stdio";
 import { getAppName } from "../util";
 import { max, orderBy, slice } from "lodash";
+import _ from "lodash";
 import pluralize from "pluralize";
 import yargs from "yargs";
 
@@ -106,9 +107,23 @@ const ls = async (
       return;
     }
 
+    // Handle cases where no results are found
     const label = pluralize(data.arg);
     if (data.items.length === 0) {
       print2(`No ${label}`);
+
+      // If using fuzzy-search & individual terms are <3 characters long, then give a useful hint
+      if (
+        _.includes(args.arguments, "--like") &&
+        data.term.split("-").some((str) => str.length < 3)
+      ) {
+        print2("The following search terms contain less than 3 characters:");
+        data.term
+          .split("-")
+          .filter((str) => str.length < 3)
+          .forEach((str) => print2(`- ${str}`));
+        print2("A minimum of 3 characters are required for each token.");
+      }
       return;
     }
     const truncationPart =
