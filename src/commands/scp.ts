@@ -12,6 +12,7 @@ import { authenticate } from "../drivers/auth";
 import { sshOrScp } from "../plugins/ssh";
 import { SshRequest, SupportedSshProviders } from "../types/ssh";
 import { prepareRequest, ScpCommandArgs } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
 
 export const scpCommand = (yargs: yargs.Argv) =>
@@ -71,6 +72,9 @@ export const scpCommand = (yargs: yargs.Argv) =>
  * Implicitly gains access to the SSH resource if required.
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
+  // Clean up any stale SSH config files before proceeding
+  await cleanupStaleSshConfigs(args.debug);
+
   const authn = await authenticate(args);
 
   const sshOptions: string[] = Array.isArray(args["--"])

@@ -23,6 +23,7 @@ import {
   SshResolveCommandArgs,
   SSH_PROVIDERS,
 } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import fs from "fs";
 import path from "path";
 import tmp from "tmp-promise";
@@ -80,6 +81,9 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
 const sshResolveAction = async (
   args: yargs.ArgumentsCamelCase<SshResolveCommandArgs>
 ) => {
+  // Clean up any stale SSH config files before proceeding
+  await cleanupStaleSshConfigs(args.debug);
+
   const silentlyExit = conditionalAbortBeforeThrow(args.quiet ?? false);
 
   const requestErrorHandler = (err: any) => {
