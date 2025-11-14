@@ -10,9 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { sanitizeAsFileName } from "../common/destination";
 import { authenticate } from "../drivers/auth";
+import { print2 } from "../drivers/stdio";
 import { sshProxy } from "../plugins/ssh";
 import { P0_PATH } from "../util";
 import { SshProxyCommandArgs, SSH_PROVIDERS } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import * as fs from "fs/promises";
 import path from "path";
 import yargs from "yargs";
@@ -65,6 +67,9 @@ export const sshProxyCommand = (yargs: yargs.Argv) =>
 const sshProxyAction = async (
   args: yargs.ArgumentsCamelCase<SshProxyCommandArgs>
 ) => {
+  // Clean up any stale SSH config files before proceeding
+  await cleanupStaleSshConfigs(args.debug);
+
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate(args);
 
@@ -91,14 +96,26 @@ const sshProxyAction = async (
   );
 
   if (args.debug) {
-    ("Deleting request JSON file");
+    print2("Deleting request JSON file");
   }
-  await fs.rm(args.requestJson);
+  try {
+    await fs.rm(args.requestJson);
+  } catch (err) {
+    if (args.debug) {
+      print2(`Warning: Failed to delete request JSON file: ${String(err)}`);
+    }
+  }
 
   if (args.debug) {
-    ("Deleting ssh Config file");
+    print2("Deleting ssh Config file");
   }
-  await fs.rm(configLocation);
+  try {
+    await fs.rm(configLocation);
+  } catch (err) {
+    if (args.debug) {
+      print2(`Warning: Failed to delete ssh config file: ${String(err)}`);
+    }
+  }
 
   await sshProxy({
     authn,

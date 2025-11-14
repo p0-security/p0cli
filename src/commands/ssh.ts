@@ -12,6 +12,7 @@ import { authenticate } from "../drivers/auth";
 import { sshOrScp } from "../plugins/ssh";
 import { getAppName } from "../util";
 import { prepareRequest, SshCommandArgs } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
 
 export const sshCommand = (yargs: yargs.Argv) =>
@@ -81,6 +82,9 @@ export const sshCommand = (yargs: yargs.Argv) =>
  * - AWS EC2 via SSM with Okta SAML
  */
 const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
+  // Clean up any stale SSH config files before proceeding
+  await cleanupStaleSshConfigs(args.debug);
+
   // Prefix is required because the backend uses it to determine that this is an AWS request
   const authn = await authenticate(args);
 
