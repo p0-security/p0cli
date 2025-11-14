@@ -153,11 +153,13 @@ Options:
   -w, --wait    Block until the request is completed                   [boolean]
 ```
 
-If you don't know the name of the role you need, you can use the `p0 ls` command. `p0 ls` accepts the same arguments that you provide to `p0 request` and lists the available options for access within your selected resource. For example, to view the available Google Cloud roles, run
+If you don't know the name of the role you need, you can use the `p0 ls` command. `p0 ls` accepts the same arguments that you provide to `p0 request` and lists the available options for access within your selected resource. For example, to view the available Google Cloud roles with a name containing "bigquery", run
 
 ```
  p0 ls gcloud role names --like bigquery
 ```
+
+**NOTE:** When using the `--like` option to perform fuzzy matching, results will only be returned if they match all provided search terms; individual search terms must be alphanumeric strings, and multiple search terms must be separated by non-alphanumeric characters. For example, to search for all roles that match both "big" and "admin", the expected command could be `--like 'big-admin'` or `--like 'big,admin'`.
 
 Now, to request `bigquery.admin`, run:
 
