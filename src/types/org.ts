@@ -33,7 +33,81 @@ export type GoogleApplicationConfig = ApplicationConfig & {
 
 export type Config = ApplicationConfig | GoogleApplicationConfig;
 
-type BaseOrgData = {
+type AzureOidcProvider = {
+  ssoProvider: "azure-oidc";
+  microsoftPrimaryDomain: string;
+};
+
+type GoogleOidcProvider = {
+  ssoProvider: "google-oidc";
+};
+
+type GoogleSsoProvider = {
+  ssoProvider: "google";
+};
+
+type LegacyOktaSsoProvider = {
+  ssoProvider: "okta";
+  providerId: string;
+};
+
+type MicrosoftSsoProvider = {
+  ssoProvider: "microsoft";
+  microsoftPrimaryDomain: string;
+};
+
+type BaseOidcPkceProvider = {
+  ssoProvider: "oidc-pkce";
+  providerId: string;
+  providerDomain: string;
+  clientId: string;
+};
+
+type OktaOidcPkceProvider = BaseOidcPkceProvider & {
+  providerType: "okta";
+  authServerPath?: string;
+};
+
+type PingIdOidcPkceProvider = BaseOidcPkceProvider & {
+  providerType: "ping";
+  environmentId: string;
+};
+
+type CloudflareOidcPkceProvider = BaseOidcPkceProvider & {
+  providerType: "cloudflare";
+  clientSecret: string;
+};
+
+type OidcPkceProvider =
+  | CloudflareOidcPkceProvider
+  | OktaOidcPkceProvider
+  | PingIdOidcPkceProvider;
+
+type SsoProvider =
+  | AzureOidcProvider
+  | GoogleOidcProvider
+  | GoogleSsoProvider
+  | LegacyOktaSsoProvider
+  | MicrosoftSsoProvider
+  | OidcPkceProvider;
+
+type OrgMagicLinkAuth = {
+  type: "magic-link";
+};
+
+type OrgPasswordAuth = {
+  type: "password";
+};
+
+type OrgSsoAuth = {
+  type: "sso";
+  provider: SsoProvider;
+};
+
+export type OrgAuth = OrgMagicLinkAuth | OrgPasswordAuth | OrgSsoAuth;
+
+/** Legacy structure for backward compatibility */
+type LegacyOrgData = {
   clientId: string;
   providerId: string;
   providerDomain?: string;
@@ -49,19 +123,26 @@ type BaseOrgData = {
   config: Config;
   /** Swaps API auth to tokens from the ssoProvider, rather than firebase */
   useProviderToken?: boolean;
+} & (
+  | {
+      providerType?: "okta";
+    }
+  | {
+      providerType?: "ping";
+      environmentId: string;
+    }
+);
+
+export type NewOrgData = {
+  tenantId: string;
+  auth: OrgAuth;
+  config: Config;
+  /** Swaps API auth to tokens from the ssoProvider, rather than firebase */
+  useProviderToken?: boolean;
 };
 
-/** Publicly readable organization data */
-export type RawOrgData = BaseOrgData &
-  (
-    | {
-        providerType?: "okta";
-      }
-    | {
-        providerType?: "ping";
-        environmentId: string;
-      }
-  );
+/** Publicly readable organization data - supports both old and new structures */
+export type RawOrgData = LegacyOrgData | NewOrgData;
 
 export type OrgData = RawOrgData & {
   slug: string;
