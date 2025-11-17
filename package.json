@@ -1,6 +1,6 @@
 {
   "name": "@p0security/cli",
-  "version": "0.20.4",
+  "version": "0.20.5",
   "description": "Execute infra CLI commands with P0 grants",
   "main": "index.ts",
   "repository": {
