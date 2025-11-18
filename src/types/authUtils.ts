@@ -86,3 +86,16 @@ export const usePasswordAuth = (org: OrgData): boolean => {
   }
   return ("usePassword" in org && org.usePassword) || false;
 };
+
+/** Get Microsoft primary domain from org data (for Azure/Microsoft providers) */
+export const getMicrosoftPrimaryDomain = (org: OrgData): string | undefined => {
+  if (hasNewAuthStructure(org)) {
+    return org.auth.type === "sso" &&
+      "microsoftPrimaryDomain" in org.auth.provider
+      ? org.auth.provider.microsoftPrimaryDomain
+      : undefined;
+  }
+  return (
+    ("microsoftPrimaryDomain" in org && org.microsoftPrimaryDomain) || undefined
+  );
+};
