@@ -126,7 +126,7 @@ export const login = async (
     print2(`You are currently logged in to the ${orgSlug} organization.`);
   }
 
-  if (tokenTimeRemaining >= 0) {
+  if (tokenTimeRemaining > 0) {
     print2(
       `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
     );
