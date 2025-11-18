@@ -117,6 +117,7 @@ export const login = async (
     const authn = await authenticate({ debug: options?.debug });
     await validateTenantAccess(authn, options?.debug);
   }
+
   if (!loggedIn) {
     print2(
       `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
