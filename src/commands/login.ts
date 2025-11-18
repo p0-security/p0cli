@@ -116,29 +116,19 @@ export const login = async (
   if (!options?.skipAuthenticate) {
     const authn = await authenticate({ debug: options?.debug });
     await validateTenantAccess(authn, options?.debug);
-
-    if (!loggedIn) {
-      print2(
-        `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
-      );
-    } else {
-      print2(`You are currently logged in to the ${orgSlug} organization.`);
-    }
-
-    if (tokenTimeRemaining >= 0) {
-      print2(
-        `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-      );
-    }
+  }
+  if (!loggedIn) {
+    print2(
+      `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
+    );
   } else {
-    if (!loggedIn) {
-      print2(
-        `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
-      );
-    } else {
-      print2(`You are currently logged in to the ${orgSlug} organization.`);
-    }
-    print2(`You are already logged in to the test-org organization.`);
+    print2(`You are currently logged in to the ${orgSlug} organization.`);
+  }
+
+  if (tokenTimeRemaining >= 0) {
+    print2(
+      `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
+    );
   }
 };
 
