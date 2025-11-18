@@ -131,7 +131,8 @@ type LegacyOrgData = {
       providerType?: "ping";
       environmentId: string;
     }
-);
+) &
+  SsoProvider;
 
 export type NewOrgData = {
   tenantId: string;
