@@ -92,7 +92,7 @@ export const awsSshProvider: SshProvider<
 
   async submitPublicKey(authn, request, requestId, publicKey, debug) {
     if (request.generated.publicKey) {
-      if (request.generated.publicKey !== publicKey) {
+      if (request.generated.publicKey.trim() !== publicKey.trim()) {
         throw "Public key mismatch. Please revoke the request and try again.";
       }
     } else {
