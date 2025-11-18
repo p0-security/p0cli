@@ -12,10 +12,7 @@ import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
-import {
-  getClientId,
-  getMicrosoftPrimaryDomain,
-} from "../../types/authUtils";
+import { getClientId, getMicrosoftPrimaryDomain } from "../../types/authUtils";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import open from "open";
