@@ -124,9 +124,12 @@ export const login = async (
     } else {
       print2(`You are currently logged in to the ${orgSlug} organization.`);
     }
-    print2(
-      `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-    );
+
+    if (tokenTimeRemaining >= 0) {
+      print2(
+        `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
+      );
+    }
   } else {
     if (!loggedIn) {
       print2(
@@ -135,9 +138,7 @@ export const login = async (
     } else {
       print2(`You are currently logged in to the ${orgSlug} organization.`);
     }
-    print2(
-      `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-    );
+    print2(`You are already logged in to the test-org organization.`);
   }
 };
 
