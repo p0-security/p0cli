@@ -24,53 +24,41 @@ export const getProviderType = (
   org: OrgData
 ): "cloudflare" | "okta" | "ping" | undefined => {
   if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" &&
-      org.auth.provider.ssoProvider === "oidc-pkce"
+    return org.auth.type === "sso" && "providerType" in org.auth.provider
       ? org.auth.provider.providerType
       : undefined;
   }
-  return "providerType" in org ? org.providerType : undefined;
+  return ("providerType" in org && org.providerType) || undefined;
 };
 
 /** Get provider domain from org data */
 export const getProviderDomain = (org: OrgData): string | undefined => {
   if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" &&
-      org.auth.provider.ssoProvider === "oidc-pkce"
+    return org.auth.type === "sso" && "providerDomain" in org.auth.provider
       ? org.auth.provider.providerDomain
       : undefined;
   }
-  return "providerDomain" in org ? org.providerDomain : undefined;
+  return ("providerDomain" in org && org.providerDomain) || undefined;
 };
 
 /** Get client ID from org data */
 export const getClientId = (org: OrgData): string | undefined => {
   if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" &&
-      org.auth.provider.ssoProvider === "oidc-pkce"
+    return org.auth.type === "sso" && "clientId" in org.auth.provider
       ? org.auth.provider.clientId
       : undefined;
   }
-  return "clientId" in org ? org.clientId : undefined;
+  return ("clientId" in org && org.clientId) || undefined;
 };
 
 /** Get environment ID from org data */
 export const getEnvironmentId = (org: OrgData): string | undefined => {
   if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" &&
-      org.auth.provider.ssoProvider === "oidc-pkce" &&
-      org.auth.provider.providerType === "ping"
+    return org.auth.type === "sso" && "environmentId" in org.auth.provider
       ? org.auth.provider.environmentId
       : undefined;
   }
-  if (
-    "providerType" in org &&
-    org.providerType === "ping" &&
-    "environmentId" in org
-  ) {
-    return org.environmentId;
-  }
-  return undefined;
+  return ("environmentId" in org && org.environmentId) || undefined;
 };
 
 /** Get SSO provider from org data */
@@ -78,7 +66,7 @@ export const getSsoProvider = (org: OrgData): string | undefined => {
   if (hasNewAuthStructure(org)) {
     return org.auth.type === "sso" ? org.auth.provider.ssoProvider : undefined;
   }
-  return "ssoProvider" in org ? org.ssoProvider : undefined;
+  return ("ssoProvider" in org && org.ssoProvider) || undefined;
 };
 
 /** Get provider ID from org data */
@@ -88,7 +76,7 @@ export const getProviderId = (org: OrgData): string | undefined => {
       ? org.auth.provider.providerId
       : undefined;
   }
-  return "providerId" in org ? org.providerId : undefined;
+  return ("providerId" in org && org.providerId) || undefined;
 };
 
 /** Check if org uses password authentication */
@@ -96,5 +84,5 @@ export const usePasswordAuth = (org: OrgData): boolean => {
   if (hasNewAuthStructure(org)) {
     return org.auth.type === "password";
   }
-  return "usePassword" in org ? !!org.usePassword : false;
+  return ("usePassword" in org && org.usePassword) || false;
 };
