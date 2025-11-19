@@ -233,7 +233,7 @@ Please contact support@p0.dev for assistance."
         await login({ org: "test-org" });
 
         expect(print2).toHaveBeenCalledWith(
-          "You are already logged in to the test-org organization."
+          "You are currently logged in to the test-org organization."
         );
 
         expect(print2).toHaveBeenCalledWith(

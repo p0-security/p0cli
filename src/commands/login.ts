@@ -76,11 +76,6 @@ export const login = async (
     if (identity && loggedIn) {
       // If no org is provided, and the user is logged in, use the one from the identity
       orgSlug = identity.org.slug;
-
-      print2(`You are currently logged in to the ${orgSlug} organization.`);
-      print2(
-        `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-      );
     } else {
       throw "The organization ID is required. Please provide it as an argument or set the P0_ORG environment variable.";
     }
@@ -89,11 +84,6 @@ export const login = async (
       if (orgSlug !== identity.org.slug || args.refresh) {
         // Force login if user is switching organizations or if --refresh argument is provided
         loggedIn = false;
-      } else {
-        print2(`You are already logged in to the ${orgSlug} organization.`);
-        print2(
-          `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
-        );
       }
     }
   }
@@ -131,6 +121,14 @@ export const login = async (
   if (!loggedIn) {
     print2(
       `You are now logged in to the ${orgSlug} organization, and can use the p0 CLI.`
+    );
+  } else {
+    print2(`You are currently logged in to the ${orgSlug} organization.`);
+  }
+
+  if (tokenTimeRemaining > 0) {
+    print2(
+      `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
     );
   }
 };
