@@ -8,94 +8,61 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import type { NewOrgData, OrgData } from "./org";
+import type { OrgData } from "./org";
 
-/** Helper functions to access auth fields with backward compatibility */
-
-/** Check if org data uses the new auth structure */
-export const hasNewAuthStructure = (
-  org: OrgData
-): org is NewOrgData & { slug: string } => {
-  return "auth" in org && org.auth !== undefined;
-};
+/** Helper functions to access auth fields */
 
 /** Get provider type from org data */
 export const getProviderType = (
   org: OrgData
 ): "cloudflare" | "okta" | "ping" | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" && "providerType" in org.auth.provider
-      ? org.auth.provider.providerType
-      : undefined;
-  }
-  return ("providerType" in org && org.providerType) || undefined;
+  return org.auth.type === "sso" && "providerType" in org.auth.provider
+    ? org.auth.provider.providerType
+    : undefined;
 };
 
 /** Get provider domain from org data */
 export const getProviderDomain = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" && "providerDomain" in org.auth.provider
-      ? org.auth.provider.providerDomain
-      : undefined;
-  }
-  return ("providerDomain" in org && org.providerDomain) || undefined;
+  return org.auth.type === "sso" && "providerDomain" in org.auth.provider
+    ? org.auth.provider.providerDomain
+    : undefined;
 };
 
 /** Get client ID from org data */
 export const getClientId = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" && "clientId" in org.auth.provider
-      ? org.auth.provider.clientId
-      : undefined;
-  }
-  return ("clientId" in org && org.clientId) || undefined;
+  return org.auth.type === "sso" && "clientId" in org.auth.provider
+    ? org.auth.provider.clientId
+    : undefined;
 };
 
 /** Get environment ID from org data */
 export const getEnvironmentId = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" && "environmentId" in org.auth.provider
-      ? org.auth.provider.environmentId
-      : undefined;
-  }
-  return ("environmentId" in org && org.environmentId) || undefined;
+  return org.auth.type === "sso" && "environmentId" in org.auth.provider
+    ? org.auth.provider.environmentId
+    : undefined;
 };
 
 /** Get SSO provider from org data */
 export const getSsoProvider = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" ? org.auth.provider.ssoProvider : undefined;
-  }
-  return ("ssoProvider" in org && org.ssoProvider) || undefined;
+  return org.auth.type === "sso" ? org.auth.provider.ssoProvider : undefined;
 };
 
 /** Get provider ID from org data */
 export const getProviderId = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" && "providerId" in org.auth.provider
-      ? org.auth.provider.providerId
-      : undefined;
-  }
-  return ("providerId" in org && org.providerId) || undefined;
+  return org.auth.type === "sso" && "providerId" in org.auth.provider
+    ? org.auth.provider.providerId
+    : undefined;
 };
 
 /** Check if org uses password authentication */
 export const usePasswordAuth = (org: OrgData): boolean => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "password";
-  }
-  return ("usePassword" in org && org.usePassword) || false;
+  return org.auth.type === "password";
 };
 
 /** Get Microsoft primary domain from org data (for Azure/Microsoft providers) */
 export const getMicrosoftPrimaryDomain = (org: OrgData): string | undefined => {
-  if (hasNewAuthStructure(org)) {
-    return org.auth.type === "sso" &&
-      "microsoftPrimaryDomain" in org.auth.provider
-      ? org.auth.provider.microsoftPrimaryDomain
-      : undefined;
-  }
-  return (
-    ("microsoftPrimaryDomain" in org && org.microsoftPrimaryDomain) || undefined
-  );
+  return org.auth.type === "sso" &&
+    "microsoftPrimaryDomain" in org.auth.provider
+    ? org.auth.provider.microsoftPrimaryDomain
+    : undefined;
 };
