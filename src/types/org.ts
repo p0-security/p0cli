@@ -106,44 +106,13 @@ type OrgSsoAuth = {
 
 export type OrgAuth = OrgMagicLinkAuth | OrgPasswordAuth | OrgSsoAuth;
 
-/** Legacy structure for backward compatibility */
-type LegacyOrgData = {
-  clientId: string;
-  providerId: string;
-  providerDomain?: string;
-  ssoProvider?:
-    | "azure-oidc"
-    | "google-oidc"
-    | "google"
-    | "microsoft"
-    | "oidc-pkce"
-    | "okta";
-  usePassword?: boolean;
-  tenantId: string;
-  config: Config;
-  /** Swaps API auth to tokens from the ssoProvider, rather than firebase */
-  useProviderToken?: boolean;
-} & (
-  | {
-      providerType?: "okta";
-    }
-  | {
-      providerType?: "ping";
-      environmentId: string;
-    }
-) &
-  SsoProvider;
-
-export type NewOrgData = {
+export type RawOrgData = {
   tenantId: string;
   auth: OrgAuth;
   config: Config;
   /** Swaps API auth to tokens from the ssoProvider, rather than firebase */
   useProviderToken?: boolean;
 };
-
-/** Publicly readable organization data - supports both old and new structures */
-export type RawOrgData = LegacyOrgData | NewOrgData;
 
 export type OrgData = RawOrgData & {
   slug: string;
