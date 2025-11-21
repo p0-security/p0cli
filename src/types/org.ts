@@ -33,11 +33,6 @@ export type GoogleApplicationConfig = ApplicationConfig & {
 
 export type Config = ApplicationConfig | GoogleApplicationConfig;
 
-type AzureOidcProvider = {
-  ssoProvider: "azure-oidc";
-  microsoftPrimaryDomain: string;
-};
-
 type GoogleOidcProvider = {
   ssoProvider: "google-oidc";
 };
@@ -51,7 +46,18 @@ type LegacyOktaSsoProvider = {
   providerId: string;
 };
 
-type MicrosoftSsoProvider = {
+type CommonOidcProvider = {
+  providerId: string;
+  providerDomain: string;
+  clientId: string;
+};
+
+type AzureOidcProvider = Partial<CommonOidcProvider> & {
+  ssoProvider: "azure-oidc";
+  microsoftPrimaryDomain: string;
+};
+
+type MicrosoftSsoProvider = Partial<CommonOidcProvider> & {
   ssoProvider: "microsoft";
   microsoftPrimaryDomain: string;
 };
