@@ -79,9 +79,37 @@ const ls = async (
 
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
+  // Map 'psql' to 'pg' for backend compatibility (backend uses 'pg' but we want 'psql' as user-facing command)
+  // Also map 'psql session destination' to 'pg role instance' since backend doesn't support 'pg session destination'
+  const stringArgs = [...args._, ...args.arguments].map(String);
+  
+  // Find the index of 'psql' in the arguments (skip 'ls' if present)
+  const psqlIndex = stringArgs.findIndex((arg) => arg === "psql");
+  
+  // Check if this is 'psql session destination' and map to 'pg role instance'
+  if (
+    psqlIndex >= 0 &&
+    stringArgs.length >= psqlIndex + 3 &&
+    stringArgs[psqlIndex] === "psql" &&
+    stringArgs[psqlIndex + 1] === "session" &&
+    stringArgs[psqlIndex + 2] === "destination"
+  ) {
+    stringArgs[psqlIndex] = "pg";
+    stringArgs[psqlIndex + 1] = "role";
+    stringArgs[psqlIndex + 2] = "instance";
+  } else {
+    // Otherwise just map 'psql' to 'pg' wherever it appears
+    stringArgs.forEach((arg, index) => {
+      if (arg === "psql") {
+        stringArgs[index] = "pg";
+      }
+    });
+  }
+  
+  const mappedArguments = stringArgs;
+
   const allArguments = [
-    ...args._,
-    ...args.arguments,
+    ...mappedArguments,
     /**
      * If the user has requested a size, replace it with double the requested size,
      * otherwise request double the default.
@@ -89,8 +117,8 @@ const ls = async (
      * This is done so that we can give the user a sense of the number of results
      * that are not displayed.
      */
-    ...(args.size ? ["--size", args.size * 2] : []),
-  ].map(String); // make sure all elements are strings to satisfy command line args
+    ...(args.size ? ["--size", String(args.size * 2)] : []),
+  ];
 
   const responsePromise: Promise<LsResponse> = command<LsResponse>(
     authn,
@@ -101,6 +129,18 @@ const ls = async (
   const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
+    // Filter out CloudSQL instances for psql/pg listings (not yet supported)
+    const isPsqlListing = mappedArguments.includes("pg") || mappedArguments.includes("psql");
+    if (isPsqlListing && data.items) {
+      data.items = data.items.filter((item) => {
+        // Exclude CloudSQL instances
+        const isCloudSQL = 
+          (item.group && item.group.toLowerCase().includes("cloudsql")) ||
+          (item.key && item.key.toLowerCase().startsWith("cloud-sql/"));
+        return !isCloudSQL;
+      });
+    }
+
     if (args.json) {
       print1(JSON.stringify(data, null, 2));
       return;
