@@ -14,7 +14,7 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import open from "open";
+import { osSafeOpen } from "../../util";
 import pkceChallenge from "pkce-challenge";
 
 const AZURE_SCOPE = "openid profile email offline_access";
@@ -51,7 +51,7 @@ const requestAuth = async (org: OrgData) => {
 
     ${url}\n`);
 
-  open(url).catch(() => {
+  osSafeOpen(url).catch(() => {
     print2(`Please visit the following URL to continue login:
 
     ${url}`);
