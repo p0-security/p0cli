@@ -129,18 +129,6 @@ const ls = async (
   const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
-    // Filter out CloudSQL instances for psql/pg listings (not yet supported)
-    const isPsqlListing = mappedArguments.includes("pg") || mappedArguments.includes("psql");
-    if (isPsqlListing && data.items) {
-      data.items = data.items.filter((item) => {
-        // Exclude CloudSQL instances
-        const isCloudSQL = 
-          (item.group && item.group.toLowerCase().includes("cloudsql")) ||
-          (item.key && item.key.toLowerCase().startsWith("cloud-sql/"));
-        return !isCloudSQL;
-      });
-    }
-
     if (args.json) {
       print1(JSON.stringify(data, null, 2));
       return;

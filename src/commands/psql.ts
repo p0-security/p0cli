@@ -24,9 +24,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { sys } from "typescript";
+import { ChildProcess } from "node:child_process";
 import { fetchCommand, fetchIntegrationConfig } from "../drivers/api";
 import { getTenantConfig } from "../drivers/config";
 import { defaultConfig } from "../drivers/env";
+import { gcloudCommandArgs } from "../plugins/google/util";
 
 export const psqlCommand = (yargs: yargs.Argv) =>
   yargs.command<PsqlCommandArgs>(
@@ -75,8 +77,16 @@ Example:
  * Automatically configures AWS SSO and generates IAM auth tokens.
  */
 const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
-  // Validate required CLI tools are installed
-  await validateCliTools(args.debug);
+  // Validate psql is installed (required for both providers)
+  // We'll validate provider-specific tools after we know the provider
+  try {
+    const checkCommand = process.platform === "win32" ? "where" : "which";
+    await asyncSpawn({ debug: args.debug }, checkCommand, ["psql"]);
+  } catch (error) {
+    print2("Error: PostgreSQL client (psql) not found in PATH.");
+    print2("Please install PostgreSQL client and ensure it's in your PATH.");
+    sys.exit(1);
+  }
 
   const authn = await authenticate(args);
 
@@ -112,52 +122,63 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   }
   const connectionDetails: ConnectionDetails = connectionDetailsResult!;
 
-  // Configure AWS SSO profile
-  const profileName = await configureAwsSsoProfile(connectionDetails, args.debug);
+  // Route to provider-specific connection flow
+  if (connectionDetails.provider === "gcp") {
+    // GCP CloudSQL connection flow
+    // Validate gcloud is installed
+    await validateCliTools("gcp", args.debug);
+    await connectToCloudSQL(connectionDetails, dbUser, args.debug);
+  } else {
+    // AWS RDS connection flow (existing)
+    // Validate aws CLI is installed
+    await validateCliTools("aws", args.debug);
+    // Configure AWS SSO profile
+    const profileName = await configureAwsSsoProfile(connectionDetails, args.debug);
 
-  // Login to AWS SSO
-  await loginAwsSso(profileName, args.debug);
+    // Login to AWS SSO
+    await loginAwsSso(profileName, args.debug);
 
-  // Only try to get actual RDS endpoint from AWS if the current endpoint looks like it was constructed
-  // (i.e., it's in the format instance.region.rds.amazonaws.com without the random ID)
-  // If we already have the full endpoint from the integration config, don't overwrite it
-  const hostParts = connectionDetails.rdsHost.split(".");
-  const isConstructedEndpoint = hostParts.length === 4 && 
-    hostParts[1] === connectionDetails.region && 
-    hostParts[2] === "rds" && 
-    hostParts[3] === "amazonaws.com";
-  
-  if (isConstructedEndpoint) {
-    // This looks like a constructed endpoint, try to get the actual one from AWS
-    const instanceIdentifier = hostParts[0] || connectionDetails.rdsHost;
-    const actualRdsHost = await getRdsEndpoint(
-      instanceIdentifier,
-      connectionDetails.region,
+    // Only try to get actual RDS endpoint from AWS if the current endpoint looks like it was constructed
+    // (i.e., it's in the format instance.region.rds.amazonaws.com without the random ID)
+    // If we already have the full endpoint from the integration config, don't overwrite it
+    const hostParts = connectionDetails.rdsHost.split(".");
+    const isConstructedEndpoint = hostParts.length === 4 && 
+      hostParts[1] === connectionDetails.region && 
+      hostParts[2] === "rds" && 
+      hostParts[3] === "amazonaws.com";
+    
+    if (isConstructedEndpoint) {
+      // This looks like a constructed endpoint, try to get the actual one from AWS
+      const instanceIdentifier = hostParts[0] || connectionDetails.rdsHost;
+      const actualRdsHost = await getRdsEndpoint(
+        instanceIdentifier,
+        connectionDetails.region,
+        profileName,
+        args.debug
+      );
+      if (actualRdsHost && actualRdsHost !== connectionDetails.rdsHost) {
+        connectionDetails.rdsHost = actualRdsHost;
+        if (args.debug) {
+          print2(`Updated RDS endpoint to: ${actualRdsHost}`);
+        }
+      }
+    } else {
+      if (args.debug) {
+        print2(`Using RDS endpoint from integration config: ${connectionDetails.rdsHost}`);
+      }
+    }
+
+    // Generate IAM auth token
+    const token = await generateDbAuthToken(
+      connectionDetails,
+      dbUser,
       profileName,
       args.debug
     );
-    if (actualRdsHost && actualRdsHost !== connectionDetails.rdsHost) {
-      connectionDetails.rdsHost = actualRdsHost;
-      if (args.debug) {
-        print2(`Updated RDS endpoint to: ${actualRdsHost}`);
-      }
-    }
-  } else {
-    if (args.debug) {
-      print2(`Using RDS endpoint from integration config: ${connectionDetails.rdsHost}`);
-    }
+
+    // Connect to database
+    await connectToDatabase(connectionDetails, dbUser, token, args.debug);
   }
-
-  // Generate IAM auth token
-  const token = await generateDbAuthToken(
-    connectionDetails,
-    dbUser,
-    profileName,
-    args.debug
-  );
-
-  // Connect to database
-  await connectToDatabase(connectionDetails, dbUser, token, args.debug);
 
   // Force exit to prevent hanging
   if (process.env.NODE_ENV !== "unit") {
@@ -165,11 +186,18 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   }
 };
 
-const validateCliTools = async (debug?: boolean) => {
-  const tools = [
-    { name: "aws", description: "AWS CLI" },
+const validateCliTools = async (provider?: "aws" | "gcp", debug?: boolean) => {
+  const tools: Array<{ name: string; description: string }> = [
     { name: "psql", description: "PostgreSQL client" },
   ];
+
+  // Add provider-specific tools
+  if (provider === "gcp") {
+    tools.push({ name: "gcloud", description: "Google Cloud CLI" });
+  } else {
+    // Default to AWS if not specified
+    tools.push({ name: "aws", description: "AWS CLI" });
+  }
 
   for (const tool of tools) {
     try {
@@ -263,6 +291,23 @@ const provisionRequest = async (
     const result = await decodeProvisionStatus<PsqlPermissionSpec>(response.request);
 
     if (!result) {
+      // Check if the error is about public IP requirement for CloudSQL
+      const errorMessage = response.request?.error?.message || "";
+      if (
+        errorMessage.includes("does not have a public IP address") &&
+        errorMessage.includes("Cloud SQL")
+      ) {
+        print2("");
+        print2(
+          "Note: The Cloud SQL Proxy (which this CLI uses) supports private IP instances."
+        );
+        print2(
+          "This error is due to a backend limitation that requires a public IP."
+        );
+        print2(
+          "Please contact your P0 administrator to update the backend to support private IP CloudSQL instances."
+        );
+      }
       return null;
     }
 
@@ -308,17 +353,22 @@ const provisionRequest = async (
           }
         }
       } catch (retryError) {
-        // Ignore retry errors - we'll throw the original error
+        // Retry failed, but we'll still try to continue if we have partial request data
         if (args.debug) {
           print2(`Retry check failed: ${retryError}`);
+          print2("Attempting to continue with available request data...");
         }
+        // Don't throw - let the error propagate but we've logged it
       }
     }
+    // If we get here and it's a network error, the retry also failed
+    // But we should still throw the error to let the caller know
     throw error;
   }
 };
 
-type ConnectionDetails = {
+type AwsConnectionDetails = {
+  provider: "aws";
   rdsHost: string;
   region: string;
   port: number;
@@ -329,6 +379,19 @@ type ConnectionDetails = {
   roleName: string;
 };
 
+type GcpConnectionDetails = {
+  provider: "gcp";
+  projectId: string;
+  instanceConnectionName: string;
+  region: string;
+  port: number;
+  database: string;
+  instanceName: string;
+  publicIp?: string; // Public IP address for direct connection
+};
+
+type ConnectionDetails = AwsConnectionDetails | GcpConnectionDetails;
+
 const extractConnectionDetails = async (
   request: PermissionRequest<PsqlPermissionSpec>,
   roleName: string,
@@ -338,29 +401,47 @@ const extractConnectionDetails = async (
 ): Promise<ConnectionDetails | null> => {
   try {
     const { permission, generated } = request;
+    const perm = permission as any;
     const resource = permission.resource as any;
 
-    // Extract from permission and resource (actual backend response structure)
-    // The permission object has: region, databaseName, instanceName, instance, parent, resource
-    const perm = permission as any;
-    const region = perm.region || resource.region;
-    const databaseName = perm.databaseName || resource.databaseName;
-    const instanceName = perm.instanceName || resource.instanceName;
-    const accountId = resource.accountId || resource.account || perm.parent;
-    const idcId = resource.idcId;
-    const idcRegion = resource.idcRegion || resource.idc_region || region;
+    // Detect provider FIRST before extracting provider-specific fields
+    const integrationType = perm.integrationType || resource.integrationType;
+    const instancePath = perm.instance || "";
+    const isGcp = 
+      integrationType === "cloudsql" ||
+      integrationType === "cloud-sql" ||
+      instancePath.toLowerCase().startsWith("cloud-sql/") ||
+      instancePath.toLowerCase().includes("cloudsql") ||
+      (resource as any)?.provider === "gcp" ||
+      (resource as any)?.type === "gcp";
+    
+    if (debug) {
+      print2(`Detected provider: ${isGcp ? "GCP CloudSQL" : "AWS RDS"}`);
+      print2(`Integration type: ${integrationType || "not specified"}`);
+      print2(`Instance path: ${instancePath || "not specified"}`);
+    }
 
-    // Extract permission set name from generated resource
+    // Extract common fields - for GCP, fields are in permission, for AWS they may be in resource
+    const region = perm.region || resource?.region;
+    const databaseName = perm.databaseName || resource?.databaseName;
+    const instanceName = perm.instanceName || resource?.instanceName;
+    
+    // Extract provider-specific fields only if needed
+    const accountId = isGcp ? undefined : (resource?.accountId || resource?.account || perm.parent);
+    const idcId = isGcp ? undefined : resource?.idcId;
+    const idcRegion = isGcp ? undefined : (resource?.idcRegion || resource?.idc_region || region);
+    
+    // Default port for PostgreSQL - check both permission and resource
+    const port = perm.port || resource?.port || 5432;
+
+    // Extract permission set name from generated resource (only for AWS)
     // The permission set name is in generated.resource.name
     const gen = generated as any;
     const permissionSetName = gen?.resource?.name || gen?.permissionSet || roleName;
     
-    if (debug) {
+    if (debug && !isGcp) {
       print2(`Using permission set name: ${permissionSetName}`);
     }
-
-    // Default port for PostgreSQL
-    const port = resource.port || 5432;
 
     if (debug) {
       print2("=== Debug: Full response structure ===");
@@ -375,19 +456,147 @@ const extractConnectionDetails = async (
       print2("=== End debug ===");
     }
 
-    if (!region || !databaseName || !accountId || !idcId || !idcRegion) {
-      print2("Error: Missing required connection details in request response:");
-      print2(`  Region: ${region || "missing"}`);
-      print2(`  Database: ${databaseName || "missing"}`);
-      print2(`  Account ID: ${accountId || "missing"}`);
-      print2(`  IDC ID: ${idcId || "missing"}`);
-      print2(`  IDC Region: ${idcRegion || "missing"}`);
-      if (debug) {
-        print2("Full permission object:");
-        print2(JSON.stringify(permission, null, 2));
-      }
-      return null;
+    // Route to provider-specific extraction
+    if (isGcp) {
+      return await extractGcpConnectionDetails(
+        perm,
+        resource,
+        region,
+        databaseName,
+        instanceName,
+        port,
+        debug,
+        authn,
+        args
+      );
+    } else {
+      return await extractAwsConnectionDetails(
+        perm,
+        resource,
+        region,
+        databaseName,
+        instanceName,
+        accountId,
+        idcId,
+        idcRegion,
+        port,
+        roleName,
+        generated,
+        debug,
+        authn,
+        args
+      );
     }
+  } catch (error) {
+    print2(`Error extracting connection details: ${error}`);
+    if (debug) {
+      print2(`Stack: ${error instanceof Error ? error.stack : String(error)}`);
+    }
+    return null;
+  }
+};
+
+const extractGcpConnectionDetails = async (
+  perm: any,
+  resource: any,
+  region: string,
+  databaseName: string,
+  instanceName: string,
+  port: number,
+  debug?: boolean,
+  _authn?: any,
+  _args?: any
+): Promise<GcpConnectionDetails | null> => {
+  // Extract GCP-specific fields - for GCP, fields are typically in permission object
+  const projectId = perm.parent || resource?.projectId || perm.projectId;
+  
+  if (!region || !databaseName || !projectId || !instanceName) {
+    print2("Error: Missing required GCP CloudSQL connection details:");
+    print2(`  Region: ${region || "missing"}`);
+    print2(`  Database: ${databaseName || "missing"}`);
+    print2(`  Project ID: ${projectId || "missing"}`);
+    print2(`  Instance Name: ${instanceName || "missing"}`);
+    return null;
+  }
+
+  // Get instance connection name - format: project-id:region:instance-name
+  // Check permission first (where GCP fields typically are), then resource
+  let instanceConnectionName = 
+    perm.instanceConnectionName ||
+    perm.connectionName ||
+    perm.connection_name ||
+    resource?.instanceConnectionName ||
+    resource?.connectionName ||
+    resource?.connection_name;
+  
+  if (!instanceConnectionName) {
+    // Construct from project:region:instance
+    instanceConnectionName = `${projectId}:${region}:${instanceName}`;
+    if (debug) {
+      print2(`Constructed instance connection name: ${instanceConnectionName}`);
+    }
+  } else {
+    if (debug) {
+      print2(`Using instance connection name from backend: ${instanceConnectionName}`);
+    }
+  }
+
+  // Ensure port is a number
+  const portNum = typeof port === "number" ? port : parseInt(String(port), 10);
+  if (isNaN(portNum) || portNum <= 0) {
+    print2(`Error: Invalid port number: ${port}`);
+    return null;
+  }
+
+  // Try to get public IP if available (will be queried later if not provided)
+  const publicIp = 
+    perm.publicIp ||
+    resource?.publicIp ||
+    perm.ipAddress ||
+    resource?.ipAddress ||
+    undefined;
+
+  return {
+    provider: "gcp",
+    projectId: String(projectId),
+    instanceConnectionName: String(instanceConnectionName),
+    region: String(region),
+    port: portNum,
+    database: String(databaseName),
+    instanceName: String(instanceName),
+    publicIp: publicIp ? String(publicIp) : undefined,
+  };
+};
+
+const extractAwsConnectionDetails = async (
+  perm: any,
+  resource: any,
+  region: string,
+  databaseName: string,
+  instanceName: string,
+  accountId: string,
+  idcId: string,
+  idcRegion: string,
+  port: number,
+  roleName: string,
+  generated: any,
+  debug?: boolean,
+  authn?: any,
+  args?: any
+): Promise<AwsConnectionDetails | null> => {
+  if (!region || !databaseName || !accountId || !idcId || !idcRegion) {
+    print2("Error: Missing required AWS RDS connection details in request response:");
+    print2(`  Region: ${region || "missing"}`);
+    print2(`  Database: ${databaseName || "missing"}`);
+    print2(`  Account ID: ${accountId || "missing"}`);
+    print2(`  IDC ID: ${idcId || "missing"}`);
+    print2(`  IDC Region: ${idcRegion || "missing"}`);
+    if (debug) {
+      print2("Full permission object:");
+      print2(JSON.stringify(perm, null, 2));
+    }
+    return null;
+  }
 
     // Get SSO Start URL - check if backend provides it, otherwise construct from IDC ID
     // The backend might provide ssoStartUrl directly, or we construct it
@@ -439,19 +648,14 @@ const extractConnectionDetails = async (
       (perm as any).connection?.host ||
       (perm as any).connection?.endpoint ||
       (perm as any).connection?.hostname ||
-      // Check in generated object
-      (gen as any)?.rdsHost ||
-      (gen as any)?.endpoint ||
-      (gen as any)?.hostname ||
-      (gen as any)?.connectionString ||
-      (gen as any)?.connection?.host ||
-      (gen as any)?.connection?.endpoint ||
-      (gen as any)?.connection?.hostname ||
-      // Check in full request object (maybe it's at the top level)
-      (request as any)?.rdsHost ||
-      (request as any)?.endpoint ||
-      (request as any)?.hostname ||
-      (request as any)?.connectionString;
+      // Check in generated object (passed as parameter)
+      (generated as any)?.rdsHost ||
+      (generated as any)?.endpoint ||
+      (generated as any)?.hostname ||
+      (generated as any)?.connectionString ||
+      (generated as any)?.connection?.host ||
+      (generated as any)?.connection?.endpoint ||
+      (generated as any)?.connection?.hostname;
     
     // If backend doesn't provide it, we'll need to query AWS or construct it
     if (!rdsHost) {
@@ -550,7 +754,15 @@ const extractConnectionDetails = async (
       return null;
     }
 
+    // Extract permission set name from generated resource
+    const permissionSetName = generated?.resource?.name || generated?.permissionSet || roleName;
+    
+    if (debug) {
+      print2(`Using permission set name: ${permissionSetName}`);
+    }
+
     return {
+      provider: "aws",
       rdsHost: rdsHost.trim(),
       region: String(region),
       port: portNum,
@@ -560,13 +772,6 @@ const extractConnectionDetails = async (
       ssoAccountId: String(accountId),
       roleName: permissionSetName, // Use permission set name from response, not user-provided role
     };
-  } catch (error) {
-    print2(`Error extracting connection details: ${error}`);
-    if (debug) {
-      print2(`Stack: ${error instanceof Error ? error.stack : String(error)}`);
-    }
-    return null;
-  }
 };
 
 const queryBackendForEndpoint = async (
@@ -901,7 +1106,7 @@ const getRdsEndpoint = async (
 };
 
 const configureAwsSsoProfile = async (
-  details: ConnectionDetails,
+  details: AwsConnectionDetails,
   debug?: boolean
 ): Promise<string> => {
   const awsConfigDir = path.join(os.homedir(), ".aws");
@@ -961,7 +1166,7 @@ const loginAwsSso = async (profileName: string, debug?: boolean): Promise<void> 
 };
 
 const generateDbAuthToken = async (
-  details: ConnectionDetails,
+  details: AwsConnectionDetails,
   dbUser: string,
   profileName: string,
   debug?: boolean
@@ -1005,7 +1210,7 @@ const generateDbAuthToken = async (
 };
 
 const connectToDatabase = async (
-  details: ConnectionDetails,
+  details: AwsConnectionDetails,
   dbUser: string,
   token: string,
   debug?: boolean
@@ -1053,6 +1258,330 @@ const connectToDatabase = async (
   } catch (error) {
     print2(`Error: Failed to connect to database. ${error}`);
     throw error;
+  }
+};
+
+const connectToCloudSQL = async (
+  details: GcpConnectionDetails,
+  dbUser: string,
+  debug?: boolean
+): Promise<void> => {
+  // Ensure gcloud is authenticated
+  await ensureGcloudAuth(debug);
+
+  // Set the project
+  await setGcloudProject(details.projectId, debug);
+
+  // Always use Cloud SQL Proxy (works for both private and public IPs)
+  print2("Connecting to CloudSQL database via Cloud SQL Proxy...");
+  print2("");
+
+  // Start Cloud SQL Proxy in the background and connect psql to it
+  await connectToCloudSQLViaProxy(details, dbUser, debug);
+};
+
+const ensureGcloudAuth = async (debug?: boolean): Promise<void> => {
+  try {
+    // Check if gcloud is authenticated by trying to get an access token
+    // This will fail if authentication is needed or tokens are expired
+    const { command, args } = gcloudCommandArgs([
+      "auth",
+      "print-access-token",
+    ]);
+    await asyncSpawn({ debug: false }, command, args);
+    // If we get here, authentication is working
+    if (debug) {
+      print2("gcloud is already authenticated.");
+    }
+  } catch (error) {
+    // Not authenticated or tokens expired, need to login
+    print2("gcloud authentication required. Please login...");
+    try {
+      const { command, args } = gcloudCommandArgs(["auth", "login"]);
+      // Use interactive spawn for login (user needs to interact with browser)
+      const child = spawnWithCleanEnv(command, args, {
+        stdio: "inherit",
+        env: createCleanChildEnv(),
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        child.on("exit", (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`gcloud auth login exited with code ${code}`));
+          }
+        });
+
+        child.on("error", (error) => {
+          reject(error);
+        });
+      });
+
+      print2("gcloud authentication successful.");
+    } catch (loginError) {
+      print2(`Error: gcloud authentication failed. ${loginError}`);
+      print2("Please run 'gcloud auth login' manually and try again.");
+      throw loginError;
+    }
+  }
+};
+
+const setGcloudProject = async (
+  projectId: string,
+  debug?: boolean
+): Promise<void> => {
+  try {
+    // Check current project
+    const { command: getCommand, args: getArgs } = gcloudCommandArgs([
+      "config",
+      "get-value",
+      "project",
+    ]);
+    const currentProject = (await asyncSpawn({ debug: false }, getCommand, getArgs)).trim();
+
+    if (currentProject === projectId) {
+      if (debug) {
+        print2(`gcloud project is already set to: ${projectId}`);
+      }
+      return;
+    }
+
+    // Set the project
+    if (debug) {
+      print2(`Setting gcloud project to: ${projectId}`);
+    }
+    const { command, args } = gcloudCommandArgs([
+      "config",
+      "set",
+      "project",
+      projectId,
+    ]);
+    await asyncSpawn({ debug }, command, args);
+    if (debug) {
+      print2(`gcloud project set to: ${projectId}`);
+    }
+  } catch (error) {
+    print2(`Error: Failed to set gcloud project. ${error}`);
+    throw error;
+  }
+};
+
+const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
+  try {
+    // Get gcloud SDK root directory
+    const { command: infoCommand, args: infoArgs } = gcloudCommandArgs([
+      "info",
+      "--format",
+      "value(installation.sdk_root)",
+    ]);
+    const sdkRoot = (await asyncSpawn({ debug: false }, infoCommand, infoArgs)).trim();
+    const proxyPath = `${sdkRoot}/bin/cloud_sql_proxy`;
+    
+    // Check if proxy binary exists
+    if (fs.existsSync(proxyPath)) {
+      if (debug) {
+        print2("Cloud SQL Proxy binary found.");
+      }
+      // Ensure it's executable
+      try {
+        fs.chmodSync(proxyPath, 0o755);
+      } catch {
+        // Ignore chmod errors
+      }
+      return proxyPath;
+    }
+
+    // Not installed, need to install it
+    print2("Cloud SQL Proxy component is required. Installing...");
+    const { command: installCommand, args: installArgs } = gcloudCommandArgs([
+      "components",
+      "install",
+      "cloud_sql_proxy",
+      "--quiet",
+    ]);
+    await asyncSpawn({ debug }, installCommand, installArgs);
+    
+    // Verify installation
+    if (!fs.existsSync(proxyPath)) {
+      throw new Error("Cloud SQL Proxy installation completed but binary not found");
+    }
+    
+    print2("Cloud SQL Proxy component installed successfully.");
+    return proxyPath;
+  } catch (error) {
+    print2(`Error: Failed to check/install Cloud SQL Proxy component. ${error}`);
+    print2("Please install it manually with: gcloud components install cloud_sql_proxy");
+    throw error;
+  }
+};
+
+const connectToCloudSQLViaProxy = async (
+  details: GcpConnectionDetails,
+  dbUser: string,
+  debug?: boolean
+): Promise<void> => {
+  // Ensure application-default credentials are set up for the proxy
+  try {
+    const { command: adcCommand, args: adcArgs } = gcloudCommandArgs([
+      "auth",
+      "application-default",
+      "print-access-token",
+    ]);
+    await asyncSpawn({ debug: false }, adcCommand, adcArgs);
+    if (debug) {
+      print2("Application-default credentials are available.");
+    }
+  } catch (error) {
+    // Application-default credentials not set up, need to login
+    print2("Setting up application-default credentials for Cloud SQL Proxy...");
+    try {
+      const { command: loginCommand, args: loginArgs } = gcloudCommandArgs([
+        "auth",
+        "application-default",
+        "login",
+      ]);
+      const loginChild = spawnWithCleanEnv(loginCommand, loginArgs, {
+        stdio: "inherit",
+        env: createCleanChildEnv(),
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        loginChild.on("exit", (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`gcloud auth application-default login exited with code ${code}`));
+          }
+        });
+
+        loginChild.on("error", (error) => {
+          reject(error);
+        });
+      });
+
+      print2("Application-default credentials set up successfully.");
+    } catch (loginError) {
+      print2(`Error: Failed to set up application-default credentials. ${loginError}`);
+      print2("Please run 'gcloud auth application-default login' manually and try again.");
+      throw loginError;
+    }
+  }
+
+  const proxyPath = await ensureCloudSqlProxy(debug);
+  
+  // Find an available local port
+  const localPort = 5433; // Use a different port than default PostgreSQL to avoid conflicts
+  
+  // Start Cloud SQL Proxy in the background
+  const instanceConnectionName = details.instanceConnectionName;
+  const proxyArgs = [
+    `-instances=${instanceConnectionName}=tcp:${localPort}`,
+  ];
+
+  if (debug) {
+    print2(`Starting Cloud SQL Proxy: ${proxyPath} ${proxyArgs.join(" ")}`);
+  }
+
+  const proxyProcess = spawnWithCleanEnv(proxyPath, proxyArgs, {
+    stdio: debug ? "inherit" : "pipe",
+    env: createCleanChildEnv(),
+  });
+
+  // Wait a bit for the proxy to start
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve();
+    }, 2000);
+
+    // Check if proxy started successfully by looking for "Ready for new connections" or error
+    let output = "";
+    if (proxyProcess.stdout) {
+      proxyProcess.stdout.on("data", (data: Buffer) => {
+        output += data.toString();
+        if (output.includes("Ready for new connections") || output.includes("ready")) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    }
+    if (proxyProcess.stderr) {
+      proxyProcess.stderr.on("data", (data: Buffer) => {
+        output += data.toString();
+        if (output.includes("Ready for new connections") || output.includes("ready")) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    }
+
+    proxyProcess.on("error", (error: Error) => {
+      clearTimeout(timeout);
+      print2(`Error: Failed to start Cloud SQL Proxy. ${error.message}`);
+      sys.exit(1);
+    });
+  });
+
+  // Generate a login token for CloudSQL IAM authentication
+  const { command: tokenCommand, args: tokenArgs } = gcloudCommandArgs([
+    "sql",
+    "generate-login-token",
+    "--project",
+    details.projectId,
+  ]);
+
+  let password: string;
+  try {
+    password = (await asyncSpawn({ debug: false }, tokenCommand, tokenArgs)).trim();
+    if (debug) {
+      print2("Generated CloudSQL login token.");
+    }
+  } catch (error) {
+    if (debug) {
+      print2(`Token generation failed: ${error}`);
+    }
+    password = "";
+  }
+
+  // Connect psql to localhost:localPort
+  const connectionString = `host=localhost port=${localPort} dbname=${details.database} user=${dbUser} sslmode=disable`;
+
+  const env = { ...process.env };
+  if (password) {
+    env.PGPASSWORD = password;
+  }
+
+  if (debug) {
+    print2(`Connecting psql to localhost:${localPort}/${details.database} as ${dbUser}`);
+  }
+
+  try {
+    const psqlProcess = spawnWithCleanEnv("psql", [connectionString], {
+      stdio: "inherit",
+      env: createCleanChildEnv(env),
+    });
+
+    psqlProcess.on("error", (error: Error) => {
+      print2(`Error: Failed to launch psql. ${error.message}`);
+      print2("Make sure psql is installed and in your PATH.");
+      proxyProcess.kill();
+      sys.exit(1);
+    });
+
+    // Wait for psql to exit
+    await new Promise<void>((resolve) => {
+      psqlProcess.on("exit", () => {
+        resolve();
+      });
+    });
+  } finally {
+    // Clean up: kill the proxy process
+    if (proxyProcess && !proxyProcess.killed) {
+      if (debug) {
+        print2("Stopping Cloud SQL Proxy...");
+      }
+      proxyProcess.kill();
+    }
   }
 };
 

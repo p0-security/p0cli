@@ -10,13 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { PermissionSpec } from "./request";
 
-export type PsqlPermissionSpec = PermissionSpec<
-  "psql",
-  PsqlRequest & { type: "aws" },
-  PsqlGenerated
->;
-
-export type PsqlRequest = {
+// AWS RDS request type
+export type AwsPsqlRequest = {
   resource: {
     rdsHost: string;
     region: string;
@@ -29,6 +24,27 @@ export type PsqlRequest = {
   };
   type: "aws";
 };
+
+// GCP CloudSQL request type
+export type GcpPsqlRequest = {
+  resource: {
+    projectId: string;
+    instanceConnectionName: string;
+    region: string;
+    port: number;
+    database: string;
+    instanceName: string;
+  };
+  type: "gcp";
+};
+
+// Union type for both providers
+export type PsqlRequest = AwsPsqlRequest | GcpPsqlRequest;
+
+// Permission spec can be either AWS or GCP
+export type PsqlPermissionSpec = 
+  | PermissionSpec<"psql", AwsPsqlRequest, PsqlGenerated>
+  | PermissionSpec<"psql", GcpPsqlRequest, PsqlGenerated>;
 
 export type PsqlGenerated = {
   username?: string;
