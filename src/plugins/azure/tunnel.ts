@@ -10,7 +10,12 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
-import { osSafeCommand, sleep, spawnWithCleanEnv } from "../../util";
+import {
+  getOperatingSystem,
+  osSafeCommand,
+  sleep,
+  spawnWithCleanEnv,
+} from "../../util";
 import {
   ABORT_AUTHORIZATION_FAILED_MESSAGE,
   AUTHORIZATION_FAILED_PATTERN,
@@ -80,11 +85,22 @@ const spawnBastionTunnelInBackground = (
 
     if (debug) print2("Spawning Azure Bastion tunnel process...");
 
-    // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
-    // descendent processes together.
+    const isWindows = getOperatingSystem() === "win";
+
+    // Spawn the process:
+    // - On Unix: use detached mode so it's in its own process group for easy cleanup
+    // - On Windows: don't use detached mode as it doesn't work reliably with cmd.exe wrapper
+    //   and process tree killing; instead rely on unref() and proper stdio handling
     const child = spawnWithCleanEnv(command, args, {
-      detached: true,
+      detached: !isWindows,
+      stdio: ["ignore", "pipe", "pipe"], // stdin ignored, stdout/stderr piped for monitoring
+      windowsHide: true, // Prevent console window on Windows
     });
+
+    // On Windows, unref immediately to prevent blocking, since we can't rely on detached mode
+    if (isWindows) {
+      child.unref();
+    }
 
     child.on("exit", (code) => {
       processExited = true;
@@ -144,6 +160,12 @@ const spawnBastionTunnelInBackground = (
       if (str.includes(TUNNEL_READY_STRING)) {
         print2("Azure Bastion tunnel is ready.");
 
+        // On Unix, unref the child process so the parent can exit without waiting for it
+        // (On Windows, we already unref'd immediately after spawn)
+        if (!isWindows) {
+          child.unref();
+        }
+
         resolve({
           killTunnel: async () => {
             if (processSignalledToExit || processExited) return;
@@ -151,43 +173,67 @@ const spawnBastionTunnelInBackground = (
             processSignalledToExit = true;
 
             if (child.pid) {
-              // Kill the process and all its descendents via killing the process group; this is only possible
-              // because we launched the process with `detached: true` above. This is necessary because `az` is
-              // actually a bash script that spawns a Python process, and we need to kill the Python process as well.
-              // SIGINT is equivalent to pressing Ctrl-C in the terminal; allows for the tunnel process to perform any
-              // necessary cleanup of its own before exiting. The negative PID is what indicates that we want to kill
-              // the whole process group.
               try {
-                if (debug) {
-                  print2(
-                    `Sending SIGINT to Azure Bastion tunnel process (${child.pid})...`
-                  );
-                }
-                process.kill(-child.pid, "SIGINT");
+                if (isWindows) {
+                  // On Windows, use taskkill to kill the process tree since negative PIDs don't work
+                  // /F = force, /T = kill tree (all child processes), /PID = process ID
+                  if (debug) {
+                    print2(
+                      `Killing Azure Bastion tunnel process tree (${child.pid}) on Windows...`
+                    );
+                  }
+                  const { spawn } = await import("node:child_process");
+                  const killProcess = spawn("taskkill", [
+                    "/F",
+                    "/T",
+                    "/PID",
+                    child.pid.toString(),
+                  ]);
 
-                // Give the tunnel a chance to quit gracefully after the SIGINT by waiting at least 250 ms and up to
-                // 5 seconds. If the process is still running after that, it's probably hung; SIGKILL it to force it to
-                // end immediately.
-                const SPIN_WAIT_MS = 250;
-                for (let spins = 0; spins < 20; spins++) {
-                  await sleep(SPIN_WAIT_MS);
-
-                  if (processExited) {
-                    if (debug) {
+                  killProcess.on("exit", (code) => {
+                    if (debug && code !== 0) {
                       print2(
-                        `Azure Bastion tunnel process exited after SIGINT after ${spins * SPIN_WAIT_MS} ms.`
+                        `taskkill exited with code ${code} (process may have already exited)`
                       );
                     }
-                    return;
+                  });
+                } else {
+                  // Kill the process and all its descendents via killing the process group; this is only possible
+                  // because we launched the process with `detached: true` above. This is necessary because `az` is
+                  // actually a bash script that spawns a Python process, and we need to kill the Python process as well.
+                  // SIGINT is equivalent to pressing Ctrl-C in the terminal; allows for the tunnel process to perform any
+                  // necessary cleanup of its own before exiting. The negative PID is what indicates that we want to kill
+                  // the whole process group.
+                  if (debug) {
+                    print2(
+                      `Sending SIGINT to Azure Bastion tunnel process (${child.pid})...`
+                    );
                   }
-                }
+                  process.kill(-child.pid, "SIGINT");
 
-                if (debug) {
-                  print2(
-                    `Azure Bastion tunnel process (${child.pid}) not responding, sending SIGKILL...`
-                  );
+                  // Give the tunnel a chance to quit gracefully after the SIGINT
+                  const SPIN_WAIT_MS = 250;
+                  for (let spins = 0; spins < 20; spins++) {
+                    await sleep(SPIN_WAIT_MS);
+
+                    if (processExited) {
+                      if (debug) {
+                        print2(
+                          `Azure Bastion tunnel process exited after SIGINT after ${spins * SPIN_WAIT_MS} ms.`
+                        );
+                      }
+                      return;
+                    }
+                  }
+
+                  // If still not exited, force kill
+                  if (debug) {
+                    print2(
+                      `Azure Bastion tunnel process (${child.pid}) not responding, sending SIGKILL...`
+                    );
+                  }
+                  process.kill(-child.pid, "SIGKILL");
                 }
-                process.kill(-child.pid, "SIGKILL");
               } catch (error: any) {
                 // Ignore the error and move on; we might as well just exit without waiting since we can't control
                 // the child process, for whatever reason
