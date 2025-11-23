@@ -198,8 +198,12 @@ const spawnBastionTunnelInBackground = (
                     }
                   });
                 } else {
-                  // On Unix, kill the process group using negative PID
-                  // SIGINT allows for graceful cleanup before exiting
+                  // Kill the process and all its descendents via killing the process group; this is only possible
+                  // because we launched the process with `detached: true` above. This is necessary because `az` is
+                  // actually a bash script that spawns a Python process, and we need to kill the Python process as well.
+                  // SIGINT is equivalent to pressing Ctrl-C in the terminal; allows for the tunnel process to perform any
+                  // necessary cleanup of its own before exiting. The negative PID is what indicates that we want to kill
+                  // the whole process group.
                   if (debug) {
                     print2(
                       `Sending SIGINT to Azure Bastion tunnel process (${child.pid})...`
