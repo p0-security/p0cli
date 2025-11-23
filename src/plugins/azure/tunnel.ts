@@ -10,7 +10,12 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { print2 } from "../../drivers/stdio";
-import { osSafeCommand, sleep, spawnWithCleanEnv } from "../../util";
+import {
+  getOperatingSystem,
+  osSafeCommand,
+  sleep,
+  spawnWithCleanEnv,
+} from "../../util";
 import {
   ABORT_AUTHORIZATION_FAILED_MESSAGE,
   AUTHORIZATION_FAILED_PATTERN,
@@ -80,10 +85,17 @@ const spawnBastionTunnelInBackground = (
 
     if (debug) print2("Spawning Azure Bastion tunnel process...");
 
+    const isWindows = getOperatingSystem() === "win";
+
     // Spawn the process in detached mode so that it is in its own process group; this lets us kill it and all
     // descendent processes together.
+    // On Windows, we need additional options to properly detach and run in the background:
+    // - stdio configuration to prevent blocking on pipes
+    // - windowsHide to prevent console window from appearing
     const child = spawnWithCleanEnv(command, args, {
       detached: true,
+      stdio: ["ignore", "pipe", "pipe"], // stdin ignored, stdout/stderr piped for monitoring
+      ...(isWindows ? { windowsHide: true } : {}),
     });
 
     child.on("exit", (code) => {
@@ -143,6 +155,10 @@ const spawnBastionTunnelInBackground = (
 
       if (str.includes(TUNNEL_READY_STRING)) {
         print2("Azure Bastion tunnel is ready.");
+
+        // Unref the child process so the parent can exit without waiting for it
+        // This is crucial on Windows to prevent the parent process from hanging
+        child.unref();
 
         resolve({
           killTunnel: async () => {
