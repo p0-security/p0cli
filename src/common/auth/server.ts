@@ -93,7 +93,7 @@ export const withRedirectServer = async <S, T, U>(
   // Try to use the requested port, but fall back to OS-assigned port if it's in use
   let server: http.Server;
   let requestedPort = options?.port;
-  let actualPort: number;
+  let actualPort: number = 0; // Will be set by the listening handlers
   let redirectUrl: string;
 
   if (requestedPort !== undefined) {
