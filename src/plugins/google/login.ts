@@ -27,10 +27,9 @@ const GOOGLE_OIDC_EXCHANGE_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_OIDC_REDIRECT_PORT = 52700;
 const PKCE_LENGTH = 128;
 
-const requestAuth = async (redirectUrl: string, sessionId: string) => {
+const requestAuth = async (redirectUrl: string) => {
   const tenantConfig = getGoogleTenantConfig();
   const pkce = await pkceChallenge(PKCE_LENGTH);
-  // Encode session ID in state parameter - OAuth providers preserve and return state
   const authBody: AuthorizeRequest = {
     client_id: tenantConfig.google.clientId,
     code_challenge: pkce.code_challenge,
@@ -38,7 +37,6 @@ const requestAuth = async (redirectUrl: string, sessionId: string) => {
     redirect_uri: redirectUrl,
     response_type: "code",
     scope: "openid email",
-    state: `session:${sessionId}`,
   };
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
   open(url).catch(() => {
@@ -74,7 +72,7 @@ const requestToken = async (
 
 export const googleLogin = async () => {
   return await withRedirectServer<any, CodeExchange, TokenResponse>(
-    async (_, redirectUrl, sessionId) => await requestAuth(redirectUrl, sessionId),
+    async (_, redirectUrl) => await requestAuth(redirectUrl),
     async (pkce, token, redirectUrl) => await requestToken(token.code, pkce, redirectUrl),
     { port: GOOGLE_OIDC_REDIRECT_PORT }
   );

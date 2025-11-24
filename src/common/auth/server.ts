@@ -10,15 +10,18 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
-import { sleep } from "../../util";
 import express from "express";
 import { noop } from "lodash";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, unlink, access } from "node:fs/promises";
+import { constants } from "node:fs";
 import http from "node:http";
 import { join, resolve } from "node:path";
 import { isSea, getAssetAsBlob } from "node:sea";
 import { Readable } from "node:stream";
-import { randomUUID } from "node:crypto";
+import os from "node:os";
+import { getOperatingSystem } from "../../util";
+import { print2 } from "../../drivers/stdio";
+import { sleep } from "../../util";
 
 const ASSETS_PATH = resolve(`${join(__dirname, "..", "..")}/public`);
 const LANDING_HTML_PATH = "redirect-landing.html";
@@ -28,6 +31,231 @@ const FAVICON_PATH = "favicon.ico";
  * properly render the redirect-landing page
  */
 const SERVER_SHUTDOWN_WAIT_MILLIS = 2e3;
+
+/** Lock file management for queue system on Windows/RDS */
+interface LockData {
+  pid: number;
+  timestamp: number;
+  port: number;
+}
+
+interface QueueIndicator {
+  waitingPid: number;
+  timestamp: number;
+  port: number;
+}
+
+const getLockFilePath = (port: number): string => {
+  // Use system temp directory for lock files
+  const tmpDir = os.tmpdir();
+  return join(tmpDir, `p0-login-${port}.lock`);
+};
+
+const getQueueIndicatorPath = (port: number): string => {
+  // Use system temp directory for queue indicator files
+  const tmpDir = os.tmpdir();
+  return join(tmpDir, `p0-login-queue-${port}.indicator`);
+};
+
+const readLockFile = async (lockPath: string): Promise<LockData | null> => {
+  try {
+    const content = await readFile(lockPath, "utf-8");
+    return JSON.parse(content) as LockData;
+  } catch {
+    return null;
+  }
+};
+
+const fileExists = async (path: string): Promise<boolean> => {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Check if lock is currently held by a running process */
+const isLockHeld = async (port: number): Promise<boolean> => {
+  const lockPath = getLockFilePath(port);
+  
+  if (!(await fileExists(lockPath))) {
+    return false;
+  }
+
+  const lockData = await readLockFile(lockPath);
+  if (!lockData) {
+    return false;
+  }
+
+  // Validate that the process is still running using process.kill(pid, 0)
+  // This doesn't actually kill the process, just checks if it exists
+  try {
+    process.kill(lockData.pid, 0);
+    return true; // Process is running, lock is valid
+  } catch {
+    // Process doesn't exist (died/crashed/cancelled)
+    // Lock is stale, remove it
+    await unlink(lockPath).catch(() => {});
+    return false;
+  }
+};
+
+/** Try to acquire lock, returns true if successful */
+const acquireLoginLock = async (port: number): Promise<boolean> => {
+  const lockPath = getLockFilePath(port);
+
+  // Check if lock exists and is valid
+  if (await isLockHeld(port)) {
+    return false; // Lock is held by another process
+  }
+
+  // Lock doesn't exist or is stale, try to create it
+  const lockData: LockData = {
+    pid: process.pid,
+    timestamp: Date.now(),
+    port: port,
+  };
+
+  try {
+    // Use 'wx' flag to create file exclusively (fails if file exists)
+    await writeFile(lockPath, JSON.stringify(lockData), { flag: "wx" });
+    return true;
+  } catch {
+    // File was created by another process between our check and write
+    // Check again if it's held
+    return !(await isLockHeld(port));
+  }
+};
+
+/** Release lock when login completes */
+const releaseLoginLock = async (port: number): Promise<void> => {
+  const lockPath = getLockFilePath(port);
+  await unlink(lockPath).catch(() => {
+    // Ignore errors if file doesn't exist
+  });
+};
+
+/** Create queue indicator to signal that someone is waiting */
+const createQueueIndicator = async (port: number): Promise<void> => {
+  const queuePath = getQueueIndicatorPath(port);
+  const indicator: QueueIndicator = {
+    waitingPid: process.pid,
+    timestamp: Date.now(),
+    port: port,
+  };
+  await writeFile(queuePath, JSON.stringify(indicator)).catch(() => {
+    // Ignore errors
+  });
+};
+
+/** Remove queue indicator */
+const removeQueueIndicator = async (port: number): Promise<void> => {
+  const queuePath = getQueueIndicatorPath(port);
+  await unlink(queuePath).catch(() => {
+    // Ignore errors if file doesn't exist
+  });
+};
+
+/** Check if someone is waiting in queue */
+const hasQueue = async (port: number): Promise<boolean> => {
+  const queuePath = getQueueIndicatorPath(port);
+  if (!(await fileExists(queuePath))) {
+    return false;
+  }
+
+  try {
+    const content = await readFile(queuePath, "utf-8");
+    const indicator = JSON.parse(content) as QueueIndicator;
+    // Check if the waiting process is still running
+    try {
+      process.kill(indicator.waitingPid, 0);
+      return true; // Process is still waiting
+    } catch {
+      // Process died, remove stale indicator
+      await unlink(queuePath).catch(() => {});
+      return false;
+    }
+  } catch {
+    return false;
+  }
+};
+
+/** Wait for lock to be released with timeout and user prompt */
+const waitForLockRelease = async (
+  port: number,
+  timeoutMs: number = 5 * 60 * 1000 // 5 minutes default
+): Promise<boolean> => {
+  const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
+  const startTime = Date.now();
+  let elapsedSeconds = 0;
+
+  // Create queue indicator to signal we're waiting
+  await createQueueIndicator(port);
+
+  // Cleanup queue indicator on exit
+  const cleanupQueueIndicator = async () => {
+    await removeQueueIndicator(port);
+  };
+  process.once("SIGINT", cleanupQueueIndicator);
+  process.once("SIGTERM", cleanupQueueIndicator);
+
+  try {
+    print2("Another user is currently logging in. Waiting in queue...");
+
+    while (Date.now() - startTime < timeoutMs) {
+      if (!(await isLockHeld(port))) {
+        // Lock is released or stale, try to acquire
+        if (await acquireLoginLock(port)) {
+          // Successfully acquired lock, remove queue indicator
+          await removeQueueIndicator(port);
+          process.removeListener("SIGINT", cleanupQueueIndicator);
+          process.removeListener("SIGTERM", cleanupQueueIndicator);
+          return true;
+        }
+      }
+
+      // Show progress every 10 seconds
+      const newElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 10 === 0) {
+        print2(`Waiting... (${newElapsedSeconds} seconds)`);
+        elapsedSeconds = newElapsedSeconds;
+      }
+
+      await sleep(POLL_INTERVAL_MS);
+    }
+
+    // Timeout reached, prompt user
+    const inquirer = (await import("inquirer")).default;
+    const { continueWaiting } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "continueWaiting",
+        message:
+          "Login is taking longer than expected. Continue waiting? (y/n)",
+        default: true,
+      },
+    ]);
+
+    if (continueWaiting) {
+      // Reset timeout and continue waiting
+      return waitForLockRelease(port, timeoutMs);
+    } else {
+      await removeQueueIndicator(port);
+      process.removeListener("SIGINT", cleanupQueueIndicator);
+      process.removeListener("SIGTERM", cleanupQueueIndicator);
+      print2(
+        "Login cancelled. Please try again later or check if another login process is stuck."
+      );
+      return false;
+    }
+  } catch (error) {
+    await removeQueueIndicator(port);
+    process.removeListener("SIGINT", cleanupQueueIndicator);
+    process.removeListener("SIGTERM", cleanupQueueIndicator);
+    throw error;
+  }
+};
 
 const pipeToResponse = (
   bytes: Buffer,
@@ -51,12 +279,11 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
   return bytes;
 };
 
-// Shared server manager to handle multiple concurrent logins on the same port
-type SessionHandler<T, U> = {
+// Shared server manager to handle OAuth redirects
+type AuthHandler<T, U> = {
   completeAuth: (value: any, token: T, redirectUrl: string) => Promise<U>;
   value: any;
-  redirectUrl: string; // Store the base redirect URL (without session parameter)
-  sessionId: string; // Store the session ID for reference
+  redirectUrl: string;
   redirectResolve: (result: U) => void;
   redirectReject: (error: any) => void;
   cleanup: () => void;
@@ -65,10 +292,10 @@ type SessionHandler<T, U> = {
 class SharedServerManager {
   private servers = new Map<number, http.Server>();
   private apps = new Map<number, express.Application>();
-  private sessions = new Map<string, SessionHandler<any, any>>();
-  private sessionCounts = new Map<number, number>(); // Track number of active sessions per port
+  private activeHandlers = new Map<number, AuthHandler<any, any>>(); // One active handler per port
   private pageBytes: Buffer | null = null;
   private faviconBytes: Buffer | null = null;
+  private lockPorts = new Set<number>(); // Track ports that have locks
 
   private async getStaticAssets() {
     if (!this.pageBytes || !this.faviconBytes) {
@@ -76,6 +303,27 @@ class SharedServerManager {
       this.faviconBytes = await loadStaticAsset(FAVICON_PATH);
     }
     return { pageBytes: this.pageBytes, faviconBytes: this.faviconBytes };
+  }
+
+  private async tryCreateServer(
+    app: express.Application,
+    port: number
+  ): Promise<http.Server> {
+    return new Promise<http.Server>((resolve, reject) => {
+      const newServer = app.listen(port);
+
+      newServer.once("listening", () => {
+        resolve(newServer);
+      });
+
+      newServer.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE") {
+          reject(error);
+        } else {
+          reject(error);
+        }
+      });
+    });
   }
 
   async getOrCreateServer(port: number): Promise<{ server: http.Server; app: express.Application }> {
@@ -91,46 +339,27 @@ class SharedServerManager {
         pipeToResponse(faviconBytes, res, "image/x-icon");
       });
 
-      // Set up session-based callback handler
+      // Set up health endpoint
+      newApp.get("/health", (_, res) => {
+        res.json({
+          type: "p0-auth-server",
+          activeSessions: this.activeHandlers.has(port) ? 1 : 0,
+          port: port,
+        });
+      });
+
+      // Set up OAuth callback handler
       newApp.get("/", async (req, res) => {
         try {
-          // Extract session ID from state parameter
-          // State format: "session:<sessionId>" or "azure_login:session:<sessionId>"
-          const state = req.query.state as string;
-          if (!state) {
-            res.status(400).send("Missing state parameter");
-            return;
-          }
-
-          let sessionId: string | undefined;
-          if (state.startsWith("session:")) {
-            sessionId = state.substring(8); // Remove "session:" prefix
-          } else if (state.startsWith("azure_login:session:")) {
-            sessionId = state.substring(20); // Remove "azure_login:session:" prefix
-          } else {
-            // Fallback: try to find session ID in state (for backwards compatibility)
-            const parts = state.split(":session:");
-            if (parts.length === 2) {
-              sessionId = parts[1];
-            }
-          }
-
-          if (!sessionId) {
-            res.status(400).send(`Invalid state parameter format: ${state}`);
-            return;
-          }
-
-          const handler = this.sessions.get(sessionId);
+          const handler = this.activeHandlers.get(port);
           if (!handler) {
-            res.status(404).send(`Session not found or expired: ${sessionId}`);
+            res.status(404).send("No active login session found");
             return;
           }
 
           const token = req.query;
           const { pageBytes } = await this.getStaticAssets();
           
-          // Use the base redirect URL (without session) for token exchange
-          // OAuth spec requires redirect_uri in token exchange to match authorization request
           const result = await handler.completeAuth(
             handler.value,
             token as any,
@@ -140,128 +369,150 @@ class SharedServerManager {
           handler.redirectResolve(result);
         } catch (error: any) {
           res.status(500).send(error?.message ?? error);
-          // Try to find handler to reject the promise
-          const state = req.query.state as string;
-          if (state) {
-            let sessionId: string | undefined;
-            if (state.startsWith("session:")) {
-              sessionId = state.substring(8);
-            } else if (state.startsWith("azure_login:session:")) {
-              sessionId = state.substring(20);
-            } else {
-              const parts = state.split(":session:");
-              if (parts.length === 2) {
-                sessionId = parts[1];
-              }
-            }
-            if (sessionId) {
-              const handler = this.sessions.get(sessionId);
-              if (handler) {
-                handler.redirectReject(error);
-              }
-            }
+          const handler = this.activeHandlers.get(port);
+          if (handler) {
+            handler.redirectReject(error);
           }
         }
       });
 
+      // On Windows/RDS, check for lock and wait in queue before creating server
+      const os = getOperatingSystem();
+      let lockAcquired = false;
+      if (os === "win") {
+        // Try to acquire lock first
+        if (!(await acquireLoginLock(port))) {
+          // Lock is held, wait in queue
+          const acquired = await waitForLockRelease(port);
+          if (!acquired) {
+            throw new Error("Login cancelled while waiting in queue.");
+          }
+        }
+        // Lock acquired, proceed with server creation
+        lockAcquired = true;
+        this.lockPorts.add(port);
+      }
+
       // Create server and handle port conflicts
-      server = await new Promise<http.Server>((resolve, reject) => {
-        const newServer = newApp.listen(port);
-        
-        newServer.once("listening", () => {
-          resolve(newServer);
-        });
-        
-        newServer.once("error", async (error: NodeJS.ErrnoException) => {
-          if (error.code === "EADDRINUSE") {
-            // Port is in use - try to check if it's our auth server
-            try {
-              const healthUrl = `http://127.0.0.1:${port}/health`;
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 1000);
-              
-              const response = await fetch(healthUrl, {
-                method: "GET",
-                signal: controller.signal,
-              }).catch(() => null);
-              
-              clearTimeout(timeoutId);
-              
-              // If it's our auth server, we can't share it across processes on Windows
-              // But we can provide a more helpful error message
-              if (response && response.ok) {
-                const data = await response.json().catch(() => null);
-                if (data?.type === "p0-auth-server") {
-                  reject(new Error(
-                    `Port ${port} is already in use by another p0 login session. ` +
-                    `On Windows/RDS, multiple users cannot share the same port. ` +
-                    `Please wait for the other login to complete, or if you're the only user, ` +
-                    `close any other p0 login processes and try again.`
-                  ));
-                  return;
+      try {
+        server = await this.tryCreateServer(newApp, port);
+      } catch (error: any) {
+        if (error.code === "EADDRINUSE") {
+          // Port is in use - try to check if it's our auth server
+          try {
+            const healthUrl = `http://127.0.0.1:${port}/health`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1000);
+            
+            const response = await fetch(healthUrl, {
+              method: "GET",
+              signal: controller.signal,
+            }).catch(() => null);
+            
+            clearTimeout(timeoutId);
+            
+            // If it's our auth server and we're on Windows, we should have waited already
+            // But if we get here, it means the server is still up, so wait a bit and retry
+            if (response && response.ok) {
+              const data = await response.json().catch(() => null);
+              if (data?.type === "p0-auth-server" && os === "win" && lockAcquired) {
+                // Wait a bit for the server to potentially close, then retry
+                await sleep(2000);
+                try {
+                  server = await this.tryCreateServer(newApp, port);
+                } catch (retryError: any) {
+                  // Release lock on retry failure
+                  if (lockAcquired) {
+                    await releaseLoginLock(port).catch(() => {});
+                    this.lockPorts.delete(port);
+                  }
+                  if (retryError.code === "EADDRINUSE") {
+                    throw new Error(
+                      `Port ${port} is still in use. The previous login session may still be active. ` +
+                      `Please wait for it to complete.`
+                    );
+                  }
+                  throw retryError;
                 }
+              } else {
+                // Not our server or not Windows - release lock if we had one
+                if (lockAcquired) {
+                  await releaseLoginLock(port).catch(() => {});
+                  this.lockPorts.delete(port);
+                }
+                throw new Error(
+                  `Port ${port} is already in use by another p0 login session. ` +
+                  `Please wait for the other login to complete, or if you're the only user, ` +
+                  `close any other p0 login processes and try again.`
+                );
               }
-              
-              // Not our server or couldn't determine
-              reject(new Error(
+            } else {
+              // Not our server or couldn't determine - release lock if we had one
+              if (lockAcquired) {
+                await releaseLoginLock(port).catch(() => {});
+                this.lockPorts.delete(port);
+              }
+              throw new Error(
                 `Port ${port} is already in use. ` +
                 `Please wait for the other login to complete or close the other process.`
-              ));
-            } catch (checkError) {
-              // If we can't check, just provide the standard error
-              reject(new Error(
-                `Port ${port} is already in use by another process. ` +
-                `Please wait for the other login to complete or close the other process.`
-              ));
+              );
             }
-          } else {
-            reject(error);
+          } catch (checkError: any) {
+            // Release lock on any error
+            if (lockAcquired) {
+              await releaseLoginLock(port).catch(() => {});
+              this.lockPorts.delete(port);
+            }
+            // If it's our error from above, rethrow it
+            if (checkError.message && checkError.message.includes("Port")) {
+              throw checkError;
+            }
+            // Otherwise, provide the standard error
+            throw new Error(
+              `Port ${port} is already in use by another process. ` +
+              `Please wait for the other login to complete or close the other process.`
+            );
           }
-        });
-      });
+        } else {
+          // Non-EADDRINUSE error - release lock if we had one
+          if (lockAcquired) {
+            await releaseLoginLock(port).catch(() => {});
+            this.lockPorts.delete(port);
+          }
+          throw error;
+        }
+      }
 
       app = newApp;
       this.servers.set(port, server);
       this.apps.set(port, app);
-      this.sessionCounts.set(port, 0);
     }
-
-    // Increment session count for this port
-    const currentCount = this.sessionCounts.get(port) || 0;
-    this.sessionCounts.set(port, currentCount + 1);
 
     return { server, app };
   }
 
-  registerSession<T, U>(
-    sessionId: string,
-    handler: SessionHandler<T, U>
-  ) {
-    this.sessions.set(sessionId, handler);
+  setActiveHandler<T, U>(port: number, handler: AuthHandler<T, U>) {
+    this.activeHandlers.set(port, handler);
   }
 
-  unregisterSession(sessionId: string, port?: number) {
-    this.sessions.delete(sessionId);
+  clearActiveHandler(port: number) {
+    this.activeHandlers.delete(port);
     
-    // If port is provided, decrement session count and close server if no sessions remain
-    if (port !== undefined) {
-      const currentCount = this.sessionCounts.get(port) || 0;
-      const newCount = Math.max(0, currentCount - 1);
-      this.sessionCounts.set(port, newCount);
-      
-      // If no more sessions, wait a bit before closing to ensure browser callback completes
-      // Then close the server
-      if (newCount === 0) {
-        // Wait for the landing page to render before closing
-        setTimeout(() => {
-          // Double-check that there are still no sessions (in case a new one started)
-          const finalCount = this.sessionCounts.get(port) || 0;
-          if (finalCount === 0) {
-            this.closeServer(port);
-          }
-        }, SERVER_SHUTDOWN_WAIT_MILLIS);
-      }
+    // Release lock if we had one
+    if (this.lockPorts.has(port)) {
+      releaseLoginLock(port).catch(() => {
+        // Ignore errors when releasing lock
+      });
+      this.lockPorts.delete(port);
     }
+    
+    // Wait a bit before closing to ensure browser callback completes
+    setTimeout(() => {
+      // Double-check that there's still no active handler (in case a new one started)
+      if (!this.activeHandlers.has(port)) {
+        this.closeServer(port);
+      }
+    }, SERVER_SHUTDOWN_WAIT_MILLIS);
   }
 
   async closeServer(port: number) {
@@ -274,7 +525,15 @@ class SharedServerManager {
       }).catch(noop);
       this.servers.delete(port);
       this.apps.delete(port);
-      this.sessionCounts.delete(port);
+      this.activeHandlers.delete(port);
+      
+      // Release lock if we had one
+      if (this.lockPorts.has(port)) {
+        await releaseLoginLock(port).catch(() => {
+          // Ignore errors when releasing lock
+        });
+        this.lockPorts.delete(port);
+      }
     }
   }
 }
@@ -283,7 +542,7 @@ const sharedServerManager = new SharedServerManager();
 
 /** Waits for an OIDC authorization redirect using a locally mounted server */
 export const withRedirectServer = async <S, T, U>(
-  beginAuth: (server: http.Server, redirectUrl: string, sessionId: string) => Promise<S>,
+  beginAuth: (server: http.Server, redirectUrl: string) => Promise<S>,
   completeAuth: (value: S, token: T, redirectUrl: string) => Promise<U>,
   options?: { port?: number }
 ) => {
@@ -292,8 +551,6 @@ export const withRedirectServer = async <S, T, U>(
   }
 
   const port = options.port;
-  const sessionId = randomUUID();
-
   let value: S;
   
   // Create promise and capture resolve/reject functions
@@ -312,28 +569,28 @@ export const withRedirectServer = async <S, T, U>(
 
   // Get or create shared server for this port
   const { server } = await sharedServerManager.getOrCreateServer(port);
-  // Use base redirect URL (without session parameter) - session ID will be encoded in state parameter
   const redirectUrl = `http://127.0.0.1:${port}`;
 
-  // Register session handler (redirectResolve and redirectReject are now definitely assigned)
-  // IMPORTANT: Register session BEFORE calling beginAuth, so the callback can find it
-  const handler: SessionHandler<T, U> = {
+  // Create handler and register it as active
+  const handler: AuthHandler<T, U> = {
     completeAuth: completeAuth as any,
     value: undefined as any,
-    redirectUrl: redirectUrl, // Store the base redirect URL
-    sessionId: sessionId, // Store session ID for reference
+    redirectUrl: redirectUrl,
     redirectResolve: redirectResolve,
     redirectReject: redirectReject,
     cleanup: () => {
-      sharedServerManager.unregisterSession(sessionId, port);
+      sharedServerManager.clearActiveHandler(port);
     },
   };
-  sharedServerManager.registerSession(sessionId, handler);
+  sharedServerManager.setActiveHandler(port, handler);
 
   // Set up cleanup handler for process interruption
   const cleanup = async () => {
     handler.cleanup();
-    // Server will be closed automatically when session count reaches zero
+    // Release lock if we had one
+    await releaseLoginLock(port).catch(() => {
+      // Ignore errors when releasing lock
+    });
   };
 
   // Register signal handlers to ensure cleanup on interruption
@@ -344,15 +601,73 @@ export const withRedirectServer = async <S, T, U>(
   process.once("SIGTERM", signalHandler);
 
   try {
-    // Call beginAuth which opens the browser - session is already registered
-    // beginAuth should return quickly (just opens browser), so we set the value immediately
-    value = await beginAuth(server, redirectUrl, sessionId);
+    // Call beginAuth which opens the browser
+    value = await beginAuth(server, redirectUrl);
     // Update handler with the value (pkce) so completeAuth can use it when callback arrives
     handler.value = value;
     
+    // Set up 120-second timeout if someone is waiting in queue
+    const QUEUE_TIMEOUT_MS = 120 * 1000; // 120 seconds
+    let queueCheckIntervalId: NodeJS.Timeout | null = null;
+
+    const checkQueueTimeout = async () => {
+      const queuePath = getQueueIndicatorPath(port);
+      if (!(await fileExists(queuePath))) {
+        // No one is waiting, no timeout needed
+        return;
+      }
+
+      try {
+        const content = await readFile(queuePath, "utf-8");
+        const indicator = JSON.parse(content) as QueueIndicator;
+        
+        // Check if the waiting process is still running
+        try {
+          process.kill(indicator.waitingPid, 0);
+        } catch {
+          // Process died, no need to timeout
+          return;
+        }
+
+        // Calculate elapsed time since queue indicator was created
+        const elapsed = Date.now() - indicator.timestamp;
+        if (elapsed >= QUEUE_TIMEOUT_MS) {
+          // Timeout reached - cancel login
+          print2(
+            "\nLogin timeout: Your login session has been cancelled because another user is waiting in queue."
+          );
+          print2(
+            "You have been logged out of the login process. Please try again later.\n"
+          );
+          if (queueCheckIntervalId) {
+            clearInterval(queueCheckIntervalId);
+          }
+          const timeoutError = new Error(
+            "Login cancelled due to timeout. Another user is waiting in queue. Your login session has been terminated."
+          );
+          if (redirectReject) {
+            redirectReject(timeoutError);
+          }
+          await cleanup();
+          // The error will be thrown when redirectPromise is awaited
+        }
+      } catch {
+        // Error reading queue indicator, ignore
+      }
+    };
+
+    // Check for queue every 5 seconds
+    queueCheckIntervalId = setInterval(checkQueueTimeout, 5000);
+    
     // Wait for the OAuth callback to complete
-    // The callback will call handler.completeAuth which uses handler.value
-    return await redirectPromise;
+    try {
+      return await redirectPromise;
+    } finally {
+      // Clean up timeout checkers
+      if (queueCheckIntervalId) {
+        clearInterval(queueCheckIntervalId);
+      }
+    }
   } catch (error) {
     // If beginAuth fails, reject the promise
     redirectReject(error);

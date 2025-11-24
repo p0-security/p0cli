@@ -26,7 +26,7 @@ type CodeExchange = {
   state: string;
 };
 
-const requestAuth = async (org: OrgData, redirectUrl: string, sessionId: string) => {
+const requestAuth = async (org: OrgData, redirectUrl: string) => {
   if (!org.providerDomain) {
     throw "Azure login requires a configured provider domain.";
   }
@@ -34,8 +34,6 @@ const requestAuth = async (org: OrgData, redirectUrl: string, sessionId: string)
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const baseUrl = `https://login.microsoftonline.com/${org.providerDomain}/oauth2/v2.0/authorize`;
 
-  // Encode session ID in state parameter - combine with existing "azure_login" state
-  // Format: "azure_login:session:<sessionId>" so we can parse it back
   const authBody: AuthorizeRequest = {
     client_id: org.clientId,
     code_challenge: pkce.code_challenge,
@@ -43,7 +41,7 @@ const requestAuth = async (org: OrgData, redirectUrl: string, sessionId: string)
     redirect_uri: redirectUrl,
     response_type: "code",
     scope: AZURE_SCOPE,
-    state: `azure_login:session:${sessionId}`,
+    state: "azure_login",
   };
 
   const url = `${baseUrl}?${urlEncode(authBody)}`;
@@ -97,7 +95,7 @@ const requestToken = async (
 
 export const azureLogin = async (org: OrgData): Promise<TokenResponse> => {
   return await withRedirectServer<any, CodeExchange, TokenResponse>(
-    async (_, redirectUrl, sessionId) => await requestAuth(org, redirectUrl, sessionId),
+    async (_, redirectUrl) => await requestAuth(org, redirectUrl),
     async (pkce, token, redirectUrl) => await requestToken(org, token.code, pkce, redirectUrl),
     { port: AZURE_REDIRECT_PORT }
   );

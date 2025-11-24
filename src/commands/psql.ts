@@ -115,22 +115,25 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
       print2(`Details: ${error.message}`);
     }
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
 
   // Make request and wait for approval
-  let response;
+  let response: Awaited<ReturnType<typeof provisionRequest>>;
   try {
-    response = await provisionRequest(authn, args);
+    response = await provisionRequest(authn!, args);
   } catch (error) {
     print2("Error: Failed to provision database access request.");
     if (args.debug && error instanceof Error) {
       print2(`Details: ${error.message}`);
     }
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
   if (!response || !response.request) {
     print2("Error: Failed to provision database access request.");
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
 
   // TypeScript doesn't recognize sys.exit() as a return, so use non-null assertion
@@ -139,20 +142,22 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   // Get user email for database username (after we have the request)
   let dbUserResult: string | null;
   try {
-    dbUserResult = await getUserEmail(authn, provisionedRequest, args.debug);
+    dbUserResult = await getUserEmail(authn!, provisionedRequest, args.debug);
   } catch (error) {
     print2("Error: Failed to determine database username.");
     if (args.debug && error instanceof Error) {
       print2(`Details: ${error.message}`);
     }
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
   if (!dbUserResult) {
     print2("Error: Could not determine user email for database authentication.");
     print2("Please ensure your user account has a valid email address.");
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
-  const dbUser: string = dbUserResult;
+  const dbUser: string = dbUserResult!;
 
   // Extract connection details from the request
   // Also try to query backend for instance details if endpoint is missing
@@ -162,7 +167,7 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
       provisionedRequest, 
       args.role, 
       args.debug,
-      authn,
+      authn!,
       args
     );
   } catch (error) {
@@ -171,13 +176,15 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
       print2(`Details: ${error.message}`);
     }
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
   if (!connectionDetailsResult) {
     print2("Error: Could not extract connection details from request response.");
     print2("The request may be missing required connection information.");
     sys.exit(1);
+    throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
   }
-  const connectionDetails: ConnectionDetails = connectionDetailsResult;
+  const connectionDetails: ConnectionDetails = connectionDetailsResult!;
 
   // Route to provider-specific connection flow
   try {
@@ -200,49 +207,51 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
           print2(`Details: ${error.message}`);
         }
         sys.exit(1);
+        throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
       }
 
       // Login to AWS SSO
       try {
-        await loginAwsSso(profileName, args.debug);
+        await loginAwsSso(profileName!, args.debug);
       } catch (error) {
         print2("Error: Failed to login to AWS SSO.");
         if (args.debug && error instanceof Error) {
           print2(`Details: ${error.message}`);
         }
         sys.exit(1);
+        throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
       }
 
-    // Only try to get actual RDS endpoint from AWS if the current endpoint looks like it was constructed
-    // (i.e., it's in the format instance.region.rds.amazonaws.com without the random ID)
-    // Real RDS endpoints have a format like: instance.random-id.region.rds.amazonaws.com
-    // If we already have the full endpoint from the integration config, don't overwrite it
-    const hostParts = connectionDetails.rdsHost.split(".");
-    const isConstructedEndpoint = hostParts.length === 4 && 
-      hostParts[1] === connectionDetails.region && 
-      hostParts[2] === "rds" && 
-      hostParts[3] === "amazonaws.com";
-    
-    if (isConstructedEndpoint) {
-      // This looks like a constructed endpoint, try to get the actual one from AWS
-      const instanceIdentifier = hostParts[0] || connectionDetails.rdsHost;
-      const actualRdsHost = await getRdsEndpoint(
-        instanceIdentifier,
-        connectionDetails.region,
-        profileName,
-        args.debug
-      );
-      if (actualRdsHost && actualRdsHost !== connectionDetails.rdsHost) {
-        connectionDetails.rdsHost = actualRdsHost;
+      // Only try to get actual RDS endpoint from AWS if the current endpoint looks like it was constructed
+      // (i.e., it's in the format instance.region.rds.amazonaws.com without the random ID)
+      // Real RDS endpoints have a format like: instance.random-id.region.rds.amazonaws.com
+      // If we already have the full endpoint from the integration config, don't overwrite it
+      const hostParts = connectionDetails.rdsHost.split(".");
+      const isConstructedEndpoint = hostParts.length === 4 && 
+        hostParts[1] === connectionDetails.region && 
+        hostParts[2] === "rds" && 
+        hostParts[3] === "amazonaws.com";
+      
+      if (isConstructedEndpoint) {
+        // This looks like a constructed endpoint, try to get the actual one from AWS
+        const instanceIdentifier = hostParts[0] || connectionDetails.rdsHost;
+        const actualRdsHost = await getRdsEndpoint(
+          instanceIdentifier,
+          connectionDetails.region,
+          profileName!,
+          args.debug
+        );
+        if (actualRdsHost && actualRdsHost !== connectionDetails.rdsHost) {
+          connectionDetails.rdsHost = actualRdsHost;
+          if (args.debug) {
+            print2(`Updated RDS endpoint to: ${actualRdsHost}`);
+          }
+        }
+      } else {
         if (args.debug) {
-          print2(`Updated RDS endpoint to: ${actualRdsHost}`);
+          print2(`Using RDS endpoint from integration config: ${connectionDetails.rdsHost}`);
         }
       }
-    } else {
-      if (args.debug) {
-        print2(`Using RDS endpoint from integration config: ${connectionDetails.rdsHost}`);
-      }
-    }
 
       // Generate IAM auth token
       let token: string;
@@ -250,7 +259,7 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
         token = await generateDbAuthToken(
           connectionDetails,
           dbUser,
-          profileName,
+          profileName!,
           args.debug
         );
       } catch (error) {
@@ -259,11 +268,12 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
           print2(`Details: ${error.message}`);
         }
         sys.exit(1);
+        throw new Error("Unreachable"); // TypeScript doesn't recognize sys.exit() as return
       }
 
       // Connect to database
       try {
-        await connectToDatabase(connectionDetails, dbUser, token, args.debug);
+        await connectToDatabase(connectionDetails, dbUser, token!, args.debug);
       } catch (error) {
         print2("Error: Failed to connect to database.");
         if (args.debug && error instanceof Error) {
