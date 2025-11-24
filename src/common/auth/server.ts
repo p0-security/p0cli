@@ -333,6 +333,7 @@ const waitForLockRelease = async (
     process.stderr.write("", () => {});
 
     let lastQueueCheck = 0;
+    let lastLockHeld: boolean | undefined = undefined;
     const QUEUE_CHECK_INTERVAL = 2000; // Check queue position every 2 seconds
     
     while (Date.now() - startTime < timeoutMs) {
@@ -413,8 +414,12 @@ const waitForLockRelease = async (
         }
       } else {
         // Still waiting for lock - check queue position regularly
+        // Also check when lock status changes (someone completes login)
         const now = Date.now();
-        if (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS) {
+        const shouldCheckQueue = (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS) || 
+                                 (lockStillHeld !== (lastLockHeld ?? true));
+        
+        if (shouldCheckQueue) {
           const queueInfo = await getQueuePosition(port, myTimestamp);
           if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
             lastPosition = queueInfo.position;
@@ -431,6 +436,7 @@ const waitForLockRelease = async (
             process.stderr.write("", () => {});
           }
           lastQueueCheck = now;
+          lastLockHeld = lockStillHeld;
         }
 
         // Show progress every 10 seconds (changed from 30 for better visibility)
