@@ -541,12 +541,6 @@ class SharedServerManager {
       try {
         server = await this.tryCreateServer(newApp, port);
       } catch (error: any) {
-        // Release lock on error
-        if (lockAcquired) {
-          await releaseLoginLock(port).catch(() => {});
-          this.lockPorts.delete(port);
-        }
-        
         if (error.code === "EADDRINUSE") {
           // Port is in use - check if it's our auth server
           try {
@@ -563,36 +557,95 @@ class SharedServerManager {
             
             if (response && response.ok) {
               const data = await response.json().catch(() => null);
-              if (data?.type === "p0-auth-server") {
-                // This shouldn't happen if waitForLockRelease worked correctly
-                // But handle it gracefully
+              if (data?.type === "p0-auth-server" && os === "win") {
+                // It's our auth server - we should have waited in queue, but didn't
+                // This means the first process didn't create a lock file, or we got here
+                // before checking the lock. Enter queue now.
+                if (!lockAcquired) {
+                  // Release any partial state and enter queue properly
+                  print2("Detected another login in progress. Joining queue...");
+                  print2("");
+                  const acquired = await waitForLockRelease(port);
+                  if (!acquired) {
+                    throw new Error("Login cancelled while waiting in queue.");
+                  }
+                  lockAcquired = true;
+                  this.lockPorts.add(port);
+                  // Now try to create server again - waitForLockRelease ensured port is available
+                  server = await this.tryCreateServer(newApp, port);
+                  // Server created successfully, break out of error handling
+                  // We'll continue to the code after the try-catch
+                } else {
+                  // We already have the lock but port is still in use
+                  // This shouldn't happen if waitForLockRelease worked
+                  await releaseLoginLock(port).catch(() => {});
+                  this.lockPorts.delete(port);
+                  throw new Error(
+                    `Port ${port} is still in use by another p0 login session. ` +
+                    `Please wait for the other login to complete, or if you're the only user, ` +
+                    `close any other p0 login processes and try again.`
+                  );
+                }
+              } else {
+                // Not our server or not Windows
+                if (lockAcquired) {
+                  await releaseLoginLock(port).catch(() => {});
+                  this.lockPorts.delete(port);
+                }
                 throw new Error(
-                  `Port ${port} is still in use by another p0 login session. ` +
-                  `Please wait for the other login to complete, or if you're the only user, ` +
-                  `close any other p0 login processes and try again.`
+                  `Port ${port} is already in use by another process. ` +
+                  `Please wait for the other login to complete or close the other process.`
                 );
               }
+            } else {
+              // Not our server or couldn't determine
+              if (lockAcquired) {
+                await releaseLoginLock(port).catch(() => {});
+                this.lockPorts.delete(port);
+              }
+              throw new Error(
+                `Port ${port} is already in use by another process. ` +
+                `Please wait for the other login to complete or close the other process.`
+              );
             }
-            
-            // Not our server or couldn't determine
-            throw new Error(
-              `Port ${port} is already in use by another process. ` +
-              `Please wait for the other login to complete or close the other process.`
-            );
           } catch (checkError: any) {
-            // If it's our error from above, rethrow it
-            if (checkError.message && checkError.message.includes("Port")) {
-              throw checkError;
+            // If we successfully created the server in the queue path, don't throw
+            if (server) {
+              // Continue execution
+            } else {
+              // Release lock on any error
+              if (lockAcquired) {
+                await releaseLoginLock(port).catch(() => {});
+                this.lockPorts.delete(port);
+              }
+              // If it's our error from above, rethrow it
+              if (checkError.message && checkError.message.includes("Port")) {
+                throw checkError;
+              }
+              // Otherwise, provide the standard error
+              throw new Error(
+                `Port ${port} is already in use by another process. ` +
+                `Please wait for the other login to complete or close the other process.`
+              );
             }
-            // Otherwise, provide the standard error
-            throw new Error(
-              `Port ${port} is already in use by another process. ` +
-              `Please wait for the other login to complete or close the other process.`
-            );
           }
         } else {
+          // Non-EADDRINUSE error - release lock if we had one
+          if (lockAcquired) {
+            await releaseLoginLock(port).catch(() => {});
+            this.lockPorts.delete(port);
+          }
           throw error;
         }
+      }
+      
+      // If we successfully created the server and we're on Windows, ensure we have the lock
+      if (os === "win" && server && !lockAcquired) {
+        // We created the server without a lock (first process)
+        // Create the lock now so other processes know we're logging in
+        await acquireLoginLock(port);
+        lockAcquired = true;
+        this.lockPorts.add(port);
       }
 
       app = newApp;
