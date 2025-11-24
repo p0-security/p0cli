@@ -66,6 +66,7 @@ class SharedServerManager {
   private servers = new Map<number, http.Server>();
   private apps = new Map<number, express.Application>();
   private sessions = new Map<string, SessionHandler<any, any>>();
+  private sessionCounts = new Map<number, number>(); // Track number of active sessions per port
   private pageBytes: Buffer | null = null;
   private faviconBytes: Buffer | null = null;
 
@@ -92,42 +93,42 @@ class SharedServerManager {
 
       // Set up session-based callback handler
       newApp.get("/", async (req, res) => {
-        // Extract session ID from state parameter
-        // State format: "session:<sessionId>" or "azure_login:session:<sessionId>"
-        const state = req.query.state as string;
-        if (!state) {
-          res.status(400).send("Missing state parameter");
-          return;
-        }
-
-        let sessionId: string | undefined;
-        if (state.startsWith("session:")) {
-          sessionId = state.substring(8); // Remove "session:" prefix
-        } else if (state.startsWith("azure_login:session:")) {
-          sessionId = state.substring(20); // Remove "azure_login:session:" prefix
-        } else {
-          // Fallback: try to find session ID in state (for backwards compatibility)
-          const parts = state.split(":session:");
-          if (parts.length === 2) {
-            sessionId = parts[1];
-          }
-        }
-
-        if (!sessionId) {
-          res.status(400).send("Invalid state parameter format");
-          return;
-        }
-
-        const handler = this.sessions.get(sessionId);
-        if (!handler) {
-          res.status(404).send("Session not found or expired");
-          return;
-        }
-
-        const token = req.query;
-        const { pageBytes } = await this.getStaticAssets();
-        
         try {
+          // Extract session ID from state parameter
+          // State format: "session:<sessionId>" or "azure_login:session:<sessionId>"
+          const state = req.query.state as string;
+          if (!state) {
+            res.status(400).send("Missing state parameter");
+            return;
+          }
+
+          let sessionId: string | undefined;
+          if (state.startsWith("session:")) {
+            sessionId = state.substring(8); // Remove "session:" prefix
+          } else if (state.startsWith("azure_login:session:")) {
+            sessionId = state.substring(20); // Remove "azure_login:session:" prefix
+          } else {
+            // Fallback: try to find session ID in state (for backwards compatibility)
+            const parts = state.split(":session:");
+            if (parts.length === 2) {
+              sessionId = parts[1];
+            }
+          }
+
+          if (!sessionId) {
+            res.status(400).send(`Invalid state parameter format: ${state}`);
+            return;
+          }
+
+          const handler = this.sessions.get(sessionId);
+          if (!handler) {
+            res.status(404).send(`Session not found or expired: ${sessionId}`);
+            return;
+          }
+
+          const token = req.query;
+          const { pageBytes } = await this.getStaticAssets();
+          
           // Use the base redirect URL (without session) for token exchange
           // OAuth spec requires redirect_uri in token exchange to match authorization request
           const result = await handler.completeAuth(
@@ -139,7 +140,27 @@ class SharedServerManager {
           handler.redirectResolve(result);
         } catch (error: any) {
           res.status(500).send(error?.message ?? error);
-          handler.redirectReject(error);
+          // Try to find handler to reject the promise
+          const state = req.query.state as string;
+          if (state) {
+            let sessionId: string | undefined;
+            if (state.startsWith("session:")) {
+              sessionId = state.substring(8);
+            } else if (state.startsWith("azure_login:session:")) {
+              sessionId = state.substring(20);
+            } else {
+              const parts = state.split(":session:");
+              if (parts.length === 2) {
+                sessionId = parts[1];
+              }
+            }
+            if (sessionId) {
+              const handler = this.sessions.get(sessionId);
+              if (handler) {
+                handler.redirectReject(error);
+              }
+            }
+          }
         }
       });
 
@@ -151,14 +172,48 @@ class SharedServerManager {
           resolve(newServer);
         });
         
-        newServer.once("error", (error: NodeJS.ErrnoException) => {
+        newServer.once("error", async (error: NodeJS.ErrnoException) => {
           if (error.code === "EADDRINUSE") {
-            // Port is in use - this means another process has the port
-            // We can't share across processes, so we need to fail
-            reject(new Error(
-              `Port ${port} is already in use by another process. ` +
-              `Please wait for the other login to complete or close the other process.`
-            ));
+            // Port is in use - try to check if it's our auth server
+            try {
+              const healthUrl = `http://127.0.0.1:${port}/health`;
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 1000);
+              
+              const response = await fetch(healthUrl, {
+                method: "GET",
+                signal: controller.signal,
+              }).catch(() => null);
+              
+              clearTimeout(timeoutId);
+              
+              // If it's our auth server, we can't share it across processes on Windows
+              // But we can provide a more helpful error message
+              if (response && response.ok) {
+                const data = await response.json().catch(() => null);
+                if (data?.type === "p0-auth-server") {
+                  reject(new Error(
+                    `Port ${port} is already in use by another p0 login session. ` +
+                    `On Windows/RDS, multiple users cannot share the same port. ` +
+                    `Please wait for the other login to complete, or if you're the only user, ` +
+                    `close any other p0 login processes and try again.`
+                  ));
+                  return;
+                }
+              }
+              
+              // Not our server or couldn't determine
+              reject(new Error(
+                `Port ${port} is already in use. ` +
+                `Please wait for the other login to complete or close the other process.`
+              ));
+            } catch (checkError) {
+              // If we can't check, just provide the standard error
+              reject(new Error(
+                `Port ${port} is already in use by another process. ` +
+                `Please wait for the other login to complete or close the other process.`
+              ));
+            }
           } else {
             reject(error);
           }
@@ -168,7 +223,12 @@ class SharedServerManager {
       app = newApp;
       this.servers.set(port, server);
       this.apps.set(port, app);
+      this.sessionCounts.set(port, 0);
     }
+
+    // Increment session count for this port
+    const currentCount = this.sessionCounts.get(port) || 0;
+    this.sessionCounts.set(port, currentCount + 1);
 
     return { server, app };
   }
@@ -180,18 +240,41 @@ class SharedServerManager {
     this.sessions.set(sessionId, handler);
   }
 
-  unregisterSession(sessionId: string) {
+  unregisterSession(sessionId: string, port?: number) {
     this.sessions.delete(sessionId);
+    
+    // If port is provided, decrement session count and close server if no sessions remain
+    if (port !== undefined) {
+      const currentCount = this.sessionCounts.get(port) || 0;
+      const newCount = Math.max(0, currentCount - 1);
+      this.sessionCounts.set(port, newCount);
+      
+      // If no more sessions, wait a bit before closing to ensure browser callback completes
+      // Then close the server
+      if (newCount === 0) {
+        // Wait for the landing page to render before closing
+        setTimeout(() => {
+          // Double-check that there are still no sessions (in case a new one started)
+          const finalCount = this.sessionCounts.get(port) || 0;
+          if (finalCount === 0) {
+            this.closeServer(port);
+          }
+        }, SERVER_SHUTDOWN_WAIT_MILLIS);
+      }
+    }
   }
 
   async closeServer(port: number) {
     const server = this.servers.get(port);
     if (server) {
+      // Close all connections first
+      server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       }).catch(noop);
       this.servers.delete(port);
       this.apps.delete(port);
+      this.sessionCounts.delete(port);
     }
   }
 }
@@ -233,6 +316,7 @@ export const withRedirectServer = async <S, T, U>(
   const redirectUrl = `http://127.0.0.1:${port}`;
 
   // Register session handler (redirectResolve and redirectReject are now definitely assigned)
+  // IMPORTANT: Register session BEFORE calling beginAuth, so the callback can find it
   const handler: SessionHandler<T, U> = {
     completeAuth: completeAuth as any,
     value: undefined as any,
@@ -241,7 +325,7 @@ export const withRedirectServer = async <S, T, U>(
     redirectResolve: redirectResolve,
     redirectReject: redirectReject,
     cleanup: () => {
-      sharedServerManager.unregisterSession(sessionId);
+      sharedServerManager.unregisterSession(sessionId, port);
     },
   };
   sharedServerManager.registerSession(sessionId, handler);
@@ -249,8 +333,7 @@ export const withRedirectServer = async <S, T, U>(
   // Set up cleanup handler for process interruption
   const cleanup = async () => {
     handler.cleanup();
-    // Don't close the server here - other sessions might be using it
-    // The server will be closed when the process exits
+    // Server will be closed automatically when session count reaches zero
   };
 
   // Register signal handlers to ensure cleanup on interruption
@@ -261,9 +344,19 @@ export const withRedirectServer = async <S, T, U>(
   process.once("SIGTERM", signalHandler);
 
   try {
+    // Call beginAuth which opens the browser - session is already registered
+    // beginAuth should return quickly (just opens browser), so we set the value immediately
     value = await beginAuth(server, redirectUrl, sessionId);
+    // Update handler with the value (pkce) so completeAuth can use it when callback arrives
     handler.value = value;
+    
+    // Wait for the OAuth callback to complete
+    // The callback will call handler.completeAuth which uses handler.value
     return await redirectPromise;
+  } catch (error) {
+    // If beginAuth fails, reject the promise
+    redirectReject(error);
+    throw error;
   } finally {
     process.removeListener("SIGINT", signalHandler);
     process.removeListener("SIGTERM", signalHandler);
