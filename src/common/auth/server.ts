@@ -345,7 +345,17 @@ const waitForLockRelease = async (
           // Successfully acquired lock
           lockAcquired = true;
           await removeQueueIndicator(port);
-          print2("Lock acquired. Waiting for previous server to close...");
+          
+          // Check if anyone else is still waiting in queue
+          // Since we removed our queue indicator, we need to check if there are other queue members
+          const hasOtherQueueMembers = await hasQueue(port);
+          if (!hasOtherQueueMembers) {
+            // We're the only one left - we're next in line
+            print2("You are now next in line (1/1). Waiting for previous server to close...");
+          } else {
+            // There are still others waiting, but we're next
+            print2("You are now next in line. Waiting for previous server to close...");
+          }
           process.stderr.write("", () => {});
         } else {
           // Lock was acquired by someone else between check and acquire
