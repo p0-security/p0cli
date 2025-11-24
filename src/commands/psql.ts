@@ -1324,18 +1324,23 @@ const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
       "value(installation.sdk_root)",
     ]);
     const sdkRoot = (await asyncSpawn({ debug: false }, infoCommand, infoArgs)).trim();
-    const proxyPath = `${sdkRoot}/bin/cloud_sql_proxy`;
+    
+    // On Windows, the binary is cloud_sql_proxy.exe, on Unix it's cloud_sql_proxy
+    const binaryName = process.platform === "win32" ? "cloud_sql_proxy.exe" : "cloud_sql_proxy";
+    const proxyPath = path.join(sdkRoot, "bin", binaryName);
     
     // Check if proxy binary exists
     if (fs.existsSync(proxyPath)) {
       if (debug) {
         print2("Cloud SQL Proxy binary found.");
       }
-      // Ensure it's executable
-      try {
-        fs.chmodSync(proxyPath, 0o755);
-      } catch {
-        // Ignore chmod errors
+      // Ensure it's executable (only on Unix)
+      if (process.platform !== "win32") {
+        try {
+          fs.chmodSync(proxyPath, 0o755);
+        } catch {
+          // Ignore chmod errors
+        }
       }
       return proxyPath;
     }
@@ -1350,13 +1355,28 @@ const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
     ]);
     await asyncSpawn({ debug }, installCommand, installArgs);
     
-    // Verify installation
-    if (!fs.existsSync(proxyPath)) {
-      throw new Error("Cloud SQL Proxy installation completed but binary not found");
+    // Verify installation - check both possible paths (with and without .exe)
+    const proxyPathWithExe = path.join(sdkRoot, "bin", "cloud_sql_proxy.exe");
+    const proxyPathWithoutExe = path.join(sdkRoot, "bin", "cloud_sql_proxy");
+    
+    // Check the expected path first
+    if (fs.existsSync(proxyPath)) {
+      print2("Cloud SQL Proxy component installed successfully.");
+      return proxyPath;
     }
     
-    print2("Cloud SQL Proxy component installed successfully.");
-    return proxyPath;
+    // On Windows, also check without .exe (in case the path construction was wrong)
+    // On Unix, also check with .exe (in case of weird edge cases)
+    const alternatePath = process.platform === "win32" ? proxyPathWithoutExe : proxyPathWithExe;
+    if (fs.existsSync(alternatePath)) {
+      if (debug) {
+        print2(`Found Cloud SQL Proxy at alternate path: ${alternatePath}`);
+      }
+      print2("Cloud SQL Proxy component installed successfully.");
+      return alternatePath;
+    }
+    
+    throw new Error("Cloud SQL Proxy installation completed but binary not found");
   } catch (error) {
     print2(`Error: Failed to check/install Cloud SQL Proxy component. ${error}`);
     print2("Please install it manually with: gcloud components install cloud_sql_proxy");
