@@ -79,8 +79,13 @@ const ls = async (
 
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
-  // Map 'psql' to 'pg' for backend compatibility (backend uses 'pg' but we want 'psql' as user-facing command)
-  // Also map 'psql session destination' to 'pg role instance' since backend doesn't support 'pg session destination'
+  // Map 'psql' to 'pg' for backend compatibility
+  // The backend API uses 'pg' as the integration name, but we expose 'psql' as the
+  // user-facing command name for better clarity. This mapping ensures that when
+  // users run 'p0 ls psql ...', the command is correctly translated to query the
+  // backend with 'pg' instead.
+  // Also map 'psql session destination' to 'pg role instance' since the backend
+  // uses 'pg role instance' but we want to support the more intuitive 'psql session destination'
   const stringArgs = [...args._, ...args.arguments].map(String);
   
   // Find the index of 'psql' in the arguments (skip 'ls' if present)

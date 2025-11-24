@@ -24,16 +24,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { sys } from "typescript";
-import { ChildProcess } from "node:child_process";
 import { fetchCommand, fetchIntegrationConfig } from "../drivers/api";
-import { getTenantConfig } from "../drivers/config";
-import { defaultConfig } from "../drivers/env";
 import { gcloudCommandArgs } from "../plugins/google/util";
 
 export const psqlCommand = (yargs: yargs.Argv) =>
   yargs.command<PsqlCommandArgs>(
     "psql <destination>",
-    "Connect to an RDS Postgres database via IAM authentication",
+    "Connect to a Postgres database via IAM authentication (AWS RDS or GCP CloudSQL)",
     (yargs) =>
       yargs
         .positional("destination", {
@@ -62,7 +59,19 @@ export const psqlCommand = (yargs: yargs.Argv) =>
         })
         .usage("$0 psql <destination> --role <ROLE_NAME>")
         .epilogue(
-          `Connect to an RDS Postgres database using AWS SSO IAM authentication.
+          `Connect to a Postgres database using IAM authentication.
+
+Supports both AWS RDS and GCP CloudSQL instances. The command automatically
+detects the provider and uses the appropriate authentication method.
+
+For AWS RDS:
+  - Uses AWS SSO IAM database authentication
+  - Automatically configures AWS SSO and generates IAM auth tokens
+
+For GCP CloudSQL:
+  - Uses Cloud SQL Proxy for secure connections
+  - Supports both private and public IP instances
+  - Uses IAM-based authentication
 
 Example:
   $ ${getAppName()} psql my-rds-instance --role MyRole --reason "Need to debug production issue"`
@@ -71,10 +80,19 @@ Example:
   );
 
 /**
- * Connect to an RDS Postgres database via IAM authentication
+ * Connect to a Postgres database via IAM authentication
  *
  * Implicitly requests access to the database if not already granted.
- * Automatically configures AWS SSO and generates IAM auth tokens.
+ * Supports both AWS RDS and GCP CloudSQL instances.
+ *
+ * For AWS RDS:
+ * - Automatically configures AWS SSO and generates IAM auth tokens
+ * - Uses AWS RDS IAM database authentication
+ *
+ * For GCP CloudSQL:
+ * - Uses Cloud SQL Proxy for secure connections
+ * - Supports both private and public IP instances
+ * - Uses IAM-based authentication
  */
 const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   // Validate psql is installed (required for both providers)
@@ -88,11 +106,30 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
     sys.exit(1);
   }
 
-  const authn = await authenticate(args);
+  let authn: Authn;
+  try {
+    authn = await authenticate(args);
+  } catch (error) {
+    print2("Error: Failed to authenticate. Please ensure you are logged in.");
+    if (args.debug && error instanceof Error) {
+      print2(`Details: ${error.message}`);
+    }
+    sys.exit(1);
+  }
 
   // Make request and wait for approval
-  const response = await provisionRequest(authn, args);
+  let response;
+  try {
+    response = await provisionRequest(authn, args);
+  } catch (error) {
+    print2("Error: Failed to provision database access request.");
+    if (args.debug && error instanceof Error) {
+      print2(`Details: ${error.message}`);
+    }
+    sys.exit(1);
+  }
   if (!response || !response.request) {
+    print2("Error: Failed to provision database access request.");
     sys.exit(1);
   }
 
@@ -100,46 +137,85 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   const provisionedRequest = response!.request!;
 
   // Get user email for database username (after we have the request)
-  const dbUserResult = await getUserEmail(authn, provisionedRequest, args.debug);
-  if (!dbUserResult) {
-    print2("Error: Could not determine user email for database authentication.");
+  let dbUserResult: string | null;
+  try {
+    dbUserResult = await getUserEmail(authn, provisionedRequest, args.debug);
+  } catch (error) {
+    print2("Error: Failed to determine database username.");
+    if (args.debug && error instanceof Error) {
+      print2(`Details: ${error.message}`);
+    }
     sys.exit(1);
   }
-  const dbUser: string = dbUserResult!;
+  if (!dbUserResult) {
+    print2("Error: Could not determine user email for database authentication.");
+    print2("Please ensure your user account has a valid email address.");
+    sys.exit(1);
+  }
+  const dbUser: string = dbUserResult;
 
   // Extract connection details from the request
   // Also try to query backend for instance details if endpoint is missing
-  const connectionDetailsResult = await extractConnectionDetails(
-    provisionedRequest, 
-    args.role, 
-    args.debug,
-    authn,
-    args
-  );
-  if (!connectionDetailsResult) {
-    print2("Error: Could not extract connection details from request response.");
+  let connectionDetailsResult: ConnectionDetails | null;
+  try {
+    connectionDetailsResult = await extractConnectionDetails(
+      provisionedRequest, 
+      args.role, 
+      args.debug,
+      authn,
+      args
+    );
+  } catch (error) {
+    print2("Error: Failed to extract connection details from request response.");
+    if (args.debug && error instanceof Error) {
+      print2(`Details: ${error.message}`);
+    }
     sys.exit(1);
   }
-  const connectionDetails: ConnectionDetails = connectionDetailsResult!;
+  if (!connectionDetailsResult) {
+    print2("Error: Could not extract connection details from request response.");
+    print2("The request may be missing required connection information.");
+    sys.exit(1);
+  }
+  const connectionDetails: ConnectionDetails = connectionDetailsResult;
 
   // Route to provider-specific connection flow
-  if (connectionDetails.provider === "gcp") {
-    // GCP CloudSQL connection flow
-    // Validate gcloud is installed
-    await validateCliTools("gcp", args.debug);
-    await connectToCloudSQL(connectionDetails, dbUser, args.debug);
-  } else {
-    // AWS RDS connection flow (existing)
-    // Validate aws CLI is installed
-    await validateCliTools("aws", args.debug);
-    // Configure AWS SSO profile
-    const profileName = await configureAwsSsoProfile(connectionDetails, args.debug);
+  try {
+    if (connectionDetails.provider === "gcp") {
+      // GCP CloudSQL connection flow
+      // Validate gcloud is installed
+      await validateCliTools("gcp", args.debug);
+      await connectToCloudSQL(connectionDetails, dbUser, args.debug);
+    } else {
+      // AWS RDS connection flow
+      // Validate aws CLI is installed
+      await validateCliTools("aws", args.debug);
+      // Configure AWS SSO profile
+      let profileName: string;
+      try {
+        profileName = await configureAwsSsoProfile(connectionDetails, args.debug);
+      } catch (error) {
+        print2("Error: Failed to configure AWS SSO profile.");
+        if (args.debug && error instanceof Error) {
+          print2(`Details: ${error.message}`);
+        }
+        sys.exit(1);
+      }
 
-    // Login to AWS SSO
-    await loginAwsSso(profileName, args.debug);
+      // Login to AWS SSO
+      try {
+        await loginAwsSso(profileName, args.debug);
+      } catch (error) {
+        print2("Error: Failed to login to AWS SSO.");
+        if (args.debug && error instanceof Error) {
+          print2(`Details: ${error.message}`);
+        }
+        sys.exit(1);
+      }
 
     // Only try to get actual RDS endpoint from AWS if the current endpoint looks like it was constructed
     // (i.e., it's in the format instance.region.rds.amazonaws.com without the random ID)
+    // Real RDS endpoints have a format like: instance.random-id.region.rds.amazonaws.com
     // If we already have the full endpoint from the integration config, don't overwrite it
     const hostParts = connectionDetails.rdsHost.split(".");
     const isConstructedEndpoint = hostParts.length === 4 && 
@@ -168,16 +244,43 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
       }
     }
 
-    // Generate IAM auth token
-    const token = await generateDbAuthToken(
-      connectionDetails,
-      dbUser,
-      profileName,
-      args.debug
-    );
+      // Generate IAM auth token
+      let token: string;
+      try {
+        token = await generateDbAuthToken(
+          connectionDetails,
+          dbUser,
+          profileName,
+          args.debug
+        );
+      } catch (error) {
+        print2("Error: Failed to generate database authentication token.");
+        if (args.debug && error instanceof Error) {
+          print2(`Details: ${error.message}`);
+        }
+        sys.exit(1);
+      }
 
-    // Connect to database
-    await connectToDatabase(connectionDetails, dbUser, token, args.debug);
+      // Connect to database
+      try {
+        await connectToDatabase(connectionDetails, dbUser, token, args.debug);
+      } catch (error) {
+        print2("Error: Failed to connect to database.");
+        if (args.debug && error instanceof Error) {
+          print2(`Details: ${error.message}`);
+        }
+        sys.exit(1);
+      }
+    }
+  } catch (error) {
+    print2("Error: Failed to establish database connection.");
+    if (args.debug && error instanceof Error) {
+      print2(`Details: ${error.message}`);
+      if (error.stack) {
+        print2(`Stack: ${error.stack}`);
+      }
+    }
+    sys.exit(1);
   }
 
   // Force exit to prevent hanging
@@ -186,6 +289,13 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   }
 };
 
+/**
+ * Validates that required CLI tools are installed and available in PATH
+ *
+ * @param provider - The cloud provider ("aws" or "gcp") to determine which tools to check
+ * @param debug - Whether to print debug information
+ * @throws Exits with code 1 if any required tool is not found
+ */
 const validateCliTools = async (provider?: "aws" | "gcp", debug?: boolean) => {
   const tools: Array<{ name: string; description: string }> = [
     { name: "psql", description: "PostgreSQL client" },
@@ -212,6 +322,19 @@ const validateCliTools = async (provider?: "aws" | "gcp", debug?: boolean) => {
   }
 };
 
+/**
+ * Determines the database username to use for authentication
+ *
+ * Tries multiple sources in order:
+ * 1. Username from request.generated.username (backend-provided)
+ * 2. User email from authentication credentials
+ * 3. Principal field from the request
+ *
+ * @param authn - Authentication credentials containing user information
+ * @param request - The permission request that may contain username information
+ * @param debug - Whether to print debug information about which source was used
+ * @returns The database username, or null if none could be determined
+ */
 const getUserEmail = async (
   authn: Authn,
   request?: PermissionRequest<PsqlPermissionSpec>,
@@ -247,6 +370,16 @@ const getUserEmail = async (
   return null;
 };
 
+/**
+ * Requests access to the Postgres database and waits for approval
+ *
+ * Makes a request to the backend for database access and waits for it to be
+ * provisioned. Handles both new requests and pre-existing access.
+ *
+ * @param authn - Authentication credentials
+ * @param args - Command arguments including destination, role, reason, and duration
+ * @returns The provisioned request response, or null if provisioning failed
+ */
 const provisionRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<PsqlCommandArgs>
@@ -340,6 +473,20 @@ type GcpConnectionDetails = {
 
 type ConnectionDetails = AwsConnectionDetails | GcpConnectionDetails;
 
+/**
+ * Extracts connection details from the permission request response
+ *
+ * Detects the cloud provider (AWS RDS or GCP CloudSQL) and extracts
+ * provider-specific connection information. Routes to provider-specific
+ * extraction functions based on the detected provider.
+ *
+ * @param request - The permission request response containing connection details
+ * @param roleName - The IAM role name to use (for AWS)
+ * @param debug - Whether to print debug information
+ * @param authn - Authentication credentials (used for querying backend if needed)
+ * @param args - Command arguments (used for querying backend if needed)
+ * @returns Connection details for the detected provider, or null if extraction failed
+ */
 const extractConnectionDetails = async (
   request: PermissionRequest<PsqlPermissionSpec>,
   roleName: string,
@@ -353,6 +500,7 @@ const extractConnectionDetails = async (
     const resource = permission.resource as any;
 
     // Detect provider FIRST before extracting provider-specific fields
+    // Check multiple indicators: integration type, instance path, and resource metadata
     const integrationType = perm.integrationType || resource.integrationType;
     const instancePath = perm.instance || "";
     const isGcp = 
@@ -369,12 +517,14 @@ const extractConnectionDetails = async (
       print2(`Instance path: ${instancePath || "not specified"}`);
     }
 
-    // Extract common fields - for GCP, fields are in permission, for AWS they may be in resource
+    // Extract common fields - for GCP, fields are typically in permission object,
+    // for AWS they may be in either permission or resource object
     const region = perm.region || resource?.region;
     const databaseName = perm.databaseName || resource?.databaseName;
     const instanceName = perm.instanceName || resource?.instanceName;
     
-    // Extract provider-specific fields only if needed
+    // Extract provider-specific fields only if needed (AWS-specific fields)
+    // These are only used for AWS RDS connections
     const accountId = isGcp ? undefined : (resource?.accountId || resource?.account || perm.parent);
     const idcId = isGcp ? undefined : resource?.idcId;
     const idcRegion = isGcp ? undefined : (resource?.idcRegion || resource?.idc_region || region);
@@ -444,6 +594,23 @@ const extractConnectionDetails = async (
   }
 };
 
+/**
+ * Extracts GCP CloudSQL connection details from the permission request
+ *
+ * Constructs the instance connection name in the format project:region:instance
+ * and validates that all required fields are present.
+ *
+ * @param perm - The permission object from the request
+ * @param resource - The resource object from the request
+ * @param region - The GCP region where the instance is located
+ * @param databaseName - The name of the database to connect to
+ * @param instanceName - The name of the CloudSQL instance
+ * @param port - The port number for the database connection
+ * @param debug - Whether to print debug information
+ * @param _authn - Unused (kept for signature compatibility)
+ * @param _args - Unused (kept for signature compatibility)
+ * @returns GCP connection details, or null if required fields are missing
+ */
 const extractGcpConnectionDetails = async (
   perm: any,
   resource: any,
@@ -516,6 +683,29 @@ const extractGcpConnectionDetails = async (
   };
 };
 
+/**
+ * Extracts AWS RDS connection details from the permission request
+ *
+ * Extracts RDS endpoint, SSO configuration, and other AWS-specific details.
+ * Attempts to query the backend or AWS for the RDS endpoint if not provided
+ * in the response. Constructs SSO Start URL from IDC ID if not provided.
+ *
+ * @param perm - The permission object from the request
+ * @param resource - The resource object from the request
+ * @param region - The AWS region where the RDS instance is located
+ * @param databaseName - The name of the database to connect to
+ * @param instanceName - The name of the RDS instance
+ * @param accountId - The AWS account ID
+ * @param idcId - The AWS IAM Identity Center (IDC) instance ID
+ * @param idcRegion - The AWS region for the IDC instance
+ * @param port - The port number for the database connection
+ * @param roleName - The IAM role name to use
+ * @param generated - The generated object from the request (may contain permission set name)
+ * @param debug - Whether to print debug information
+ * @param authn - Authentication credentials (used for querying backend if needed)
+ * @param args - Command arguments (used for querying backend if needed)
+ * @returns AWS connection details, or null if required fields are missing
+ */
 const extractAwsConnectionDetails = async (
   perm: any,
   resource: any,
@@ -570,9 +760,11 @@ const extractAwsConnectionDetails = async (
     }
 
     // Get RDS endpoint - check if backend provides it first
-    // Check multiple possible locations in the response - search deeply
+    // Check multiple possible locations in the response - search deeply across
+    // resource, permission, and generated objects, as the backend may place
+    // the endpoint in different locations depending on the response structure
     let rdsHost = 
-      // Check in resource object
+      // Check in resource object (most common location)
       (resource as any).rdsHost ||
       (resource as any).hostname ||
       (resource as any).endpoint ||
@@ -584,7 +776,7 @@ const extractAwsConnectionDetails = async (
       (resource as any).connection?.host ||
       (resource as any).connection?.endpoint ||
       (resource as any).connection?.hostname ||
-      // Check in permission object
+      // Check in permission object (alternative location)
       (perm as any).rdsHost ||
       (perm as any).endpoint ||
       (perm as any).hostname ||
@@ -596,7 +788,7 @@ const extractAwsConnectionDetails = async (
       (perm as any).connection?.host ||
       (perm as any).connection?.endpoint ||
       (perm as any).connection?.hostname ||
-      // Check in generated object (passed as parameter)
+      // Check in generated object (may contain computed values)
       (generated as any)?.rdsHost ||
       (generated as any)?.endpoint ||
       (generated as any)?.hostname ||
@@ -612,13 +804,16 @@ const extractAwsConnectionDetails = async (
       // Example: arn:aws:rds-db:us-east-2:326061184090:dbuser:db-7LYIFFGO2QKFIRJJT2NRKPO2DE/michael.security@workspace.got.network
       let dbInstanceIdentifier: string | null = null;
       
-      // Try to extract from ARN first (most reliable)
+      // Try to extract from ARN first (most reliable method)
+      // The ARN contains the exact instance identifier used by AWS
       const arn = resource.arn;
       if (arn && typeof arn === "string" && arn.includes(":dbuser:")) {
         // Format: arn:aws:rds-db:region:account:dbuser:db-instance-id/db-user
+        // Split on ":dbuser:" to get the instance identifier part
         const arnParts = arn.split(":dbuser:");
         if (arnParts.length === 2 && arnParts[1]) {
           const dbUserPart = arnParts[1];
+          // The instance identifier is before the "/" separator
           const dbInstancePart = dbUserPart.split("/")[0];
           if (dbInstancePart) {
             dbInstanceIdentifier = dbInstancePart;
@@ -630,17 +825,19 @@ const extractAwsConnectionDetails = async (
       }
       
       // Fallback to instance name if ARN extraction failed
+      // Parse instance identifier from full instance path if needed
       if (!dbInstanceIdentifier) {
         const instance = perm.instance || instanceName;
         dbInstanceIdentifier = instanceName;
         
         // Parse instance identifier from full instance path if needed
+        // Format: rds/account/account:region:instance-name/db-name
         if (instance && typeof instance === "string") {
-          // Format: rds/account/account:region:instance-name/db-name
           const parts = instance.split("/");
           if (parts.length >= 3) {
             const instancePart = parts[2];
             if (instancePart) {
+              // Split on ":" to extract region and instance name
               const instanceParts = instancePart.split(":");
               if (instanceParts.length >= 3 && instanceParts[2]) {
                 dbInstanceIdentifier = instanceParts[2];
@@ -660,6 +857,8 @@ const extractAwsConnectionDetails = async (
       }
 
       // Try to query backend for instance details to get the endpoint
+      // This is preferred over constructing the endpoint, as the backend may have
+      // the actual endpoint stored in its configuration
       if (authn && args) {
         const fullInstancePath = perm.instance || instanceName;
         const queriedEndpoint = await queryBackendForEndpoint(
@@ -677,11 +876,13 @@ const extractAwsConnectionDetails = async (
             print2(`Retrieved RDS endpoint from backend: ${rdsHost}`);
           }
         } else {
-          // Fallback: try to fetch RDS endpoint (will construct it if query fails, actual endpoint will be fetched after SSO login)
+          // Fallback: construct endpoint from instance identifier
+          // The actual endpoint will be fetched from AWS after SSO login if needed
           rdsHost = await getRdsEndpoint(dbInstanceIdentifier, region, undefined, debug);
         }
       } else {
-        // Fallback: try to fetch RDS endpoint (will construct it if query fails, actual endpoint will be fetched after SSO login)
+        // Fallback: construct endpoint from instance identifier
+        // The actual endpoint will be fetched from AWS after SSO login if needed
         rdsHost = await getRdsEndpoint(dbInstanceIdentifier, region, undefined, debug);
       }
     } else {
@@ -722,6 +923,24 @@ const extractAwsConnectionDetails = async (
     };
 };
 
+/**
+ * Queries the backend API to retrieve the RDS endpoint for an instance
+ *
+ * Tries multiple approaches to find the endpoint:
+ * 1. Query integration config for pg/rds
+ * 2. Query using full instance path
+ * 3. Query using just the instance name
+ * 4. Try alternative query formats
+ *
+ * @param instanceName - The name of the RDS instance
+ * @param _region - Unused (kept for signature compatibility)
+ * @param authn - Authentication credentials for API calls
+ * @param args - Command arguments for API calls
+ * @param debug - Whether to print debug information
+ * @param fullInstancePath - The full instance path (e.g., "rds/account/account:region:instance/db")
+ * @param _accountId - Unused (kept for signature compatibility)
+ * @returns The RDS endpoint if found, or null if not found
+ */
 const queryBackendForEndpoint = async (
   instanceName: string,
   _region: string,
@@ -744,11 +963,12 @@ const queryBackendForEndpoint = async (
 
     // Approach 1: Try querying integration config for pg/rds to get endpoint
     // The endpoint is stored in config.access-management.{instance-name}.installType.hostname
+    // This is the most reliable source if the backend has stored the endpoint
     try {
       if (debug) {
         print2("Trying to fetch integration config for pg/rds...");
       }
-      // Try both "pg" and "rds" as integration names
+      // Try both "pg" and "rds" as integration names since the backend may use either
       for (const integrationName of ["pg", "rds"]) {
         try {
           const config = await fetchIntegrationConfig<any>(authn, integrationName, debug);
@@ -982,6 +1202,19 @@ const queryBackendForEndpoint = async (
   return null;
 };
 
+/**
+ * Retrieves the RDS endpoint for a database instance
+ *
+ * If a profile name is provided (after AWS SSO login), queries AWS RDS API
+ * for the actual endpoint. Otherwise, constructs a fallback endpoint from
+ * the instance identifier.
+ *
+ * @param dbInstanceIdentifier - The RDS instance identifier
+ * @param region - The AWS region where the instance is located
+ * @param profileName - Optional AWS CLI profile name (if SSO is already configured)
+ * @param debug - Whether to print debug information
+ * @returns The RDS endpoint, or null if retrieval failed
+ */
 const getRdsEndpoint = async (
   dbInstanceIdentifier: string,
   region: string,
@@ -1040,8 +1273,9 @@ const getRdsEndpoint = async (
 
   // Fallback: construct endpoint from instance identifier
   // Note: This may not work if the actual endpoint format is different
-  // RDS endpoints typically follow: {instance-name}.{random-id}.{region}.rds.amazonaws.com
+  // Real RDS endpoints typically follow: {instance-name}.{random-id}.{region}.rds.amazonaws.com
   // But we only have the instance identifier, so we try the simple format first
+  // The actual endpoint will be queried from AWS after SSO login if this doesn't work
   const constructedEndpoint = `${dbInstanceIdentifier}.${region}.rds.amazonaws.com`;
 
   if (debug) {
@@ -1053,33 +1287,45 @@ const getRdsEndpoint = async (
   return constructedEndpoint;
 };
 
+/**
+ * Configures an AWS SSO profile in the AWS config file
+ *
+ * Creates a temporary SSO session and profile configuration for accessing
+ * the RDS instance. The profile name is unique based on timestamp to avoid
+ * conflicts with existing profiles.
+ *
+ * @param details - AWS connection details containing SSO configuration
+ * @param debug - Whether to print debug information
+ * @returns The name of the created AWS profile
+ */
 const configureAwsSsoProfile = async (
   details: AwsConnectionDetails,
   debug?: boolean
 ): Promise<string> => {
-  const awsConfigDir = path.join(os.homedir(), ".aws");
-  const awsConfigPath = path.join(awsConfigDir, "config");
+  try {
+    const awsConfigDir = path.join(os.homedir(), ".aws");
+    const awsConfigPath = path.join(awsConfigDir, "config");
 
-  // Ensure .aws directory exists
-  if (!fs.existsSync(awsConfigDir)) {
-    fs.mkdirSync(awsConfigDir, { recursive: true });
-  }
+    // Ensure .aws directory exists
+    if (!fs.existsSync(awsConfigDir)) {
+      fs.mkdirSync(awsConfigDir, { recursive: true });
+    }
 
-  // Create unique profile name
-  const timestamp = Date.now();
-  const profileName = `p0-psql-${timestamp}`;
-  const sessionName = `${profileName}-sso-session`;
+    // Create unique profile name
+    const timestamp = Date.now();
+    const profileName = `p0-psql-${timestamp}`;
+    const sessionName = `${profileName}-sso-session`;
 
-  // Create SSO session block
-  const sessionBlock = `[sso-session ${sessionName}]
+    // Create SSO session block
+    const sessionBlock = `[sso-session ${sessionName}]
 sso_start_url = ${details.ssoStartUrl}
 sso_region = ${details.ssoRegion}
 sso_registration_scopes = sso:account:access
 
 `;
 
-  // Create profile block
-  const profileBlock = `[profile ${profileName}]
+    // Create profile block
+    const profileBlock = `[profile ${profileName}]
 sso_session = ${sessionName}
 sso_account_id = ${details.ssoAccountId}
 sso_role_name = ${details.roleName}
@@ -1088,18 +1334,35 @@ output = json
 
 `;
 
-  // Append to config file
-  const configContent = sessionBlock + profileBlock;
-  fs.appendFileSync(awsConfigPath, configContent);
+    // Append to config file
+    const configContent = sessionBlock + profileBlock;
+    try {
+      fs.appendFileSync(awsConfigPath, configContent);
+    } catch (error) {
+      throw new Error(`Failed to write AWS config file: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
-  if (debug) {
-    print2(`Configured AWS SSO profile: ${profileName}`);
-    print2(`Appended to ${awsConfigPath}`);
+    if (debug) {
+      print2(`Configured AWS SSO profile: ${profileName}`);
+      print2(`Appended to ${awsConfigPath}`);
+    }
+
+    return profileName;
+  } catch (error) {
+    throw new Error(`Failed to configure AWS SSO profile: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  return profileName;
 };
 
+/**
+ * Logs in to AWS SSO using the specified profile
+ *
+ * Initiates the AWS SSO login flow, which typically opens a browser for
+ * authentication. Waits for the login to complete.
+ *
+ * @param profileName - The AWS profile name to use for SSO login
+ * @param debug - Whether to print debug information
+ * @throws Error if SSO login fails
+ */
 const loginAwsSso = async (profileName: string, debug?: boolean): Promise<void> => {
   print2(`Logging in to AWS SSO with profile ${profileName}...`);
 
@@ -1113,6 +1376,19 @@ const loginAwsSso = async (profileName: string, debug?: boolean): Promise<void> 
   }
 };
 
+/**
+ * Generates an IAM database authentication token for RDS
+ *
+ * Uses the AWS CLI to generate a temporary authentication token that can be
+ * used as a password for PostgreSQL IAM authentication.
+ *
+ * @param details - AWS connection details including RDS host and region
+ * @param dbUser - The database username (typically the IAM user email)
+ * @param profileName - The AWS profile name to use for authentication
+ * @param debug - Whether to print debug information
+ * @returns The generated authentication token
+ * @throws Error if token generation fails
+ */
 const generateDbAuthToken = async (
   details: AwsConnectionDetails,
   dbUser: string,
@@ -1157,6 +1433,18 @@ const generateDbAuthToken = async (
   }
 };
 
+/**
+ * Connects to the RDS database using psql with IAM authentication
+ *
+ * Spawns a psql process with the IAM auth token as the password. The process
+ * runs interactively, allowing the user to execute SQL commands.
+ *
+ * @param details - AWS connection details including host, port, and database name
+ * @param dbUser - The database username
+ * @param token - The IAM authentication token (used as password)
+ * @param debug - Whether to print debug information
+ * @throws Error if connection fails
+ */
 const connectToDatabase = async (
   details: AwsConnectionDetails,
   dbUser: string,
@@ -1209,6 +1497,17 @@ const connectToDatabase = async (
   }
 };
 
+/**
+ * Connects to a GCP CloudSQL database
+ *
+ * Ensures gcloud authentication and project configuration, then initiates
+ * the Cloud SQL Proxy connection flow.
+ *
+ * @param details - GCP connection details including project and instance information
+ * @param dbUser - The database username
+ * @param debug - Whether to print debug information
+ * @throws Error if connection setup fails
+ */
 const connectToCloudSQL = async (
   details: GcpConnectionDetails,
   dbUser: string,
@@ -1228,6 +1527,15 @@ const connectToCloudSQL = async (
   await connectToCloudSQLViaProxy(details, dbUser, debug);
 };
 
+/**
+ * Ensures gcloud CLI is authenticated
+ *
+ * Checks if gcloud is already authenticated. If not, initiates an interactive
+ * login flow that opens a browser for authentication.
+ *
+ * @param debug - Whether to print debug information
+ * @throws Error if authentication fails
+ */
 const ensureGcloudAuth = async (debug?: boolean): Promise<void> => {
   try {
     // Check if gcloud is authenticated by trying to get an access token
@@ -1275,6 +1583,16 @@ const ensureGcloudAuth = async (debug?: boolean): Promise<void> => {
   }
 };
 
+/**
+ * Sets the gcloud active project
+ *
+ * Checks the current project and updates it if it differs from the target
+ * project ID.
+ *
+ * @param projectId - The GCP project ID to set as active
+ * @param debug - Whether to print debug information
+ * @throws Error if project setting fails
+ */
 const setGcloudProject = async (
   projectId: string,
   debug?: boolean
@@ -1286,7 +1604,16 @@ const setGcloudProject = async (
       "get-value",
       "project",
     ]);
-    const currentProject = (await asyncSpawn({ debug: false }, getCommand, getArgs)).trim();
+    let currentProject: string;
+    try {
+      currentProject = (await asyncSpawn({ debug: false }, getCommand, getArgs)).trim();
+    } catch (error) {
+      // If getting current project fails, try to set it anyway
+      if (debug) {
+        print2(`Could not get current gcloud project, will set it to: ${projectId}`);
+      }
+      currentProject = "";
+    }
 
     if (currentProject === projectId) {
       if (debug) {
@@ -1310,11 +1637,24 @@ const setGcloudProject = async (
       print2(`gcloud project set to: ${projectId}`);
     }
   } catch (error) {
-    print2(`Error: Failed to set gcloud project. ${error}`);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    print2(`Error: Failed to set gcloud project to ${projectId}.`);
+    print2(`Details: ${errorMessage}`);
+    throw new Error(`Failed to set gcloud project: ${errorMessage}`);
   }
 };
 
+/**
+ * Ensures the Cloud SQL Proxy component is installed and available
+ *
+ * Checks if the Cloud SQL Proxy binary exists in the gcloud SDK. If not,
+ * attempts to install it via gcloud components install. Returns the path
+ * to the proxy binary.
+ *
+ * @param debug - Whether to print debug information
+ * @returns The path to the Cloud SQL Proxy binary
+ * @throws Error if the proxy cannot be found or installed
+ */
 const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
   try {
     // Get gcloud SDK root directory
@@ -1411,6 +1751,18 @@ const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
   }
 };
 
+/**
+ * Connects to CloudSQL via Cloud SQL Proxy
+ *
+ * Sets up application-default credentials, starts the Cloud SQL Proxy in the
+ * background, generates an IAM login token, and connects psql to the local
+ * proxy port. Cleans up the proxy process when psql exits.
+ *
+ * @param details - GCP connection details including instance connection name
+ * @param dbUser - The database username
+ * @param debug - Whether to print debug information
+ * @throws Error if connection setup fails
+ */
 const connectToCloudSQLViaProxy = async (
   details: GcpConnectionDetails,
   dbUser: string,
@@ -1483,13 +1835,16 @@ const connectToCloudSQLViaProxy = async (
     env: createCleanChildEnv(),
   });
 
-  // Wait a bit for the proxy to start
+  // Wait for the proxy to start and become ready
+  // The proxy prints "Ready for new connections" when it's ready to accept connections
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
+      // Timeout after 2 seconds - proxy should start quickly
       resolve();
     }, 2000);
 
-    // Check if proxy started successfully by looking for "Ready for new connections" or error
+    // Check if proxy started successfully by looking for "Ready for new connections" message
+    // Monitor both stdout and stderr as the proxy may print to either
     let output = "";
     if (proxyProcess.stdout) {
       proxyProcess.stdout.on("data", (data: Buffer) => {
@@ -1513,11 +1868,14 @@ const connectToCloudSQLViaProxy = async (
     proxyProcess.on("error", (error: Error) => {
       clearTimeout(timeout);
       print2(`Error: Failed to start Cloud SQL Proxy. ${error.message}`);
+      print2("Please ensure gcloud is properly installed and configured.");
       sys.exit(1);
     });
   });
 
   // Generate a login token for CloudSQL IAM authentication
+  // This token is used as the password for PostgreSQL authentication
+  // The token is valid for a short period and is tied to the IAM user
   const { command: tokenCommand, args: tokenArgs } = gcloudCommandArgs([
     "sql",
     "generate-login-token",
@@ -1532,8 +1890,11 @@ const connectToCloudSQLViaProxy = async (
       print2("Generated CloudSQL login token.");
     }
   } catch (error) {
+    // Token generation is optional - some CloudSQL instances may not require it
+    // Continue without password if generation fails
     if (debug) {
       print2(`Token generation failed: ${error}`);
+      print2("Continuing without IAM login token (may use default authentication).");
     }
     password = "";
   }
@@ -1570,7 +1931,8 @@ const connectToCloudSQLViaProxy = async (
       });
     });
   } finally {
-    // Clean up: kill the proxy process
+    // Clean up: kill the proxy process when psql exits
+    // This ensures the proxy doesn't continue running after the user disconnects
     if (proxyProcess && !proxyProcess.killed) {
       if (debug) {
         print2("Stopping Cloud SQL Proxy...");
