@@ -273,98 +273,46 @@ const provisionRequest = async (
     );
   };
 
-  try {
-    const response = await makeRequest();
+  const response = await makeRequest();
 
-    if (!response) {
-      print2("Did not receive access ID from server");
-      return null;
-    }
-
-    const { isPreexisting } = response;
-
-    const message = isPreexisting
-      ? "Existing access found. Connecting to database."
-      : "Waiting for access to be provisioned";
-    print2(message);
-
-    const result = await decodeProvisionStatus<PsqlPermissionSpec>(response.request);
-
-    if (!result) {
-      // Check if the error is about public IP requirement for CloudSQL
-      const errorMessage = response.request?.error?.message || "";
-      if (
-        errorMessage.includes("does not have a public IP address") &&
-        errorMessage.includes("Cloud SQL")
-      ) {
-        print2("");
-        print2(
-          "Note: The Cloud SQL Proxy (which this CLI uses) supports private IP instances."
-        );
-        print2(
-          "This error is due to a backend limitation that requires a public IP."
-        );
-        print2(
-          "Please contact your P0 administrator to update the backend to support private IP CloudSQL instances."
-        );
-      }
-      return null;
-    }
-
-    return {
-      request: response.request,
-    };
-  } catch (error: any) {
-    // Handle timeout or network errors - check if request was already approved
-    const isTimeoutError = error instanceof Error && error.name === "TimeoutError";
-    const isNetworkError = typeof error === "string" && error.startsWith("Network error:");
-    
-    if (isTimeoutError || isNetworkError) {
-      if (isTimeoutError) {
-        print2("Your request did not complete within 5 minutes.");
-      } else {
-        print2("Network error occurred while waiting for request to complete.");
-      }
-      // Check if we can use existing approval
-      print2("Attempting to use existing approval if available...");
-      try {
-        const response = await request("request")<PermissionRequest<PsqlPermissionSpec>>(
-          {
-            ...pick(args, "$0", "_"),
-            arguments: [
-              "pg",
-              "role",
-              destination,
-              role,
-              ...(args.reason ? ["--reason", args.reason] : []),
-              ...(args.duration ? ["--duration", args.duration] : []),
-            ],
-            wait: false,
-            debug: args.debug,
-          },
-          authn,
-          { message: "quiet" }
-        );
-        if (response && (response.isPreexisting || response.request)) {
-          print2("Using existing approval.");
-          const result = await decodeProvisionStatus<PsqlPermissionSpec>(response.request);
-          if (result) {
-            return { request: response.request };
-          }
-        }
-      } catch (retryError) {
-        // Retry failed, but we'll still try to continue if we have partial request data
-        if (args.debug) {
-          print2(`Retry check failed: ${retryError}`);
-          print2("Attempting to continue with available request data...");
-        }
-        // Don't throw - let the error propagate but we've logged it
-      }
-    }
-    // If we get here and it's a network error, the retry also failed
-    // But we should still throw the error to let the caller know
-    throw error;
+  if (!response) {
+    print2("Did not receive access ID from server");
+    return null;
   }
+
+  const { isPreexisting } = response;
+
+  const message = isPreexisting
+    ? "Existing access found. Connecting to database."
+    : "Waiting for access to be provisioned";
+  print2(message);
+
+  const result = await decodeProvisionStatus<PsqlPermissionSpec>(response.request);
+
+  if (!result) {
+    // Check if the error is about public IP requirement for CloudSQL
+    const errorMessage = response.request?.error?.message || "";
+    if (
+      errorMessage.includes("does not have a public IP address") &&
+      errorMessage.includes("Cloud SQL")
+    ) {
+      print2("");
+      print2(
+        "Note: The Cloud SQL Proxy (which this CLI uses) supports private IP instances."
+      );
+      print2(
+        "This error is due to a backend limitation that requires a public IP."
+      );
+      print2(
+        "Please contact your P0 administrator to update the backend to support private IP CloudSQL instances."
+      );
+    }
+    return null;
+  }
+
+  return {
+    request: response.request,
+  };
 };
 
 type AwsConnectionDetails = {
