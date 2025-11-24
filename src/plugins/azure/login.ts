@@ -19,7 +19,6 @@ import pkceChallenge from "pkce-challenge";
 
 const AZURE_SCOPE = "openid profile email offline_access";
 const AZURE_REDIRECT_PORT = 52701;
-const AZURE_REDIRECT_URL = `http://localhost:${AZURE_REDIRECT_PORT}`;
 const PKCE_LENGTH = 128;
 
 type CodeExchange = {
@@ -27,7 +26,7 @@ type CodeExchange = {
   state: string;
 };
 
-const requestAuth = async (org: OrgData) => {
+const requestAuth = async (org: OrgData, redirectUrl: string) => {
   if (!org.providerDomain) {
     throw "Azure login requires a configured provider domain.";
   }
@@ -39,7 +38,7 @@ const requestAuth = async (org: OrgData) => {
     client_id: org.clientId,
     code_challenge: pkce.code_challenge,
     code_challenge_method: "S256",
-    redirect_uri: AZURE_REDIRECT_URL,
+    redirect_uri: redirectUrl,
     response_type: "code",
     scope: AZURE_SCOPE,
     state: "azure_login",
@@ -63,7 +62,8 @@ const requestAuth = async (org: OrgData) => {
 const requestToken = async (
   org: OrgData,
   code: string,
-  pkce: { code_challenge: string; code_verifier: string }
+  pkce: { code_challenge: string; code_verifier: string },
+  redirectUrl: string
 ) => {
   if (!org.providerDomain) {
     throw "Azure login requires a configured provider domain.";
@@ -76,7 +76,7 @@ const requestToken = async (
     code,
     code_verifier: pkce.code_verifier,
     grant_type: "authorization_code",
-    redirect_uri: AZURE_REDIRECT_URL,
+    redirect_uri: redirectUrl,
   };
 
   const response = await fetch(tokenUrl, {
@@ -84,7 +84,7 @@ const requestToken = async (
     headers: {
       ...OIDC_HEADERS,
       Accept: "application/json",
-      Origin: AZURE_REDIRECT_URL,
+      Origin: redirectUrl,
     },
     body: urlEncode(body),
   });
@@ -95,8 +95,8 @@ const requestToken = async (
 
 export const azureLogin = async (org: OrgData): Promise<TokenResponse> => {
   return await withRedirectServer<any, CodeExchange, TokenResponse>(
-    async () => await requestAuth(org),
-    async (pkce, token) => await requestToken(org, token.code, pkce),
+    async (_, redirectUrl) => await requestAuth(org, redirectUrl),
+    async (pkce, token, redirectUrl) => await requestToken(org, token.code, pkce, redirectUrl),
     { port: AZURE_REDIRECT_PORT }
   );
 };

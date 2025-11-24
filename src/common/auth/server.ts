@@ -52,8 +52,8 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
 
 /** Waits for an OIDC authorization redirect using a locally mounted server */
 export const withRedirectServer = async <S, T, U>(
-  beginAuth: (server: http.Server) => Promise<S>,
-  completeAuth: (value: S, token: T) => Promise<U>,
+  beginAuth: (server: http.Server, redirectUrl: string) => Promise<S>,
+  completeAuth: (value: S, token: T, redirectUrl: string) => Promise<U>,
   options?: { port?: number }
 ) => {
   const app = express();
@@ -76,7 +76,8 @@ export const withRedirectServer = async <S, T, U>(
   const redirectRouter = express.Router();
   redirectRouter.get("/", (req, res) => {
     const token = req.query as T;
-    completeAuth(value, token)
+    // redirectUrl is captured from the closure
+    completeAuth(value, token, redirectUrl)
       .then((result) => {
         pipeToResponse(pageBytes, res, "text/html; charset=utf-8");
         redirectResolve(result);
@@ -89,7 +90,83 @@ export const withRedirectServer = async <S, T, U>(
 
   app.use(redirectRouter);
 
-  const server = app.listen(options?.port ?? 0);
+  // Try to use the requested port, but fall back to OS-assigned port if it's in use
+  let server: http.Server;
+  let requestedPort = options?.port;
+  let actualPort: number;
+  let redirectUrl: string;
+
+  if (requestedPort !== undefined) {
+    // Try the requested port first
+    server = app.listen(requestedPort);
+    
+    // Wait for server to start listening or fail
+    const listenPromise = new Promise<void>((resolve, reject) => {
+      server.once("listening", () => {
+        const address = server.address();
+        if (address && typeof address === "object") {
+          actualPort = address.port;
+        } else if (typeof address === "number") {
+          actualPort = address;
+        } else {
+          actualPort = requestedPort!;
+        }
+        resolve();
+      });
+      server.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE") {
+          // Port is in use, try with OS-assigned port instead
+          server.close();
+          server = app.listen(0);
+          server.once("listening", () => {
+            const address = server.address();
+            if (address && typeof address === "object") {
+              actualPort = address.port;
+            } else if (typeof address === "number") {
+              actualPort = address;
+            } else {
+              reject(new Error("Failed to determine server port"));
+            }
+            resolve();
+          });
+          server.once("error", (retryError) => {
+            redirectReject(retryError);
+            reject(retryError);
+          });
+        } else {
+          redirectReject(error);
+          reject(error);
+        }
+      });
+    });
+    
+    await listenPromise;
+  } else {
+    // No port specified, use OS-assigned port
+    server = app.listen(0);
+    
+    // Wait for server to start listening or fail
+    await new Promise<void>((resolve, reject) => {
+      server.once("listening", () => {
+        const address = server.address();
+        if (address && typeof address === "object") {
+          actualPort = address.port;
+        } else if (typeof address === "number") {
+          actualPort = address;
+        } else {
+          reject(new Error("Failed to determine server port"));
+        }
+        resolve();
+      });
+      server.once("error", (error) => {
+        redirectReject(error);
+        reject(error);
+      });
+    });
+  }
+
+  // Construct the redirect URL using the actual port
+  redirectUrl = `http://127.0.0.1:${actualPort}`;
 
   // Set up cleanup handler for process interruption
   const cleanup = async () => {
@@ -107,17 +184,8 @@ export const withRedirectServer = async <S, T, U>(
   process.once("SIGINT", signalHandler);
   process.once("SIGTERM", signalHandler);
 
-  // Wait for server to start listening or fail
-  await new Promise<void>((resolve, reject) => {
-    server.once("listening", () => resolve());
-    server.once("error", (error) => {
-      redirectReject(error);
-      reject(error);
-    });
-  });
-
   try {
-    value = await beginAuth(server);
+    value = await beginAuth(server, redirectUrl);
     return await redirectPromise;
   } finally {
     process.removeListener("SIGINT", signalHandler);

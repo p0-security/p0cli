@@ -25,17 +25,16 @@ type CodeExchange = {
 const GOOGLE_OIDC_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_OIDC_EXCHANGE_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_OIDC_REDIRECT_PORT = 52700;
-const GOOGLE_OIDC_REDIRECT_URL = `http://127.0.0.1:${GOOGLE_OIDC_REDIRECT_PORT}`;
 const PKCE_LENGTH = 128;
 
-const requestAuth = async () => {
+const requestAuth = async (redirectUrl: string) => {
   const tenantConfig = getGoogleTenantConfig();
   const pkce = await pkceChallenge(PKCE_LENGTH);
   const authBody: AuthorizeRequest = {
     client_id: tenantConfig.google.clientId,
     code_challenge: pkce.code_challenge,
     code_challenge_method: "S256",
-    redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
+    redirect_uri: redirectUrl,
     response_type: "code",
     scope: "openid email",
   };
@@ -50,7 +49,8 @@ ${url}`);
 
 const requestToken = async (
   code: string,
-  pkce: { code_challenge: string; code_verifier: string }
+  pkce: { code_challenge: string; code_verifier: string },
+  redirectUrl: string
 ) => {
   const tenantConfig = getGoogleTenantConfig();
   const body = {
@@ -59,7 +59,7 @@ const requestToken = async (
     code,
     code_verifier: pkce.code_verifier,
     grant_type: "authorization_code",
-    redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
+    redirect_uri: redirectUrl,
   };
   const response = await fetch(GOOGLE_OIDC_EXCHANGE_URL, {
     method: "POST",
@@ -72,8 +72,8 @@ const requestToken = async (
 
 export const googleLogin = async () => {
   return await withRedirectServer<any, CodeExchange, TokenResponse>(
-    async () => await requestAuth(),
-    async (pkce, token) => await requestToken(token.code, pkce),
+    async (_, redirectUrl) => await requestAuth(redirectUrl),
+    async (pkce, token, redirectUrl) => await requestToken(token.code, pkce, redirectUrl),
     { port: GOOGLE_OIDC_REDIRECT_PORT }
   );
 };
