@@ -293,11 +293,13 @@ const waitForLockRelease = async (
   timeoutMs: number = 5 * 60 * 1000 // 5 minutes default
 ): Promise<boolean> => {
   const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
+  const QUEUE_CHECK_INTERVAL_MS = 2000; // Check queue position every 2 seconds
   const startTime = Date.now();
   let elapsedSeconds = 0;
   let lastPosition = 0;
   let lastTotal = 0;
   let lockAcquired = false;
+  let lastQueueCheck = 0;
 
   // Create queue indicator to signal we're waiting
   const myTimestamp = Date.now();
@@ -330,6 +332,9 @@ const waitForLockRelease = async (
     // Force flush to ensure messages appear
     process.stderr.write("", () => {});
 
+    let lastQueueCheck = 0;
+    const QUEUE_CHECK_INTERVAL = 2000; // Check queue position every 2 seconds
+    
     while (Date.now() - startTime < timeoutMs) {
       // Check if lock is still held
       const lockStillHeld = await isLockHeld(port);
@@ -344,7 +349,21 @@ const waitForLockRelease = async (
           process.stderr.write("", () => {});
         } else {
           // Lock was acquired by someone else between check and acquire
-          // Continue waiting
+          // This means someone else got ahead of us - immediately update queue position
+          const queueInfo = await getQueuePosition(port, myTimestamp);
+          if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+            lastPosition = queueInfo.position;
+            lastTotal = queueInfo.total;
+            if (lastPosition === 1) {
+              print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+            } else if (lastTotal > 5) {
+              print2(`Queue update: You are ${lastPosition}/${lastTotal} in the login queue.`);
+            } else {
+              print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+            }
+            process.stderr.write("", () => {});
+          }
+          lastQueueCheck = Date.now();
         }
       }
       
@@ -367,21 +386,25 @@ const waitForLockRelease = async (
           }
         }
       } else {
-        // Still waiting for lock - check queue position
-        const queueInfo = await getQueuePosition(port, myTimestamp);
-        if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
-          lastPosition = queueInfo.position;
-          lastTotal = queueInfo.total;
-          if (lastPosition === 1) {
-            print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
-          } else if (lastTotal > 5) {
-            // With many users, show more frequent updates
-            print2(`Queue update: You are ${lastPosition}/${lastTotal} in the login queue.`);
-          } else {
-            print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+        // Still waiting for lock - check queue position regularly
+        const now = Date.now();
+        if (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS) {
+          const queueInfo = await getQueuePosition(port, myTimestamp);
+          if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+            lastPosition = queueInfo.position;
+            lastTotal = queueInfo.total;
+            if (lastPosition === 1) {
+              print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+            } else if (lastTotal > 5) {
+              // With many users, show more frequent updates
+              print2(`Queue update: You are ${lastPosition}/${lastTotal} in the login queue.`);
+            } else {
+              print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+            }
+            // Force flush after position update
+            process.stderr.write("", () => {});
           }
-          // Force flush after position update
-          process.stderr.write("", () => {});
+          lastQueueCheck = now;
         }
 
         // Show progress every 10 seconds (changed from 30 for better visibility)
