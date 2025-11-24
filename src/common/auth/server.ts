@@ -241,6 +241,21 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
   }
 };
 
+/** Check if port is available by trying to create a test server */
+const isPortAvailable = async (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const testServer = http.createServer();
+    testServer.listen(port, () => {
+      testServer.close(() => {
+        resolve(true);
+      });
+    });
+    testServer.on("error", () => {
+      resolve(false);
+    });
+  });
+};
+
 /** Wait for lock to be released with timeout and user prompt */
 const waitForLockRelease = async (
   port: number,
@@ -251,6 +266,7 @@ const waitForLockRelease = async (
   let elapsedSeconds = 0;
   let lastPosition = 0;
   let lastTotal = 0;
+  let lockAcquired = false;
 
   // Create queue indicator to signal we're waiting
   const myTimestamp = Date.now();
@@ -287,42 +303,61 @@ const waitForLockRelease = async (
       // Check if lock is still held
       const lockStillHeld = await isLockHeld(port);
       
-      if (!lockStillHeld) {
+      if (!lockStillHeld && !lockAcquired) {
         // Lock is released or stale, try to acquire
         if (await acquireLoginLock(port)) {
-          // Successfully acquired lock, remove queue indicator
+          // Successfully acquired lock
+          lockAcquired = true;
           await removeQueueIndicator(port);
-          process.removeListener("SIGINT", cleanupQueueIndicator);
-          process.removeListener("SIGTERM", cleanupQueueIndicator);
-          print2("It's your turn! Starting login...");
-          return true;
+          print2("Lock acquired. Waiting for previous server to close...");
+          process.stderr.write("", () => {});
         } else {
           // Lock was acquired by someone else between check and acquire
           // Continue waiting
         }
       }
-
-      // Check queue position every poll interval
-      const queueInfo = await getQueuePosition(port, myTimestamp);
-      if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
-        lastPosition = queueInfo.position;
-        lastTotal = queueInfo.total;
-        if (lastPosition === 1) {
-          print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+      
+      // If we've acquired the lock, check if port is available
+      if (lockAcquired) {
+        const portAvailable = await isPortAvailable(port);
+        if (portAvailable) {
+          // Port is available, we can proceed
+          process.removeListener("SIGINT", cleanupQueueIndicator);
+          process.removeListener("SIGTERM", cleanupQueueIndicator);
+          print2("Port is available. Starting login...");
+          return true;
         } else {
-          print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+          // Port still in use, show waiting message
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          if (elapsed % 5 === 0 && elapsed !== elapsedSeconds) {
+            print2(`Waiting for port to become available... (${elapsed} seconds)`);
+            elapsedSeconds = elapsed;
+            process.stderr.write("", () => {});
+          }
         }
-        // Force flush after position update
-        process.stderr.write("", () => {});
-      }
+      } else {
+        // Still waiting for lock - check queue position
+        const queueInfo = await getQueuePosition(port, myTimestamp);
+        if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+          lastPosition = queueInfo.position;
+          lastTotal = queueInfo.total;
+          if (lastPosition === 1) {
+            print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+          } else {
+            print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+          }
+          // Force flush after position update
+          process.stderr.write("", () => {});
+        }
 
-      // Show progress every 10 seconds (changed from 30 for better visibility)
-      const newElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 10 === 0 && newElapsedSeconds > 0) {
-        print2(`Still waiting... (${newElapsedSeconds} seconds elapsed, position ${lastPosition}/${lastTotal})`);
-        elapsedSeconds = newElapsedSeconds;
-        // Force flush after progress update
-        process.stderr.write("", () => {});
+        // Show progress every 10 seconds (changed from 30 for better visibility)
+        const newElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 10 === 0 && newElapsedSeconds > 0) {
+          print2(`Still waiting... (${newElapsedSeconds} seconds elapsed, position ${lastPosition}/${lastTotal})`);
+          elapsedSeconds = newElapsedSeconds;
+          // Force flush after progress update
+          process.stderr.write("", () => {});
+        }
       }
 
       await sleep(POLL_INTERVAL_MS);
@@ -492,15 +527,12 @@ class SharedServerManager {
           if (!acquired) {
             throw new Error("Login cancelled while waiting in queue.");
           }
-          // After acquiring lock from queue, wait a bit for previous server to close
-          // The previous process releases the lock in clearActiveHandler, which has a 2s delay
-          // before closing the server, so we wait a bit more to ensure it's closed
-          print2("Lock acquired. Waiting for previous server to close...");
-          await sleep(3000);
+          // waitForLockRelease now waits until port is available, so we can proceed
+        } else {
+          // We acquired the lock immediately (no one was waiting)
+          lockAcquired = true;
+          this.lockPorts.add(port);
         }
-        // Lock acquired, proceed with server creation
-        lockAcquired = true;
-        this.lockPorts.add(port);
       }
 
       // Create server and handle port conflicts
