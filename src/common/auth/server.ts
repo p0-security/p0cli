@@ -558,34 +558,29 @@ class SharedServerManager {
             if (response && response.ok) {
               const data = await response.json().catch(() => null);
               if (data?.type === "p0-auth-server" && os === "win") {
-                // It's our auth server - we should have waited in queue, but didn't
-                // This means the first process didn't create a lock file, or we got here
-                // before checking the lock. Enter queue now.
-                if (!lockAcquired) {
-                  // Release any partial state and enter queue properly
-                  print2("Detected another login in progress. Joining queue...");
-                  print2("");
-                  const acquired = await waitForLockRelease(port);
-                  if (!acquired) {
-                    throw new Error("Login cancelled while waiting in queue.");
-                  }
-                  lockAcquired = true;
-                  this.lockPorts.add(port);
-                  // Now try to create server again - waitForLockRelease ensured port is available
-                  server = await this.tryCreateServer(newApp, port);
-                  // Server created successfully, break out of error handling
-                  // We'll continue to the code after the try-catch
-                } else {
-                  // We already have the lock but port is still in use
-                  // This shouldn't happen if waitForLockRelease worked
+                // It's our auth server - another process is already using the port
+                // We should release our lock (if we have one) and enter the queue
+                // The first process should have the lock, not us
+                if (lockAcquired) {
+                  // We incorrectly acquired the lock - release it and enter queue
                   await releaseLoginLock(port).catch(() => {});
                   this.lockPorts.delete(port);
-                  throw new Error(
-                    `Port ${port} is still in use by another p0 login session. ` +
-                    `Please wait for the other login to complete, or if you're the only user, ` +
-                    `close any other p0 login processes and try again.`
-                  );
+                  lockAcquired = false;
                 }
+                
+                // Enter queue to wait for the other login to complete
+                print2("Detected another login in progress. Joining queue...");
+                print2("");
+                const acquired = await waitForLockRelease(port);
+                if (!acquired) {
+                  throw new Error("Login cancelled while waiting in queue.");
+                }
+                lockAcquired = true;
+                this.lockPorts.add(port);
+                // Now try to create server again - waitForLockRelease ensured port is available
+                server = await this.tryCreateServer(newApp, port);
+                // Server created successfully, break out of error handling
+                // We'll continue to the code after the try-catch
               } else {
                 // Not our server or not Windows
                 if (lockAcquired) {
