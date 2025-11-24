@@ -204,8 +204,8 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
     // Check if lock is held (someone is currently logging in)
     const lockHeld = await isLockHeld(port);
     
-    let position = lockHeld ? 2 : 1; // If lock is held, we're at least position 2 (after current login)
-    let total = lockHeld ? 2 : 1; // At least us, plus current login if lock is held
+    // Collect all active queue members with their timestamps and PIDs
+    const activeQueueMembers: Array<{ pid: number; timestamp: number }> = [];
     
     // Count all active queue members
     for (const file of queueFiles) {
@@ -218,21 +218,52 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
         try {
           process.kill(indicator.waitingPid, 0);
           // This is an active queue member
-          if (indicator.waitingPid !== process.pid) {
-            // Not our own indicator
-            total++; // Count this queue member
-            if (indicator.timestamp < myTimestamp) {
-              position++; // Someone ahead of us in queue
-            }
-          }
-          // If it's our own indicator, we don't count it (we're already counted)
+          activeQueueMembers.push({
+            pid: indicator.waitingPid,
+            timestamp: indicator.timestamp,
+          });
         } catch {
-          // Process died, ignore this indicator
+          // Process died, remove stale indicator
+          await unlink(filePath).catch(() => {});
         }
       } catch {
         // Error reading file, ignore
       }
     }
+    
+    // Sort queue members by timestamp, then by PID (for deterministic ordering with ties)
+    activeQueueMembers.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      // Tie-breaker: use PID for deterministic ordering
+      return a.pid - b.pid;
+    });
+    
+    // Find our position in the sorted queue
+    // If we're not in the list yet (just created indicator), add ourselves
+    let myIndex = activeQueueMembers.findIndex(m => m.pid === process.pid);
+    if (myIndex < 0) {
+      // Our indicator might not be in the list yet, add it
+      activeQueueMembers.push({ pid: process.pid, timestamp: myTimestamp });
+      // Re-sort with our entry
+      activeQueueMembers.sort((a, b) => {
+        if (a.timestamp !== b.timestamp) {
+          return a.timestamp - b.timestamp;
+        }
+        return a.pid - b.pid;
+      });
+      myIndex = activeQueueMembers.findIndex(m => m.pid === process.pid);
+    }
+    
+    // Calculate position: if lock is held, add 1 for the current login
+    // Position 1 = next in line (after current login if lock is held)
+    const position = lockHeld 
+      ? myIndex + 2 // +1 for 0-based index, +1 for current login
+      : myIndex + 1; // +1 for 0-based index
+    
+    // Total includes: current login (if lock held) + all queue members
+    const total = lockHeld ? activeQueueMembers.length + 1 : activeQueueMembers.length;
     
     return { position, total };
   } catch (error) {
@@ -343,6 +374,9 @@ const waitForLockRelease = async (
           lastTotal = queueInfo.total;
           if (lastPosition === 1) {
             print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+          } else if (lastTotal > 5) {
+            // With many users, show more frequent updates
+            print2(`Queue update: You are ${lastPosition}/${lastTotal} in the login queue.`);
           } else {
             print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
           }
