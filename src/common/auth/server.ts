@@ -82,16 +82,16 @@ class SharedServerManager {
     let app = this.apps.get(port);
 
     if (!server || !app) {
-      app = express();
+      const newApp = express();
       
       // Set up favicon handler
-      app.get("/favicon.ico", async (_, res) => {
+      newApp.get("/favicon.ico", async (_, res) => {
         const { faviconBytes } = await this.getStaticAssets();
         pipeToResponse(faviconBytes, res, "image/x-icon");
       });
 
       // Set up session-based callback handler
-      app.get("/", async (req, res) => {
+      newApp.get("/", async (req, res) => {
         // Extract session ID from state parameter
         // State format: "session:<sessionId>" or "azure_login:session:<sessionId>"
         const state = req.query.state as string;
@@ -145,7 +145,7 @@ class SharedServerManager {
 
       // Create server and handle port conflicts
       server = await new Promise<http.Server>((resolve, reject) => {
-        const newServer = app.listen(port);
+        const newServer = newApp.listen(port);
         
         newServer.once("listening", () => {
           resolve(newServer);
@@ -165,6 +165,7 @@ class SharedServerManager {
         });
       });
 
+      app = newApp;
       this.servers.set(port, server);
       this.apps.set(port, app);
     }
@@ -210,27 +211,35 @@ export const withRedirectServer = async <S, T, U>(
   const port = options.port;
   const sessionId = randomUUID();
 
-  let redirectResolve: (result: U) => void;
-  let redirectReject: (error: any) => void;
   let value: S;
+  
+  // Create promise and capture resolve/reject functions
+  let redirectResolve: ((result: U) => void) | undefined;
+  let redirectReject: ((error: any) => void) | undefined;
+  
   const redirectPromise = new Promise<U>((resolve, reject) => {
     redirectResolve = resolve;
     redirectReject = reject;
   });
+
+  // TypeScript needs these to be definitely assigned
+  if (!redirectResolve || !redirectReject) {
+    throw new Error("Failed to initialize promise handlers");
+  }
 
   // Get or create shared server for this port
   const { server } = await sharedServerManager.getOrCreateServer(port);
   // Use base redirect URL (without session parameter) - session ID will be encoded in state parameter
   const redirectUrl = `http://127.0.0.1:${port}`;
 
-  // Register session handler
+  // Register session handler (redirectResolve and redirectReject are now definitely assigned)
   const handler: SessionHandler<T, U> = {
     completeAuth: completeAuth as any,
     value: undefined as any,
     redirectUrl: redirectUrl, // Store the base redirect URL
     sessionId: sessionId, // Store session ID for reference
-    redirectResolve,
-    redirectReject,
+    redirectResolve: redirectResolve,
+    redirectReject: redirectReject,
     cleanup: () => {
       sharedServerManager.unregisterSession(sessionId);
     },
