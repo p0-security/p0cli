@@ -22,6 +22,7 @@ import {
   USER_NOT_IN_CACHE_PATTERN,
 } from "./auth";
 import { AzureSshRequest } from "./types";
+import { spawn } from "node:child_process";
 
 const TUNNEL_READY_STRING = "Tunnel is ready";
 
@@ -182,7 +183,6 @@ const spawnBastionTunnelInBackground = (
                       `Killing Azure Bastion tunnel process tree (${child.pid}) on Windows...`
                     );
                   }
-                  const { spawn } = await import("node:child_process");
                   const killProcess = spawn("taskkill", [
                     "/F",
                     "/T",
