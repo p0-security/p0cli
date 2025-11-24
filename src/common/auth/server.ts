@@ -254,6 +254,14 @@ const waitForLockRelease = async (
 
   // Create queue indicator to signal we're waiting
   const myTimestamp = Date.now();
+  
+  // Print message immediately - this should appear right away
+  print2("");
+  print2("Another user is currently logging in. Joining queue...");
+  
+  // Force flush stderr to ensure message appears
+  process.stderr.write("", () => {});
+  
   await createQueueIndicator(port);
 
   // Cleanup queue indicator on exit
@@ -265,13 +273,21 @@ const waitForLockRelease = async (
 
   try {
     // Get initial queue position
+    print2("Checking queue position...");
     const initialPosition = await getQueuePosition(port, myTimestamp);
     lastPosition = initialPosition.position;
     lastTotal = initialPosition.total;
-    print2(`Another user is currently logging in. You are ${lastPosition}/${lastTotal} in the login queue.`);
+    print2(`You are ${lastPosition}/${lastTotal} in the login queue.`);
+    print2("");
+    
+    // Force flush to ensure messages appear
+    process.stderr.write("", () => {});
 
     while (Date.now() - startTime < timeoutMs) {
-      if (!(await isLockHeld(port))) {
+      // Check if lock is still held
+      const lockStillHeld = await isLockHeld(port);
+      
+      if (!lockStillHeld) {
         // Lock is released or stale, try to acquire
         if (await acquireLoginLock(port)) {
           // Successfully acquired lock, remove queue indicator
@@ -280,6 +296,9 @@ const waitForLockRelease = async (
           process.removeListener("SIGTERM", cleanupQueueIndicator);
           print2("It's your turn! Starting login...");
           return true;
+        } else {
+          // Lock was acquired by someone else between check and acquire
+          // Continue waiting
         }
       }
 
@@ -293,13 +312,17 @@ const waitForLockRelease = async (
         } else {
           print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
         }
+        // Force flush after position update
+        process.stderr.write("", () => {});
       }
 
-      // Show progress every 30 seconds
+      // Show progress every 10 seconds (changed from 30 for better visibility)
       const newElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 30 === 0) {
+      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 10 === 0 && newElapsedSeconds > 0) {
         print2(`Still waiting... (${newElapsedSeconds} seconds elapsed, position ${lastPosition}/${lastTotal})`);
         elapsedSeconds = newElapsedSeconds;
+        // Force flush after progress update
+        process.stderr.write("", () => {});
       }
 
       await sleep(POLL_INTERVAL_MS);
@@ -463,6 +486,8 @@ class SharedServerManager {
         // Try to acquire lock first
         if (!(await acquireLoginLock(port))) {
           // Lock is held, wait in queue
+          print2("Detected another login in progress. Joining queue...");
+          print2(""); // Blank line for readability
           const acquired = await waitForLockRelease(port);
           if (!acquired) {
             throw new Error("Login cancelled while waiting in queue.");
@@ -470,6 +495,7 @@ class SharedServerManager {
           // After acquiring lock from queue, wait a bit for previous server to close
           // The previous process releases the lock in clearActiveHandler, which has a 2s delay
           // before closing the server, so we wait a bit more to ensure it's closed
+          print2("Lock acquired. Waiting for previous server to close...");
           await sleep(3000);
         }
         // Lock acquired, proceed with server creation
