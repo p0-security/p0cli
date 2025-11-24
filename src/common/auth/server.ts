@@ -197,12 +197,17 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
   const queueFilePattern = `p0-login-queue-${port}-`;
   
   try {
-    const files = await import("node:fs/promises").then(fs => fs.readdir(tmpDir));
+    const fs = await import("node:fs/promises");
+    const files = await fs.readdir(tmpDir);
     const queueFiles = files.filter(f => f.startsWith(queueFilePattern) && f.endsWith(".indicator"));
     
-    let position = 1; // Start at 1 (we're at least position 1)
-    let total = 1; // At least us
+    // Check if lock is held (someone is currently logging in)
+    const lockHeld = await isLockHeld(port);
     
+    let position = lockHeld ? 2 : 1; // If lock is held, we're at least position 2 (after current login)
+    let total = lockHeld ? 2 : 1; // At least us, plus current login if lock is held
+    
+    // Count all active queue members
     for (const file of queueFiles) {
       try {
         const filePath = join(tmpDir, file);
@@ -212,10 +217,15 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
         // Check if this indicator is from a running process
         try {
           process.kill(indicator.waitingPid, 0);
-          total++; // Count active queue members
-          if (indicator.timestamp < myTimestamp) {
-            position++; // Someone ahead of us
+          // This is an active queue member
+          if (indicator.waitingPid !== process.pid) {
+            // Not our own indicator
+            total++; // Count this queue member
+            if (indicator.timestamp < myTimestamp) {
+              position++; // Someone ahead of us in queue
+            }
           }
+          // If it's our own indicator, we don't count it (we're already counted)
         } catch {
           // Process died, ignore this indicator
         }
@@ -224,12 +234,10 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
       }
     }
     
-    // Add 1 for the current login (lock holder)
-    total++;
-    
     return { position, total };
-  } catch {
-    return { position: 1, total: 2 }; // Fallback
+  } catch (error) {
+    // Fallback: assume we're waiting behind current login
+    return { position: 2, total: 2 };
   }
 };
 
