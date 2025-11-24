@@ -51,10 +51,12 @@ const getLockFilePath = (port: number): string => {
   return join(tmpDir, `p0-login-${port}.lock`);
 };
 
-const getQueueIndicatorPath = (port: number): string => {
+const getQueueIndicatorPath = (port: number, pid?: number): string => {
   // Use system temp directory for queue indicator files
+  // Include PID in filename to allow multiple queue indicators
   const tmpDir = os.tmpdir();
-  return join(tmpDir, `p0-login-queue-${port}.indicator`);
+  const pidSuffix = pid ? `-${pid}` : "";
+  return join(tmpDir, `p0-login-queue-${port}${pidSuffix}.indicator`);
 };
 
 const readLockFile = async (lockPath: string): Promise<LockData | null> => {
@@ -138,7 +140,7 @@ const releaseLoginLock = async (port: number): Promise<void> => {
 
 /** Create queue indicator to signal that someone is waiting */
 const createQueueIndicator = async (port: number): Promise<void> => {
-  const queuePath = getQueueIndicatorPath(port);
+  const queuePath = getQueueIndicatorPath(port, process.pid);
   const indicator: QueueIndicator = {
     waitingPid: process.pid,
     timestamp: Date.now(),
@@ -151,7 +153,7 @@ const createQueueIndicator = async (port: number): Promise<void> => {
 
 /** Remove queue indicator */
 const removeQueueIndicator = async (port: number): Promise<void> => {
-  const queuePath = getQueueIndicatorPath(port);
+  const queuePath = getQueueIndicatorPath(port, process.pid);
   await unlink(queuePath).catch(() => {
     // Ignore errors if file doesn't exist
   });
@@ -159,25 +161,75 @@ const removeQueueIndicator = async (port: number): Promise<void> => {
 
 /** Check if someone is waiting in queue */
 const hasQueue = async (port: number): Promise<boolean> => {
-  const queuePath = getQueueIndicatorPath(port);
-  if (!(await fileExists(queuePath))) {
-    return false;
-  }
-
+  const tmpDir = os.tmpdir();
+  const queueFilePattern = `p0-login-queue-${port}-`;
+  
   try {
-    const content = await readFile(queuePath, "utf-8");
-    const indicator = JSON.parse(content) as QueueIndicator;
-    // Check if the waiting process is still running
-    try {
-      process.kill(indicator.waitingPid, 0);
-      return true; // Process is still waiting
-    } catch {
-      // Process died, remove stale indicator
-      await unlink(queuePath).catch(() => {});
-      return false;
+    const files = await import("node:fs/promises").then(fs => fs.readdir(tmpDir));
+    const queueFiles = files.filter(f => f.startsWith(queueFilePattern) && f.endsWith(".indicator"));
+    
+    for (const file of queueFiles) {
+      try {
+        const filePath = join(tmpDir, file);
+        const content = await readFile(filePath, "utf-8");
+        const indicator = JSON.parse(content) as QueueIndicator;
+        // Check if the waiting process is still running
+        try {
+          process.kill(indicator.waitingPid, 0);
+          return true; // At least one process is still waiting
+        } catch {
+          // Process died, remove stale indicator
+          await unlink(filePath).catch(() => {});
+        }
+      } catch {
+        // Error reading file, ignore
+      }
     }
+    return false;
   } catch {
     return false;
+  }
+};
+
+/** Get queue position by counting queue indicators with earlier timestamps */
+const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ position: number; total: number }> => {
+  const tmpDir = os.tmpdir();
+  const queueFilePattern = `p0-login-queue-${port}-`;
+  
+  try {
+    const files = await import("node:fs/promises").then(fs => fs.readdir(tmpDir));
+    const queueFiles = files.filter(f => f.startsWith(queueFilePattern) && f.endsWith(".indicator"));
+    
+    let position = 1; // Start at 1 (we're at least position 1)
+    let total = 1; // At least us
+    
+    for (const file of queueFiles) {
+      try {
+        const filePath = join(tmpDir, file);
+        const content = await readFile(filePath, "utf-8");
+        const indicator = JSON.parse(content) as QueueIndicator;
+        
+        // Check if this indicator is from a running process
+        try {
+          process.kill(indicator.waitingPid, 0);
+          total++; // Count active queue members
+          if (indicator.timestamp < myTimestamp) {
+            position++; // Someone ahead of us
+          }
+        } catch {
+          // Process died, ignore this indicator
+        }
+      } catch {
+        // Error reading file, ignore
+      }
+    }
+    
+    // Add 1 for the current login (lock holder)
+    total++;
+    
+    return { position, total };
+  } catch {
+    return { position: 1, total: 2 }; // Fallback
   }
 };
 
@@ -189,8 +241,11 @@ const waitForLockRelease = async (
   const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
   const startTime = Date.now();
   let elapsedSeconds = 0;
+  let lastPosition = 0;
+  let lastTotal = 0;
 
   // Create queue indicator to signal we're waiting
+  const myTimestamp = Date.now();
   await createQueueIndicator(port);
 
   // Cleanup queue indicator on exit
@@ -201,7 +256,11 @@ const waitForLockRelease = async (
   process.once("SIGTERM", cleanupQueueIndicator);
 
   try {
-    print2("Another user is currently logging in. Waiting in queue...");
+    // Get initial queue position
+    const initialPosition = await getQueuePosition(port, myTimestamp);
+    lastPosition = initialPosition.position;
+    lastTotal = initialPosition.total;
+    print2(`Another user is currently logging in. You are ${lastPosition}/${lastTotal} in the login queue.`);
 
     while (Date.now() - startTime < timeoutMs) {
       if (!(await isLockHeld(port))) {
@@ -211,14 +270,27 @@ const waitForLockRelease = async (
           await removeQueueIndicator(port);
           process.removeListener("SIGINT", cleanupQueueIndicator);
           process.removeListener("SIGTERM", cleanupQueueIndicator);
+          print2("It's your turn! Starting login...");
           return true;
         }
       }
 
-      // Show progress every 10 seconds
+      // Check queue position every poll interval
+      const queueInfo = await getQueuePosition(port, myTimestamp);
+      if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+        lastPosition = queueInfo.position;
+        lastTotal = queueInfo.total;
+        if (lastPosition === 1) {
+          print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
+        } else {
+          print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+        }
+      }
+
+      // Show progress every 30 seconds
       const newElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 10 === 0) {
-        print2(`Waiting... (${newElapsedSeconds} seconds)`);
+      if (newElapsedSeconds !== elapsedSeconds && newElapsedSeconds % 30 === 0) {
+        print2(`Still waiting... (${newElapsedSeconds} seconds elapsed, position ${lastPosition}/${lastTotal})`);
         elapsedSeconds = newElapsedSeconds;
       }
 
@@ -622,31 +694,55 @@ export const withRedirectServer = async <S, T, U>(
     // Update handler with the value (pkce) so completeAuth can use it when callback arrives
     handler.value = value;
     
-    // Set up 120-second timeout if someone is waiting in queue
-    const QUEUE_TIMEOUT_MS = 120 * 1000; // 120 seconds
+    // Set up 5-minute timeout if someone is waiting in queue
+    const QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
     let queueCheckIntervalId: NodeJS.Timeout | null = null;
 
     const checkQueueTimeout = async () => {
-      const queuePath = getQueueIndicatorPath(port);
-      if (!(await fileExists(queuePath))) {
+      if (!(await hasQueue(port))) {
         // No one is waiting, no timeout needed
         return;
       }
 
+      // Check all queue indicators to find the oldest one
+      const tmpDir = os.tmpdir();
+      const queueFilePattern = `p0-login-queue-${port}-`;
+      
       try {
-        const content = await readFile(queuePath, "utf-8");
-        const indicator = JSON.parse(content) as QueueIndicator;
+        const files = await import("node:fs/promises").then(fs => fs.readdir(tmpDir));
+        const queueFiles = files.filter(f => f.startsWith(queueFilePattern) && f.endsWith(".indicator"));
         
-        // Check if the waiting process is still running
-        try {
-          process.kill(indicator.waitingPid, 0);
-        } catch {
-          // Process died, no need to timeout
-          return;
+        let oldestTimestamp = Date.now();
+        let hasActiveQueue = false;
+        
+        for (const file of queueFiles) {
+          try {
+            const filePath = join(tmpDir, file);
+            const content = await readFile(filePath, "utf-8");
+            const indicator = JSON.parse(content) as QueueIndicator;
+            
+            // Check if the waiting process is still running
+            try {
+              process.kill(indicator.waitingPid, 0);
+              hasActiveQueue = true;
+              if (indicator.timestamp < oldestTimestamp) {
+                oldestTimestamp = indicator.timestamp;
+              }
+            } catch {
+              // Process died, remove stale indicator
+              await unlink(filePath).catch(() => {});
+            }
+          } catch {
+            // Error reading file, ignore
+          }
+        }
+        
+        if (!hasActiveQueue) {
+          return; // No active queue members
         }
 
-        // Calculate elapsed time since queue indicator was created
-        const elapsed = Date.now() - indicator.timestamp;
+        // Calculate elapsed time since oldest queue indicator was created
+        const elapsed = Date.now() - oldestTimestamp;
         if (elapsed >= QUEUE_TIMEOUT_MS) {
           // Timeout reached - cancel login
           print2(
