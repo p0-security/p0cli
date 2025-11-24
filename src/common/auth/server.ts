@@ -340,7 +340,23 @@ const waitForLockRelease = async (
       const lockStillHeld = await isLockHeld(port);
       
       if (!lockStillHeld && !lockAcquired) {
-        // Lock is released or stale, try to acquire
+        // Lock is released or stale - check queue position before trying to acquire
+        // This ensures we show the correct position (should be 1/1 or 1/X) before acquiring
+        const queueInfoBeforeAcquire = await getQueuePosition(port, myTimestamp);
+        if (queueInfoBeforeAcquire.position !== lastPosition || queueInfoBeforeAcquire.total !== lastTotal) {
+          lastPosition = queueInfoBeforeAcquire.position;
+          lastTotal = queueInfoBeforeAcquire.total;
+          if (lastPosition === 1 && lastTotal === 1) {
+            print2("You are now next in line (1/1). Acquiring lock...");
+          } else if (lastPosition === 1) {
+            print2(`You are now next in line (1/${lastTotal}). Acquiring lock...`);
+          } else {
+            print2(`Queue update: You are now ${lastPosition}/${lastTotal} in the login queue.`);
+          }
+          process.stderr.write("", () => {});
+        }
+        
+        // Try to acquire lock
         if (await acquireLoginLock(port)) {
           // Successfully acquired lock
           lockAcquired = true;
