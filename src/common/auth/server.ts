@@ -387,6 +387,10 @@ class SharedServerManager {
           if (!acquired) {
             throw new Error("Login cancelled while waiting in queue.");
           }
+          // After acquiring lock from queue, wait a bit for previous server to close
+          // The previous process releases the lock in clearActiveHandler, which has a 2s delay
+          // before closing the server, so we wait a bit more to ensure it's closed
+          await sleep(3000);
         }
         // Lock acquired, proceed with server creation
         lockAcquired = true;
@@ -394,93 +398,105 @@ class SharedServerManager {
       }
 
       // Create server and handle port conflicts
-      try {
-        server = await this.tryCreateServer(newApp, port);
-      } catch (error: any) {
-        if (error.code === "EADDRINUSE") {
-          // Port is in use - try to check if it's our auth server
-          try {
-            const healthUrl = `http://127.0.0.1:${port}/health`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1000);
-            
-            const response = await fetch(healthUrl, {
-              method: "GET",
-              signal: controller.signal,
-            }).catch(() => null);
-            
-            clearTimeout(timeoutId);
-            
-            // If it's our auth server and we're on Windows, we should have waited already
-            // But if we get here, it means the server is still up, so wait a bit and retry
-            if (response && response.ok) {
-              const data = await response.json().catch(() => null);
-              if (data?.type === "p0-auth-server" && os === "win" && lockAcquired) {
-                // Wait a bit for the server to potentially close, then retry
-                await sleep(2000);
-                try {
-                  server = await this.tryCreateServer(newApp, port);
-                } catch (retryError: any) {
-                  // Release lock on retry failure
+      // On Windows, if we acquired the lock, the previous server should be closing
+      // We may need to retry a few times as the server closes
+      let serverCreated = false;
+      let retryCount = 0;
+      const MAX_RETRIES = 10; // Try up to 10 times (20 seconds total)
+      
+      while (!serverCreated && retryCount < MAX_RETRIES) {
+        try {
+          const newServer = await this.tryCreateServer(newApp, port);
+          server = newServer;
+          serverCreated = true;
+        } catch (error: any) {
+          if (error.code === "EADDRINUSE") {
+            // Port is in use - check if it's our auth server
+            try {
+              const healthUrl = `http://127.0.0.1:${port}/health`;
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 1000);
+              
+              const response = await fetch(healthUrl, {
+                method: "GET",
+                signal: controller.signal,
+              }).catch(() => null);
+              
+              clearTimeout(timeoutId);
+              
+              // If it's our auth server and we're on Windows with lock acquired, wait and retry
+              if (response && response.ok) {
+                const data = await response.json().catch(() => null);
+                if (data?.type === "p0-auth-server" && os === "win" && lockAcquired) {
+                  // Server is still closing, wait a bit and retry
+                  retryCount++;
+                  if (retryCount < MAX_RETRIES) {
+                    await sleep(2000);
+                    continue; // Retry
+                  } else {
+                    // Max retries reached, release lock and error
+                    if (lockAcquired) {
+                      await releaseLoginLock(port).catch(() => {});
+                      this.lockPorts.delete(port);
+                    }
+                    throw new Error(
+                      `Port ${port} is still in use after waiting. The previous login session may be stuck. ` +
+                      `Please close any other p0 login processes and try again.`
+                    );
+                  }
+                } else {
+                  // Not our server or not Windows - release lock if we had one
                   if (lockAcquired) {
                     await releaseLoginLock(port).catch(() => {});
                     this.lockPorts.delete(port);
                   }
-                  if (retryError.code === "EADDRINUSE") {
-                    throw new Error(
-                      `Port ${port} is still in use. The previous login session may still be active. ` +
-                      `Please wait for it to complete.`
-                    );
-                  }
-                  throw retryError;
+                  throw new Error(
+                    `Port ${port} is already in use by another p0 login session. ` +
+                    `Please wait for the other login to complete, or if you're the only user, ` +
+                    `close any other p0 login processes and try again.`
+                  );
                 }
               } else {
-                // Not our server or not Windows - release lock if we had one
+                // Not our server or couldn't determine - release lock if we had one
                 if (lockAcquired) {
                   await releaseLoginLock(port).catch(() => {});
                   this.lockPorts.delete(port);
                 }
                 throw new Error(
-                  `Port ${port} is already in use by another p0 login session. ` +
-                  `Please wait for the other login to complete, or if you're the only user, ` +
-                  `close any other p0 login processes and try again.`
+                  `Port ${port} is already in use. ` +
+                  `Please wait for the other login to complete or close the other process.`
                 );
               }
-            } else {
-              // Not our server or couldn't determine - release lock if we had one
+            } catch (checkError: any) {
+              // Release lock on any error
               if (lockAcquired) {
                 await releaseLoginLock(port).catch(() => {});
                 this.lockPorts.delete(port);
               }
+              // If it's our error from above, rethrow it
+              if (checkError.message && checkError.message.includes("Port")) {
+                throw checkError;
+              }
+              // Otherwise, provide the standard error
               throw new Error(
-                `Port ${port} is already in use. ` +
+                `Port ${port} is already in use by another process. ` +
                 `Please wait for the other login to complete or close the other process.`
               );
             }
-          } catch (checkError: any) {
-            // Release lock on any error
+          } else {
+            // Non-EADDRINUSE error - release lock if we had one
             if (lockAcquired) {
               await releaseLoginLock(port).catch(() => {});
               this.lockPorts.delete(port);
             }
-            // If it's our error from above, rethrow it
-            if (checkError.message && checkError.message.includes("Port")) {
-              throw checkError;
-            }
-            // Otherwise, provide the standard error
-            throw new Error(
-              `Port ${port} is already in use by another process. ` +
-              `Please wait for the other login to complete or close the other process.`
-            );
+            throw error;
           }
-        } else {
-          // Non-EADDRINUSE error - release lock if we had one
-          if (lockAcquired) {
-            await releaseLoginLock(port).catch(() => {});
-            this.lockPorts.delete(port);
-          }
-          throw error;
         }
+      }
+
+      if (!server) {
+        // This shouldn't happen, but TypeScript needs this check
+        throw new Error("Failed to create server after retries");
       }
 
       app = newApp;
