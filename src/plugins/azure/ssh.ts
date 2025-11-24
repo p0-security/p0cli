@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { SshProvider } from "../../types/ssh";
+import { getOperatingSystem } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
 import {
   azAccountClearCommand,
@@ -91,7 +92,13 @@ export const azureSshProvider: SshProvider<
     return undefined;
   },
 
-  proxyCommand: (_, port) => ["nc", "localhost", port ?? "22"],
+  proxyCommand: (_, port) => {
+    const targetPort = port ?? "22";
+    // On Windows, use ncat (from nmap). On Unix/Mac, use nc.
+    // Both have the same command line syntax: command localhost port
+    const command = getOperatingSystem() === "win" ? "ncat" : "nc";
+    return [command, "localhost", targetPort];
+  },
 
   reproCommands: (request, additionalData) => {
     const { command: azAccountClearExe, args: azAccountClearArgs } =
