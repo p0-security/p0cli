@@ -303,6 +303,7 @@ const waitForLockRelease = async (
   let lastTotal = 0;
   let lockAcquired = false;
   let lastQueueCheck = 0;
+  let lastQueueMemberCount = 0; // Track queue member count to detect when someone leaves queue
 
   // Create queue indicator to signal we're waiting
   const myTimestamp = Date.now();
@@ -329,6 +330,7 @@ const waitForLockRelease = async (
     const initialPosition = await getQueuePosition(port, myTimestamp);
     lastPosition = initialPosition.position;
     lastTotal = initialPosition.total;
+    lastQueueMemberCount = initialPosition.total; // Initialize queue member count tracking
     print2(`You are ${lastPosition}/${lastTotal} in the login queue.`);
     print2("");
     
@@ -337,7 +339,7 @@ const waitForLockRelease = async (
 
     let lastQueueCheck = 0;
     let lastLockHeld: boolean | undefined = undefined;
-    const QUEUE_CHECK_INTERVAL_MS = 1000; // Check queue position every 1 second for faster updates
+    const QUEUE_CHECK_INTERVAL_MS = 500; // Check queue position every 500ms for faster updates
     
     while (Date.now() - startTime < timeoutMs) {
       // Check if lock is still held - this detects when someone acquires/releases the lock
@@ -346,13 +348,20 @@ const waitForLockRelease = async (
       // Check if lock status changed (someone acquired/released lock)
       const lockStatusChanged = lastLockHeld !== undefined && lockStillHeld !== lastLockHeld;
       
-      // If lock status changed and we haven't acquired the lock yet, immediately check queue position
-      if (lockStatusChanged && !lockAcquired) {
-        // Lock status changed - immediately check queue position
+      // Check queue position if lock status changed OR if it's time for regular check
+      const now = Date.now();
+      const shouldCheckQueueNow = lockStatusChanged || (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS);
+      
+      if (shouldCheckQueueNow && !lockAcquired) {
+        // Check queue position - this will detect when someone removes their queue indicator
         const queueInfo = await getQueuePosition(port, myTimestamp);
-        if (queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+        const queueMemberCountChanged = lastQueueMemberCount > 0 && queueInfo.total !== lastQueueMemberCount;
+        
+        // Update if lock status changed, queue member count changed, or position/total changed
+        if (lockStatusChanged || queueMemberCountChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
           lastPosition = queueInfo.position;
           lastTotal = queueInfo.total;
+          lastQueueMemberCount = queueInfo.total; // Track the total as queue member count
           if (lastPosition === 1) {
             print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
           } else if (lastTotal > 5) {
@@ -362,7 +371,7 @@ const waitForLockRelease = async (
           }
           process.stderr.write("", () => {});
         }
-        lastQueueCheck = Date.now(); // Reset queue check timer
+        lastQueueCheck = now;
         lastLockHeld = lockStillHeld;
       }
       
@@ -483,10 +492,13 @@ const waitForLockRelease = async (
         
         if (shouldCheckQueue) {
           const queueInfo = await getQueuePosition(port, myTimestamp);
-          // Always update if lock status changed (someone completed/started login) or position/total changed
-          if (lockStatusChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
+          const queueMemberCountChanged = lastQueueMemberCount > 0 && queueInfo.total !== lastQueueMemberCount;
+          
+          // Update if lock status changed, queue member count changed, or position/total changed
+          if (lockStatusChanged || queueMemberCountChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
             lastPosition = queueInfo.position;
             lastTotal = queueInfo.total;
+            lastQueueMemberCount = queueInfo.total; // Track the total as queue member count
             if (lastPosition === 1) {
               print2(`You are next in line (1/${lastTotal} in queue). Waiting for current login to complete...`);
             } else if (lastTotal > 5) {
