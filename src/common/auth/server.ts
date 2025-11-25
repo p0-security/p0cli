@@ -257,12 +257,15 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
     }
     
     // Calculate position: if lock is held, add 1 for the current login
-    // Position 1 = next in line (after current login if lock is held)
+    // Position 1 = the person currently logging in (has the lock)
+    // Position 2 = next in line (first person in queue, myIndex = 0)
+    // Position 3 = second in queue (myIndex = 1), etc.
     const position = lockHeld 
-      ? myIndex + 2 // +1 for 0-based index, +1 for current login
-      : myIndex + 1; // +1 for 0-based index
+      ? myIndex + 2 // +1 to convert 0-based index to 1-based, +1 for current login
+      : myIndex + 1; // +1 to convert 0-based index to 1-based
     
     // Total includes: current login (if lock held) + all queue members
+    // activeQueueMembers.length already includes us (we're in the queue)
     const total = lockHeld ? activeQueueMembers.length + 1 : activeQueueMembers.length;
     
     return { position, total };
