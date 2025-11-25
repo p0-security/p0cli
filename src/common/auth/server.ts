@@ -340,8 +340,10 @@ const waitForLockRelease = async (
       // Check if lock is still held - this detects when someone acquires/releases the lock
       const lockStillHeld = await isLockHeld(port);
       
-      // Immediately check queue position if lock status changed (someone acquired/released lock)
+      // Check if lock status changed (someone acquired/released lock)
       const lockStatusChanged = lastLockHeld !== undefined && lockStillHeld !== lastLockHeld;
+      
+      // If lock status changed and we haven't acquired the lock yet, immediately check queue position
       if (lockStatusChanged && !lockAcquired) {
         // Lock status changed - immediately check queue position
         const queueInfo = await getQueuePosition(port, myTimestamp);
@@ -357,6 +359,7 @@ const waitForLockRelease = async (
           }
           process.stderr.write("", () => {});
         }
+        lastQueueCheck = Date.now(); // Reset queue check timer
         lastLockHeld = lockStillHeld;
       }
       
@@ -468,15 +471,16 @@ const waitForLockRelease = async (
           }
         }
       } else {
-        // Still waiting for lock - check queue position regularly
-        // Check every loop iteration to catch changes immediately
+        // Still waiting for lock - check queue position every loop iteration
+        // This ensures we catch changes immediately when someone acquires/releases lock
         const now = Date.now();
         const lockStatusChanged = lastLockHeld !== undefined && lockStillHeld !== lastLockHeld;
+        // Check queue position if lock status changed OR if it's been 1 second since last check
         const shouldCheckQueue = (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS) || lockStatusChanged;
         
         if (shouldCheckQueue) {
           const queueInfo = await getQueuePosition(port, myTimestamp);
-          // Always update if lock status changed (someone completed login) or position/total changed
+          // Always update if lock status changed (someone completed/started login) or position/total changed
           if (lockStatusChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
             lastPosition = queueInfo.position;
             lastTotal = queueInfo.total;
