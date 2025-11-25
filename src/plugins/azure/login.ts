@@ -12,7 +12,12 @@ import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
-import { getClientId, getMicrosoftPrimaryDomain } from "../../types/authUtils";
+import {
+  getClientId,
+  getMicrosoftPrimaryDomain,
+  getProviderDomain,
+  getProviderId,
+} from "../../types/authUtils";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import open from "open";
@@ -29,10 +34,11 @@ type CodeExchange = {
 };
 
 const requestAuth = async (org: OrgData) => {
-  const microsoftPrimaryDomain = getMicrosoftPrimaryDomain(org);
+  const providerDomain =
+    getMicrosoftPrimaryDomain(org) || getProviderDomain(org);
   const clientId = getClientId(org);
 
-  if (!microsoftPrimaryDomain) {
+  if (!providerDomain) {
     throw "Azure login requires a configured Microsoft primary domain.";
   }
   if (!clientId) {
@@ -40,7 +46,7 @@ const requestAuth = async (org: OrgData) => {
   }
 
   const pkce = await pkceChallenge(PKCE_LENGTH);
-  const baseUrl = `https://login.microsoftonline.com/${microsoftPrimaryDomain}/oauth2/v2.0/authorize`;
+  const baseUrl = `https://login.microsoftonline.com/${providerDomain}/oauth2/v2.0/authorize`;
 
   const authBody: AuthorizeRequest = {
     client_id: clientId,
@@ -72,17 +78,18 @@ const requestToken = async (
   code: string,
   pkce: { code_challenge: string; code_verifier: string }
 ) => {
-  const microsoftPrimaryDomain = getMicrosoftPrimaryDomain(org);
+  const providerDomain =
+    getMicrosoftPrimaryDomain(org) || getProviderDomain(org);
   const clientId = getClientId(org);
 
-  if (!microsoftPrimaryDomain) {
+  if (!providerDomain) {
     throw "Azure login requires a configured Microsoft primary domain.";
   }
   if (!clientId) {
     throw "Azure login requires a configured client ID.";
   }
 
-  const tokenUrl = `https://login.microsoftonline.com/${microsoftPrimaryDomain}/oauth2/v2.0/token`;
+  const tokenUrl = `https://login.microsoftonline.com/${providerDomain}/oauth2/v2.0/token`;
 
   const body = {
     client_id: clientId,
