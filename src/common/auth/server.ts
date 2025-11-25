@@ -266,6 +266,9 @@ const getQueuePosition = async (port: number, myTimestamp: number): Promise<{ po
     
     // Total includes: current login (if lock held) + all queue members
     // activeQueueMembers.length already includes us (we're in the queue)
+    // When lock is held: total = 1 (active login) + activeQueueMembers.length (all waiting)
+    // When lock not held: total = activeQueueMembers.length (all waiting, no active login)
+    // Note: activeQueueMembers includes all processes with queue indicators (waiting in queue)
     const total = lockHeld ? activeQueueMembers.length + 1 : activeQueueMembers.length;
     
     return { position, total };
@@ -295,8 +298,8 @@ const waitForLockRelease = async (
   port: number,
   timeoutMs: number = 5 * 60 * 1000 // 5 minutes default
 ): Promise<boolean> => {
-  const POLL_INTERVAL_MS = 500; // Check every 500ms for faster updates
-  const QUEUE_CHECK_INTERVAL_MS = 500; // Check queue position every 500ms for faster updates
+  const POLL_INTERVAL_MS = 200; // Check every 200ms for very fast updates
+  const QUEUE_CHECK_INTERVAL_MS = 200; // Check queue position every 200ms for very fast updates
   const startTime = Date.now();
   let elapsedSeconds = 0;
   let lastPosition = 0;
@@ -339,7 +342,7 @@ const waitForLockRelease = async (
 
     let lastQueueCheck = 0;
     let lastLockHeld: boolean | undefined = undefined;
-    const QUEUE_CHECK_INTERVAL_MS = 500; // Check queue position every 500ms for faster updates
+    const QUEUE_CHECK_INTERVAL_MS = 200; // Check queue position every 200ms for very fast updates
     
     while (Date.now() - startTime < timeoutMs) {
       // Check if lock is still held - this detects when someone acquires/releases the lock
@@ -349,6 +352,7 @@ const waitForLockRelease = async (
       const lockStatusChanged = lastLockHeld !== undefined && lockStillHeld !== lastLockHeld;
       
       // Check queue position if lock status changed OR if it's time for regular check
+      // We need to check frequently to detect when someone removes their queue indicator
       const now = Date.now();
       const shouldCheckQueueNow = lockStatusChanged || (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS);
       
@@ -357,7 +361,8 @@ const waitForLockRelease = async (
         const queueInfo = await getQueuePosition(port, myTimestamp);
         const queueMemberCountChanged = lastQueueMemberCount > 0 && queueInfo.total !== lastQueueMemberCount;
         
-        // Update if lock status changed, queue member count changed, or position/total changed
+        // Always update if lock status changed, queue member count changed, or position/total changed
+        // This ensures we catch when someone acquires lock and removes their queue indicator
         if (lockStatusChanged || queueMemberCountChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
           lastPosition = queueInfo.position;
           lastTotal = queueInfo.total;
@@ -372,6 +377,9 @@ const waitForLockRelease = async (
           process.stderr.write("", () => {});
         }
         lastQueueCheck = now;
+        lastLockHeld = lockStillHeld;
+      } else if (!lockAcquired) {
+        // Always update lastLockHeld even if we don't check queue, so we can detect changes
         lastLockHeld = lockStillHeld;
       }
       
@@ -494,7 +502,8 @@ const waitForLockRelease = async (
           const queueInfo = await getQueuePosition(port, myTimestamp);
           const queueMemberCountChanged = lastQueueMemberCount > 0 && queueInfo.total !== lastQueueMemberCount;
           
-          // Update if lock status changed, queue member count changed, or position/total changed
+          // Always update if lock status changed, queue member count changed, or position/total changed
+          // This ensures we catch when someone acquires lock and removes their queue indicator
           if (lockStatusChanged || queueMemberCountChanged || queueInfo.position !== lastPosition || queueInfo.total !== lastTotal) {
             lastPosition = queueInfo.position;
             lastTotal = queueInfo.total;
