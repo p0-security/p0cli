@@ -362,23 +362,51 @@ const waitForLockRelease = async (
           // Successfully acquired lock
           lockAcquired = true;
           
-          // Check queue position BEFORE removing our indicator, so we can see the total count
-          const queueInfoAfterLock = await getQueuePosition(port, myTimestamp);
-          
           // Now remove our queue indicator
           await removeQueueIndicator(port);
           
-          // Calculate the correct total: if there are other queue members, total = 1 (us) + others
-          // If no other queue members, total = 1 (just us)
-          const hasOtherQueueMembers = await hasQueue(port);
-          const totalCount = hasOtherQueueMembers ? queueInfoAfterLock.total : 1;
+          // Check how many others are still waiting in queue
+          // We need to count the actual queue indicator files to get the accurate count
+          const tmpDir = os.tmpdir();
+          const queueFilePattern = `p0-login-queue-${port}-`;
+          let otherQueueCount = 0;
           
-          if (totalCount === 1) {
+          try {
+            const fs = await import("node:fs/promises");
+            const files = await fs.readdir(tmpDir);
+            const queueFiles = files.filter(f => f.startsWith(queueFilePattern) && f.endsWith(".indicator"));
+            
+            for (const file of queueFiles) {
+              try {
+                const filePath = join(tmpDir, file);
+                const content = await readFile(filePath, "utf-8");
+                const indicator = JSON.parse(content) as QueueIndicator;
+                // Check if this indicator is from a running process (and not us)
+                try {
+                  process.kill(indicator.waitingPid, 0);
+                  if (indicator.waitingPid !== process.pid) {
+                    otherQueueCount++;
+                  }
+                } catch {
+                  // Process died, ignore
+                }
+              } catch {
+                // Error reading file, ignore
+              }
+            }
+          } catch {
+            // Error reading directory, assume no others
+          }
+          
+          // Final total: 1 (us, now active) + others still waiting
+          const finalTotal = 1 + otherQueueCount;
+          
+          if (finalTotal === 1) {
             // We're the only one left - we're next in line
             print2("You are now next in line (1/1). Waiting for previous server to close...");
           } else {
             // There are still others waiting, but we're next
-            print2(`You are now next in line (1/${totalCount}). Waiting for previous server to close...`);
+            print2(`You are now next in line (1/${finalTotal}). Waiting for previous server to close...`);
           }
           process.stderr.write("", () => {});
         } else {
