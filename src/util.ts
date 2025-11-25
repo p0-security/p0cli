@@ -24,6 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import type { Readable } from "node:stream";
+import open from "open";
 import { sys } from "typescript";
 
 /**
@@ -237,4 +238,54 @@ export const osSafeCommand = (command: string, args: string[]) => {
   return isWindows
     ? { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] }
     : { command, args };
+};
+
+export const osSafeOpen = async (
+  target: string,
+  options?: open.Options
+): Promise<void> => {
+  const child = await open(target, options);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    // Timeout to avoid hanging indefinitely
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.removeListener("error", errorHandler);
+        child.removeListener("spawn", spawnHandler);
+        reject(new Error("Failed to open target: timeout exceeded"));
+      }
+    }, 5000);
+
+    const errorHandler = (err: Error) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeout);
+        child.removeListener("spawn", spawnHandler);
+        child.removeListener("error", errorHandler);
+        reject(err);
+      }
+    };
+
+    const spawnHandler = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeout);
+        child.removeListener("spawn", spawnHandler);
+        child.removeListener("error", errorHandler);
+        resolve();
+      }
+    };
+
+    // Attach handlers synchronously to catch immediate errors
+    child.on("error", errorHandler);
+    child.on("spawn", spawnHandler);
+
+    // Handle already-spawned case (process started before handlers attached)
+    if (child.pid !== undefined) {
+      spawnHandler();
+    }
+  });
 };

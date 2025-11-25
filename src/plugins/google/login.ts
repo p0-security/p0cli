@@ -14,7 +14,7 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { getGoogleTenantConfig } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
-import open from "open";
+import { osSafeOpen } from "../../util";
 import pkceChallenge from "pkce-challenge";
 
 type CodeExchange = {
@@ -40,11 +40,14 @@ const requestAuth = async () => {
     scope: "openid email",
   };
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
-  open(url).catch(() => {
+  try {
+    await osSafeOpen(url);
+    print2(`Please use the opened browser window to continue your P0 login.`);
+  } catch {
     print2(`Please visit the following URL to continue login:
 
-${url}`);
-  });
+    ${url}`);
+  }
   return pkce;
 };
 

@@ -13,9 +13,8 @@ import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { sleep, throwAssertNever } from "../../util";
+import { sleep, throwAssertNever, osSafeOpen } from "../../util";
 import { LoginPluginType } from "../login";
-import open from "open";
 
 export const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
@@ -177,15 +176,23 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
   const { user_code, verification_uri_complete } = processAuthzResponse(
     deviceAuthorizationResponse
   );
-  print2(`Please use the opened browser window to continue your P0 login.
 
+  try {
+    await osSafeOpen(verification_uri_complete);
+    print2(`Please use the opened browser window to continue your P0 login.`);
+  } catch {
+    print2(
+      `Could not open browser automatically. Please visit the following URL in your browser: ${verification_uri_complete}`
+    );
+  }
+
+  print2(`
     When prompted, confirm that ${oidcProviderLabels(providerType)} displays this code:
     
       ${user_code}
     
     Waiting for authorization...
     `);
-  void open(verification_uri_complete);
   return await waitForActivation<A, T>(
     deviceAuthorizationResponse,
     processAuthzExpiry,

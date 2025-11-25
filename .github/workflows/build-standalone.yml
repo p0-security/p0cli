@@ -353,3 +353,48 @@ jobs:
           files: build/sea/p0-windows-${{ matrix.arch }}-${{ env.VERSION }}.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build_linux:
+    name: Build CLI on Linux
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+      - name: Install dependencies
+        run: yarn install
+      - name: Build
+        run: |
+          yarn build:linux
+          ./linux/build-linux.sh
+      - name: Package application
+        run: |
+          mkdir -p build/sea/deb/usr/local/bin
+          mkdir -p build/sea/deb/DEBIAN
+
+          # Copy the binary directly to /usr/local/bin
+          cp build/sea/p0 build/sea/deb/usr/local/bin/p0
+          chmod +x build/sea/deb/usr/local/bin/p0
+
+          # Preprocess and copy control file
+          node ./linux/preprocess-control.cjs
+          cp ./linux/control build/sea/deb/DEBIAN/control
+
+          # Build the .deb package
+          dpkg-deb --build build/sea/deb build/sea/p0-linux-${{ env.VERSION }}.deb
+      - name: Upload artifact to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-linux-${{ env.VERSION }}
+          path: build/sea/p0-linux-${{ env.VERSION }}.deb
+      - name: Upload artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/sea/p0-linux-${{ env.VERSION }}.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

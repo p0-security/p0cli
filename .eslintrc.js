@@ -67,6 +67,7 @@ module.exports = {
     "win",
     "mac",
     "preprocess-sea.cjs",
+    "linux",
   ],
   overrides: [],
   parserOptions: {
