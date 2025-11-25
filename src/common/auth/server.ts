@@ -361,17 +361,24 @@ const waitForLockRelease = async (
         if (await acquireLoginLock(port)) {
           // Successfully acquired lock
           lockAcquired = true;
+          
+          // Check queue position BEFORE removing our indicator, so we can see the total count
+          const queueInfoAfterLock = await getQueuePosition(port, myTimestamp);
+          
+          // Now remove our queue indicator
           await removeQueueIndicator(port);
           
-          // Check if anyone else is still waiting in queue
-          // Since we removed our queue indicator, we need to check if there are other queue members
+          // Calculate the correct total: if there are other queue members, total = 1 (us) + others
+          // If no other queue members, total = 1 (just us)
           const hasOtherQueueMembers = await hasQueue(port);
-          if (!hasOtherQueueMembers) {
+          const totalCount = hasOtherQueueMembers ? queueInfoAfterLock.total : 1;
+          
+          if (totalCount === 1) {
             // We're the only one left - we're next in line
             print2("You are now next in line (1/1). Waiting for previous server to close...");
           } else {
             // There are still others waiting, but we're next
-            print2("You are now next in line. Waiting for previous server to close...");
+            print2(`You are now next in line (1/${totalCount}). Waiting for previous server to close...`);
           }
           process.stderr.write("", () => {});
         } else {
