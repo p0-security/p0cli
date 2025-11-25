@@ -292,8 +292,8 @@ const waitForLockRelease = async (
   port: number,
   timeoutMs: number = 5 * 60 * 1000 // 5 minutes default
 ): Promise<boolean> => {
-  const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
-  const QUEUE_CHECK_INTERVAL_MS = 2000; // Check queue position every 2 seconds
+  const POLL_INTERVAL_MS = 500; // Check every 500ms for faster updates
+  const QUEUE_CHECK_INTERVAL_MS = 500; // Check queue position every 500ms for faster updates
   const startTime = Date.now();
   let elapsedSeconds = 0;
   let lastPosition = 0;
@@ -475,7 +475,7 @@ const waitForLockRelease = async (
         // This ensures we catch changes immediately when someone acquires/releases lock
         const now = Date.now();
         const lockStatusChanged = lastLockHeld !== undefined && lockStillHeld !== lastLockHeld;
-        // Check queue position if lock status changed OR if it's been 1 second since last check
+        // Always check queue position if lock status changed, otherwise check every 500ms
         const shouldCheckQueue = (now - lastQueueCheck >= QUEUE_CHECK_INTERVAL_MS) || lockStatusChanged;
         
         if (shouldCheckQueue) {
@@ -497,7 +497,7 @@ const waitForLockRelease = async (
           }
           lastQueueCheck = now;
         }
-        // Always update lastLockHeld to detect changes
+        // Always update lastLockHeld to detect changes - this is critical for detecting when someone acquires lock
         lastLockHeld = lockStillHeld;
 
         // Show progress every 10 seconds (changed from 30 for better visibility)
