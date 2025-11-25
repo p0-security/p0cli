@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { createKeyPair } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
-import { getAppName } from "../../util";
+import { getAppName, getOperatingSystem } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
 import { generateSelfHostedCertificate } from "./keygen";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
@@ -96,7 +96,11 @@ export const selfHostedSshProvider: SshProvider<
   },
 
   proxyCommand: (request, port) => {
-    return ["nc", request.id, port ?? "22"];
+    const targetPort = port ?? "22";
+    // On Windows, use ncat (from nmap). On Unix/Mac, use nc.
+    // Both have the same command line syntax: command localhost port
+    const command = getOperatingSystem() === "win" ? "ncat" : "nc";
+    return [command, request.id, targetPort];
   },
 
   reproCommands: () => undefined,
