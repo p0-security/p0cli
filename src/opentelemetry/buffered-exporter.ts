@@ -39,7 +39,12 @@ export class BufferedSpanExporter implements SpanExporter {
     }
 
     if (this.delegate) {
-      this.delegate.export(spans, resultCallback);
+      try {
+        this.delegate.export(spans, resultCallback);
+      } catch (error) {
+        // Silently ignore export errors - traces are best-effort telemetry
+        resultCallback({ code: ExportResultCode.FAILED });
+      }
     } else {
       this.buffer.push(...spans);
       resultCallback({ code: ExportResultCode.SUCCESS });
@@ -48,7 +53,11 @@ export class BufferedSpanExporter implements SpanExporter {
 
   async forceFlush(): Promise<void> {
     if (this.delegate) {
-      return this.delegate.forceFlush?.();
+      try {
+        await this.delegate.forceFlush?.();
+      } catch (error) {
+        // Silently ignore flush errors
+      }
     }
     // No-op if buffering
   }
@@ -56,7 +65,11 @@ export class BufferedSpanExporter implements SpanExporter {
   async shutdown(): Promise<void> {
     this.isShutdown = true;
     if (this.delegate) {
-      return this.delegate.shutdown();
+      try {
+        await this.delegate.shutdown();
+      } catch (error) {
+        // Silently ignore shutdown errors
+      }
     }
   }
 
@@ -67,7 +80,15 @@ export class BufferedSpanExporter implements SpanExporter {
 
     if (this.buffer.length > 0) {
       const toFlush = this.buffer.splice(0);
-      this.delegate.export(toFlush, () => {});
+      try {
+        this.delegate.export(toFlush, (result) => {
+          if (result.code === ExportResultCode.FAILED) {
+            // Silently ignore export failures
+          }
+        });
+      } catch (error) {
+        // Silently ignore export errors
+      }
     }
   }
 }
