@@ -80,6 +80,7 @@
     "build": "tsc --project tsconfig.build.json && cp -r public build/dist/",
     "build:macos": "tsc --project tsconfig.build.json && cp -r public build/dist/ && node esbuild.js",
     "build:windows": "tsc --project tsconfig.build.json && xcopy public build\\dist\\ /E /I /Y && node esbuild.js",
+    "build:debian": "tsc --project tsconfig.build.json && cp -r public build/dist/ && node esbuild.js",
     "test": "yarn test:unit",
     "test:unit": "NODE_ENV=unit vitest run",
     "clean": "rm -rf build",
