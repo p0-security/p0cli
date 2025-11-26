@@ -240,6 +240,17 @@ export const osSafeCommand = (command: string, args: string[]) => {
     : { command, args };
 };
 
+const OPEN_TIMEOUT_MS = 5000;
+
+/**
+ * Wraps the 'open' function to provide a timeout and error handling. This is
+ * necessary because on some OSes, 'open' may fail depending on whether the machine
+ * has the required dependencies installed (e.g., 'xdg-open' on Linux). Without
+ * proper error handling, the promise may hang indefinitely or throw an unhandled exception,
+ * which would crash the application entirely.
+ * @param target the URL to open
+ * @param options options to be passed directly to the 'open' function
+ */
 export const osSafeOpen = async (
   target: string,
   options?: open.Options
@@ -249,32 +260,32 @@ export const osSafeOpen = async (
   return new Promise((resolve, reject) => {
     let settled = false;
 
+    const settle = () => {
+      settled = true;
+      child.removeListener("error", errorHandler);
+      child.removeListener("spawn", spawnHandler);
+    };
+
     // Timeout to avoid hanging indefinitely
     const timeout = setTimeout(() => {
       if (!settled) {
-        settled = true;
-        child.removeListener("error", errorHandler);
-        child.removeListener("spawn", spawnHandler);
+        settle();
         reject(new Error("Failed to open target: timeout exceeded"));
       }
-    }, 5000);
+    }, OPEN_TIMEOUT_MS);
 
     const errorHandler = (err: Error) => {
       if (!settled) {
-        settled = true;
+        settle();
         clearTimeout(timeout);
-        child.removeListener("spawn", spawnHandler);
-        child.removeListener("error", errorHandler);
         reject(err);
       }
     };
 
     const spawnHandler = () => {
       if (!settled) {
-        settled = true;
+        settle();
         clearTimeout(timeout);
-        child.removeListener("spawn", spawnHandler);
-        child.removeListener("error", errorHandler);
         resolve();
       }
     };

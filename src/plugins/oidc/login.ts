@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { print2 } from "../../drivers/stdio";
+import { print1, print2 } from "../../drivers/stdio";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { sleep, throwAssertNever, osSafeOpen } from "../../util";
@@ -179,9 +179,9 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
 
   try {
     await osSafeOpen(verification_uri_complete);
-    print2(`Please use the opened browser window to continue your P0 login.`);
+    print1(`Please use the opened browser window to continue your P0 login.`);
   } catch {
-    print2(
+    print1(
       `Could not open browser automatically. Please visit the following URL in your browser: ${verification_uri_complete}`
     );
   }

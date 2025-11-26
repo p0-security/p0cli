@@ -12,7 +12,7 @@ import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { getGoogleTenantConfig } from "../../drivers/config";
-import { print2 } from "../../drivers/stdio";
+import { print1 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { osSafeOpen } from "../../util";
 import pkceChallenge from "pkce-challenge";
@@ -42,9 +42,9 @@ const requestAuth = async () => {
   const url = `${GOOGLE_OIDC_URL}?${urlEncode(authBody)}`;
   try {
     await osSafeOpen(url);
-    print2(`Please use the opened browser window to continue your P0 login.`);
+    print1(`Please use the opened browser window to continue your P0 login.`);
   } catch {
-    print2(`Please visit the following URL to continue login:
+    print1(`Please visit the following URL to continue login:
 
     ${url}`);
   }

@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { print2 } from "../../drivers/stdio";
+import { print1 } from "../../drivers/stdio";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { osSafeOpen } from "../../util";
@@ -49,9 +49,9 @@ const requestAuth = async (org: OrgData) => {
 
   try {
     await osSafeOpen(url);
-    print2(`Please use the opened browser window to continue your P0 login.`);
+    print1(`Please use the opened browser window to continue your P0 login.`);
   } catch {
-    print2(`Please visit the following URL to continue login:
+    print1(`Please visit the following URL to continue login:
 
     ${url}`);
   }
