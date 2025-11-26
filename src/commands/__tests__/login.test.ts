@@ -69,7 +69,12 @@ const mockIdentity: Identity = {
   org: {
     tenantId: "test-tenant",
     slug: "test-org",
-    ssoProvider: "google",
+    auth: {
+      type: "sso",
+      provider: {
+        ssoProvider: "google",
+      },
+    },
   },
   token: "test",
 };
@@ -106,7 +111,12 @@ describe("login", () => {
     mockFetchOrgData.mockResolvedValue({
       slug: "test-org",
       tenantId: "test-tenant",
-      ssoProvider: "microsoft",
+      auth: {
+        type: "sso",
+        provider: {
+          ssoProvider: "microsoft",
+        },
+      },
     });
     await expect(login({ org: "test-org" })).rejects.toMatchInlineSnapshot(
       `"Unsupported login for your organization"`
@@ -126,7 +136,12 @@ describe("login", () => {
       mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
-        ssoProvider: "google",
+        auth: {
+          type: "sso",
+          provider: {
+            ssoProvider: "google",
+          },
+        },
       });
     });
 
@@ -162,7 +177,12 @@ describe("login", () => {
       mockFetchOrgData.mockResolvedValue({
         slug: "test-org",
         tenantId: "test-tenant",
-        ssoProvider: "google",
+        auth: {
+          type: "sso",
+          provider: {
+            ssoProvider: "google",
+          },
+        },
       });
     });
 
@@ -213,7 +233,12 @@ Please contact support@p0.dev for assistance."
         mockFetchOrgData.mockResolvedValue({
           slug: "test-org",
           tenantId: "test-tenant",
-          ssoProvider: "google",
+          auth: {
+            type: "sso",
+            provider: {
+              ssoProvider: "google",
+            },
+          },
         });
       });
 
@@ -253,7 +278,12 @@ Please contact support@p0.dev for assistance."
         mockFetchOrgData.mockResolvedValue({
           slug: "other-org",
           tenantId: "other-tenant",
-          ssoProvider: "google",
+          auth: {
+            type: "sso",
+            provider: {
+              ssoProvider: "google",
+            },
+          },
         });
 
         await login({ org: "other-org" });

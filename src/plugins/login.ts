@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getProviderType } from "../types/authUtils";
 import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
 import { azureLogin } from "./azure/login";
@@ -37,7 +38,13 @@ export const pluginLoginMap: Record<
   okta: oktaLogin,
   ping: pingLogin,
   "google-oidc": googleLogin,
-  "oidc-pkce": async (org) => await pluginLoginMap[org.providerType!]!(org),
+  "oidc-pkce": async (org) => {
+    const providerType = getProviderType(org);
+    if (!providerType) {
+      throw "Missing provider type for OIDC PKCE login";
+    }
+    return await pluginLoginMap[providerType]!(org);
+  },
   password: emailPasswordLogin,
   "azure-oidc": azureLogin,
 };
