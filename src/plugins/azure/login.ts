@@ -11,16 +11,15 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { withRedirectServer } from "../../common/auth/server";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { print2 } from "../../drivers/stdio";
+import { print1 } from "../../drivers/stdio";
 import {
   getClientId,
   getMicrosoftPrimaryDomain,
   getProviderDomain,
-  getProviderId,
 } from "../../types/authUtils";
 import { AuthorizeRequest, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import open from "open";
+import { osSafeOpen } from "../../util";
 import pkceChallenge from "pkce-challenge";
 
 const AZURE_SCOPE = "openid profile email offline_access";
@@ -60,15 +59,14 @@ const requestAuth = async (org: OrgData) => {
 
   const url = `${baseUrl}?${urlEncode(authBody)}`;
 
-  print2(`Your browser has been opened to visit:
-
-    ${url}\n`);
-
-  open(url).catch(() => {
-    print2(`Please visit the following URL to continue login:
+  try {
+    await osSafeOpen(url);
+    print1(`Please use the opened browser window to continue your P0 login.`);
+  } catch {
+    print1(`Please visit the following URL to continue login:
 
     ${url}`);
-  });
+  }
 
   return pkce;
 };

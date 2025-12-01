@@ -1,0 +1,9 @@
+# Configuration file for the Debian build of the CLI
+Package: p0
+Version: __VERSION__
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: P0 Security, Inc. <support@p0.dev>
+Homepage: https://p0.dev
+Description: P0 Security CLI
