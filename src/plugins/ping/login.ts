@@ -8,6 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import {
+  getEnvironmentId,
+  getProviderDomain,
+  getProviderType,
+} from "../../types/authUtils";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { oidcLogin, oidcLoginSteps } from "../oidc/login";
@@ -16,12 +21,16 @@ import { oidcLogin, oidcLoginSteps } from "../oidc/login";
 export const pingLogin = async (org: OrgData) =>
   oidcLogin<AuthorizeResponse, TokenResponse>(
     oidcLoginSteps(org, "openid email profile", () => {
-      if (org.providerType !== "ping" || org.providerType === undefined) {
-        throw `Invalid provider type ${org.providerType} (expected "ping")`;
+      const providerType = getProviderType(org);
+      const providerDomain = getProviderDomain(org);
+      const environmentId = getEnvironmentId(org);
+
+      if (providerType !== "ping" || !providerDomain || !environmentId) {
+        throw `Invalid provider ${providerType} (expected ping OIDC provider)`;
       }
       return {
-        deviceAuthorizationUrl: `https://${org.providerDomain}/${org.environmentId}/as/device_authorization`,
-        tokenUrl: `https://${org.providerDomain}/${org.environmentId}/as/token`,
+        deviceAuthorizationUrl: `https://${providerDomain}/${environmentId}/as/device_authorization`,
+        tokenUrl: `https://${providerDomain}/${environmentId}/as/token`,
       };
     })
   );

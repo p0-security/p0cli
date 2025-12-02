@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { getPasswordCredential } from "../plugins/email/login";
+import { getProviderId, getSsoProvider } from "../types/authUtils";
 import { Identity } from "../types/identity";
 import { OrgData } from "../types/org";
 import { getContactMessage, loadConfig } from "./config";
@@ -33,7 +34,10 @@ export async function initializeFirebase() {
 }
 
 const findProviderId = (org: OrgData) => {
-  switch (org.ssoProvider) {
+  const ssoProvider = getSsoProvider(org);
+  const providerId = getProviderId(org);
+
+  switch (ssoProvider) {
     case "google":
       return ProviderId.GOOGLE;
     case "google-oidc":
@@ -44,7 +48,7 @@ const findProviderId = (org: OrgData) => {
     case undefined:
       return ProviderId.PASSWORD;
     default:
-      return org.providerId;
+      return providerId;
   }
 };
 
@@ -105,6 +109,10 @@ export const authenticateToFirebase = async (
   const { credential, org } = identity;
 
   const providerId = findProviderId(org);
+  if (!providerId) {
+    throw new Error("No provider ID found for organization");
+  }
+
   const firebaseCredential =
     providerId === ProviderId.PASSWORD
       ? getPasswordCredential()

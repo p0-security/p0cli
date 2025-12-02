@@ -10,7 +10,13 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { print1, print2 } from "../../drivers/stdio";
+import { print1 } from "../../drivers/stdio";
+import {
+  getClientId,
+  getProviderDomain,
+  getProviderType,
+  getSsoProvider,
+} from "../../types/authUtils";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { sleep, throwAssertNever, osSafeOpen } from "../../util";
@@ -19,7 +25,15 @@ import { LoginPluginType } from "../login";
 export const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export const validateProviderDomain = (org: OrgData) => {
-  if (!org.providerDomain) throw "Login requires a configured provider domain.";
+  const ssoProvider = getSsoProvider(org);
+  const providerDomain = getProviderDomain(org);
+
+  if (ssoProvider !== "oidc-pkce") {
+    throw "Login requires an OIDC PKCE provider configuration.";
+  }
+  if (!providerDomain) {
+    throw "Login requires a configured provider domain.";
+  }
 };
 
 const oidcProviderLabels = (providerType: LoginPluginType) => {
@@ -110,9 +124,14 @@ export const oidcLoginSteps = (
   urls: () => { deviceAuthorizationUrl: string; tokenUrl: string }
 ) => {
   const { deviceAuthorizationUrl, tokenUrl } = urls();
-  if (org.providerType === undefined) {
+  const ssoProvider = getSsoProvider(org);
+  const clientId = getClientId(org);
+  const providerType = getProviderType(org);
+
+  if (ssoProvider !== "oidc-pkce" || !clientId) {
     throw "Your organization's login configuration does not support this access. Your admin will need to install a supported OIDC provider in order for you to use this command.";
   }
+
   const buildOidcAuthorizeRequest = () => {
     validateProviderDomain(org);
     return {
@@ -120,7 +139,7 @@ export const oidcLoginSteps = (
         method: "POST",
         headers: OIDC_HEADERS,
         body: urlEncode({
-          client_id: org.clientId,
+          client_id: clientId,
           scope,
         }),
       },
@@ -136,7 +155,7 @@ export const oidcLoginSteps = (
         method: "POST",
         headers: OIDC_HEADERS,
         body: urlEncode({
-          client_id: org.clientId,
+          client_id: clientId,
           device_code: authorize.device_code,
           grant_type: DEVICE_GRANT_TYPE,
         }),
@@ -144,7 +163,7 @@ export const oidcLoginSteps = (
     };
   };
   return {
-    providerType: org.providerType,
+    providerType,
     validateResponse,
     buildAuthorizeRequest: buildOidcAuthorizeRequest,
     buildTokenRequest: buildOidcTokenRequest,
@@ -186,7 +205,7 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
     );
   }
 
-  print2(`
+  print1(`
     When prompted, confirm that ${oidcProviderLabels(providerType)} displays this code:
     
       ${user_code}

@@ -21,6 +21,7 @@ import { initializeFirebase } from "../drivers/firestore";
 import { getOrgData } from "../drivers/org";
 import { print2 } from "../drivers/stdio";
 import { pluginLoginMap } from "../plugins/login";
+import { getSsoProvider, usePasswordAuth } from "../types/authUtils";
 import { Authn } from "../types/identity";
 import { OrgData } from "../types/org";
 import yargs from "yargs";
@@ -28,9 +29,9 @@ import yargs from "yargs";
 const MIN_REMAINING_TOKEN_TIME_SECONDS = 5 * 60;
 
 const doActualLogin = async (orgWithSlug: OrgData, debug?: boolean) => {
-  const plugin =
-    orgWithSlug?.ssoProvider ??
-    (orgWithSlug.usePassword ? "password" : undefined);
+  const ssoProvider = getSsoProvider(orgWithSlug);
+  const isPasswordAuth = usePasswordAuth(orgWithSlug);
+  const plugin = ssoProvider ?? (isPasswordAuth ? "password" : undefined);
 
   if (debug) {
     print2(`Using login method: ${plugin ?? "unknown"}`);

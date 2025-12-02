@@ -18,7 +18,12 @@ exports[`login > organization exists > should write the user's identity & config
   "org": {
     "slug": "test-org",
     "tenantId": "test-tenant",
-    "ssoProvider": "google"
+    "auth": {
+      "type": "sso",
+      "provider": {
+        "ssoProvider": "google"
+      }
+    }
   }
 }",
     {
