@@ -12,6 +12,7 @@ import { sanitizeAsFileName } from "../common/destination";
 import { PRIVATE_KEY_PATH } from "../common/keys";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
+import { observedExit } from "../opentelemetry/otel-helpers";
 import {
   conditionalAbortBeforeThrow,
   getAppPath,
@@ -24,6 +25,7 @@ import {
   SSH_PROVIDERS,
 } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import fs from "fs";
 import path from "path";
 import tmp from "tmp-promise";
@@ -103,7 +105,7 @@ const sshResolveAction = async (
       if (args.debug) {
         print2(err);
       }
-      sys.exit(1);
+      observedExit(1, err);
     }
 
     return silentlyExit(err);

@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getHelpMessage } from "../drivers/config";
 import { print1, print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
+import { observedExit } from "../opentelemetry/otel-helpers";
 import { p0VersionInfo, stringifyVersionInfo } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
@@ -94,10 +95,11 @@ export const getCli = async () =>
     .fail((message, error, yargs) => {
       if (error) {
         print2(error);
+        observedExit(1, error);
       } else {
         print2(yargs.help());
         print2(`\n${message}`);
         print2(`\n${getHelpMessage()}`);
+        sys.exit(1);
       }
-      sys.exit(1);
     });

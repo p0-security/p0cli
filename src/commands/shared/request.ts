@@ -11,12 +11,15 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { print2, spinUntil } from "../../drivers/stdio";
+import { observedExit } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
 import {
   PermissionRequest,
   PluginRequest,
   RequestResponse,
 } from "../../types/request";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { error } from "console";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -72,10 +75,10 @@ const resolveCode = (
       ? `${message}: ${permission.error.message}`
       : message;
     if (code !== 0 || logMessage) print2(errorMessage);
-    return code;
+    return { code, errorMessage };
   } else {
     print2("Your request did not complete within 5 minutes.");
-    return 4;
+    return { code: 4 };
   }
 };
 
@@ -163,12 +166,12 @@ export const request =
         if (!chunkData) {
           throw new Error("Errored waiting for request to complete");
         }
-        const code = resolveCode(
+        const { code, errorMessage } = resolveCode(
           chunkData.request as PermissionRequest<PluginRequest>,
           shouldLogMessage
         );
         if (code) {
-          sys.exit(code);
+          observedExit(code, errorMessage);
           return undefined;
         }
         return chunkData;

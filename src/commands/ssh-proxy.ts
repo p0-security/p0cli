@@ -19,7 +19,7 @@ import * as fs from "fs/promises";
 import path from "path";
 import yargs from "yargs";
 
-export const sshProxyCommand = (yargs: yargs.Argv) =>
+export const xsshProxyCommand = (yargs: yargs.Argv) =>
   yargs.command<SshProxyCommandArgs>(
     "ssh-proxy <destination>",
     false,

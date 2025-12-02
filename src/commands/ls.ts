@@ -77,6 +77,8 @@ const ls = async (
   const isAdminCommand =
     args.arguments.includes("--all") || args.arguments.includes("--principal");
 
+  const isHelpCommand = args.arguments.includes("--help");
+
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
   const allArguments = [
@@ -89,7 +91,7 @@ const ls = async (
      * This is done so that we can give the user a sense of the number of results
      * that are not displayed.
      */
-    ...(args.size ? ["--size", args.size * 2] : []),
+    ...(args.size && !isHelpCommand ? ["--size", args.size * 2] : []),
   ].map(String); // make sure all elements are strings to satisfy command line args
 
   const responsePromise: Promise<LsResponse> = command<LsResponse>(

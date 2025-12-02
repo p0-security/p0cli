@@ -80,9 +80,7 @@ const provisionRequest = async (
     : "Waiting for access to be provisioned";
   print2(message);
 
-  const result = await decodeProvisionStatus<AzureRdpRequest>(response.request);
-
-  if (!result) process.exit(1);
+  decodeProvisionStatus<AzureRdpRequest>(response.request);
 
   return {
     provisionedRequest: response.request,
