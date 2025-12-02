@@ -1,5 +1,6 @@
 /**
- * Injects the version from package.json into the control file for the Debian build
+ * Injects the version from package.json into the control file.
+ * The control file is the Debian build configuration file for application packaging.
  */
 const fs = require("fs");
 const path = require("path");
