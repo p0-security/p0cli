@@ -1,4 +1,3 @@
-# Configuration file for the Debian build of the CLI
 Package: p0
 Version: __VERSION__
 Section: utils
