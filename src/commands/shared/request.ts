@@ -121,7 +121,8 @@ export const request =
           options?.message === "all" ||
           (options?.message === "approval-required" &&
             !data.isPreexisting &&
-            !data.isPersistent);
+            !data.isPersistent &&
+            !data.isPreapproved);
         return { shouldLogMessage, data };
       } else {
         throw data;
