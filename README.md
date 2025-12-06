@@ -209,6 +209,27 @@ p0 ssh <INSTANCE_NAME>
 
 If you already have access, this will directly open the SSH session. Otherwise, it will request access, wait for approval, and open a SSH session once the access is provisioned.
 
+## macOS URL Handler
+
+The P0 CLI includes a macOS URL handler application that registers the `p0://` URL scheme, enabling browser-initiated CLI commands. This allows you to create clickable links that automatically invoke P0 commands.
+
+### Example
+
+Click a link like `p0://ssh/my-host` in your browser, and it will automatically execute:
+
+```bash
+p0 ssh my-host
+```
+
+### Installation
+
+See [mac/url-handler/README.md](mac/url-handler/README.md) for complete documentation, including:
+
+- Building and installing the URL handler
+- URL format reference
+- Integration examples
+- Troubleshooting guide
+
 ## Support
 
 If you encounter any issues with the P0 CLI, you can open a GitHub issue on this repo, email `support@p0.dev`, or reach out to us on our [community slack](https://join.slack.com/t/p0securitycommunity/shared_invite/zt-1zouzlovp-1kuym9RfuzkJ17ZlvAf6mQ).
