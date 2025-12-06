@@ -25,6 +25,6 @@ follow certain guidelines, in order to ensure usability of the CLI:
 ## Single-Artifact Binary
 
 To build the CLI as a single-artifact binary, use the `yarn build:macos` script and then
-run `build.sh`. You must have NodeJS version 22 or newer currently installed on your system
+run `build-macOS.sh`. You must have NodeJS version 22 or newer currently installed on your system
 when building the standalone CLI. The resulting binary will be output to `/build/sea`, and can
 be run even if NodeJS is uninstalled on your system. Currently only MacOS is supported.
