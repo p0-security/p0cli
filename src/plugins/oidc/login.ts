@@ -198,11 +198,17 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
 
   try {
     await osSafeOpen(verification_uri_complete);
-    print1(`Please use the opened browser window to continue your P0 login.`);
-  } catch {
+    print1("Please use the opened browser window to continue your P0 login.");
     print1(
-      `Could not open browser automatically. Please visit the following URL in your browser: ${verification_uri_complete}`
+      "If the browser window didn't open automatically or you are operating in a headless environment,\nyou can also visit this URL from any device:"
     );
+    print1(verification_uri_complete);
+  } catch {
+    print1("Could not open browser automatically.");
+    print1(
+      "Please visit the following URL in a web browser on any device to complete your P0 login:"
+    );
+    print1(verification_uri_complete);
   }
 
   print1(`
