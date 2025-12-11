@@ -94,7 +94,11 @@ const clearIdentityCache = async () => {
 export const loadCredentials = async (): Promise<Identity> => {
   try {
     const buffer = await fs.readFile(getIdentityFilePath());
-    return JSON.parse(buffer.toString());
+    const data = JSON.parse(buffer.toString()) as Identity;
+    if (!data.org?.auth) {
+      throw { code: "LEGACY_IDENTITY", slug: data.org.slug };
+    }
+    return data;
   } catch (error: any) {
     if (error?.code === "ENOENT") {
       throw `Please run \`${getAppName()} login <organization>\`.`;
@@ -110,7 +114,21 @@ const loadCredentialsWithAutoLogin = async (options?: {
   noRefresh?: boolean;
   debug?: boolean;
 }): Promise<Identity> => {
-  const identity = await loadCredentials();
+  let identity: Identity;
+  try {
+    identity = await loadCredentials();
+  } catch (e: any) {
+    if (e?.code === "LEGACY_IDENTITY") {
+      await login(
+        { org: e.slug },
+        { debug: options?.debug, skipAuthenticate: true }
+      );
+      print2("\n");
+      return loadCredentialsWithAutoLogin({ noRefresh: true });
+    }
+    throw e;
+  }
+
   if (remainingTokenTime(identity) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
     return identity;
   }

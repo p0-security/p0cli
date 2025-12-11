@@ -14,9 +14,16 @@ export const authenticate = async () => ({
       access_token: "test-access-token",
     },
     org: {
-      ssoProvider: "oidc-pkce",
-      providerDomain: "test.okta.com",
-      providerType: "okta",
+      auth: {
+        type: "sso" as const,
+        provider: {
+          ssoProvider: "oidc-pkce" as const,
+          providerDomain: "test.okta.com",
+          providerType: "okta" as const,
+          providerId: "test-provider-id",
+          clientId: "test-client-id",
+        },
+      },
       slug: "test-org",
       tenantId: "test-tenant",
     },

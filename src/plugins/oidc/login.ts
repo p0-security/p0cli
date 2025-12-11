@@ -10,17 +10,30 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
-import { print2 } from "../../drivers/stdio";
+import { print1 } from "../../drivers/stdio";
+import {
+  getClientId,
+  getProviderDomain,
+  getProviderType,
+  getSsoProvider,
+} from "../../types/authUtils";
 import { AuthorizeResponse, OidcLoginSteps } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { sleep, throwAssertNever } from "../../util";
+import { sleep, throwAssertNever, osSafeOpen } from "../../util";
 import { LoginPluginType } from "../login";
-import open from "open";
 
 export const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export const validateProviderDomain = (org: OrgData) => {
-  if (!org.providerDomain) throw "Login requires a configured provider domain.";
+  const ssoProvider = getSsoProvider(org);
+  const providerDomain = getProviderDomain(org);
+
+  if (ssoProvider !== "oidc-pkce") {
+    throw "Login requires an OIDC PKCE provider configuration.";
+  }
+  if (!providerDomain) {
+    throw "Login requires a configured provider domain.";
+  }
 };
 
 const oidcProviderLabels = (providerType: LoginPluginType) => {
@@ -111,9 +124,14 @@ export const oidcLoginSteps = (
   urls: () => { deviceAuthorizationUrl: string; tokenUrl: string }
 ) => {
   const { deviceAuthorizationUrl, tokenUrl } = urls();
-  if (org.providerType === undefined) {
+  const ssoProvider = getSsoProvider(org);
+  const clientId = getClientId(org);
+  const providerType = getProviderType(org);
+
+  if (ssoProvider !== "oidc-pkce" || !clientId) {
     throw "Your organization's login configuration does not support this access. Your admin will need to install a supported OIDC provider in order for you to use this command.";
   }
+
   const buildOidcAuthorizeRequest = () => {
     validateProviderDomain(org);
     return {
@@ -121,7 +139,7 @@ export const oidcLoginSteps = (
         method: "POST",
         headers: OIDC_HEADERS,
         body: urlEncode({
-          client_id: org.clientId,
+          client_id: clientId,
           scope,
         }),
       },
@@ -137,7 +155,7 @@ export const oidcLoginSteps = (
         method: "POST",
         headers: OIDC_HEADERS,
         body: urlEncode({
-          client_id: org.clientId,
+          client_id: clientId,
           device_code: authorize.device_code,
           grant_type: DEVICE_GRANT_TYPE,
         }),
@@ -145,7 +163,7 @@ export const oidcLoginSteps = (
     };
   };
   return {
-    providerType: org.providerType,
+    providerType,
     validateResponse,
     buildAuthorizeRequest: buildOidcAuthorizeRequest,
     buildTokenRequest: buildOidcTokenRequest,
@@ -177,15 +195,29 @@ export const oidcLogin = async <A, T>(steps: OidcLoginSteps<A>) => {
   const { user_code, verification_uri_complete } = processAuthzResponse(
     deviceAuthorizationResponse
   );
-  print2(`Please use the opened browser window to continue your P0 login.
 
+  try {
+    await osSafeOpen(verification_uri_complete);
+    print1("Please use the opened browser window to continue your P0 login.");
+    print1(
+      "If the browser window didn't open automatically or you are operating in a headless environment,\nyou can also visit this URL from any device:"
+    );
+    print1(verification_uri_complete);
+  } catch {
+    print1("Could not open browser automatically.");
+    print1(
+      "Please visit the following URL in a web browser on any device to complete your P0 login:"
+    );
+    print1(verification_uri_complete);
+  }
+
+  print1(`
     When prompted, confirm that ${oidcProviderLabels(providerType)} displays this code:
     
       ${user_code}
     
     Waiting for authorization...
     `);
-  void open(verification_uri_complete);
   return await waitForActivation<A, T>(
     deviceAuthorizationResponse,
     processAuthzExpiry,

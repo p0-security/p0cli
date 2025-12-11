@@ -11,6 +11,11 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { deleteIdentity } from "../../drivers/auth";
+import {
+  getClientId,
+  getProviderDomain,
+  getProviderType,
+} from "../../types/authUtils";
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
@@ -40,12 +45,20 @@ const fetchSsoWebToken = async (
   appId: string,
   { org, credential }: Identity
 ) => {
+  const providerType = getProviderType(org);
+  const providerDomain = getProviderDomain(org);
+  const clientId = getClientId(org);
+
+  if (providerType !== "okta" || !providerDomain || !clientId) {
+    throw "Invalid provider configuration for Okta token exchange";
+  }
+
   const init = {
     method: "POST",
     headers: OIDC_HEADERS,
     body: urlEncode({
       audience: `urn:okta:apps:${appId}`,
-      client_id: org.clientId,
+      client_id: clientId,
       actor_token: credential.access_token,
       actor_token_type: ACCESS_TOKEN_TYPE,
       subject_token: credential.id_token,
@@ -55,10 +68,7 @@ const fetchSsoWebToken = async (
     }),
   };
   validateProviderDomain(org);
-  const response = await fetch(
-    `https:${org.providerDomain}/oauth2/v1/token`,
-    init
-  );
+  const response = await fetch(`https:${providerDomain}/oauth2/v1/token`, init);
 
   if (!response.ok) {
     if (response.status === 400) {
@@ -81,14 +91,19 @@ const fetchSamlResponse = async (
   org: OrgData,
   { access_token }: TokenResponse
 ) => {
+  const providerType = getProviderType(org);
+  const providerDomain = getProviderDomain(org);
+
+  if (providerType !== "okta" || !providerDomain) {
+    throw "Invalid provider configuration for Okta SAML response";
+  }
+
   const init = {
     method: "GET",
     headers: omit(OIDC_HEADERS, "Content-Type"),
   };
   validateProviderDomain(org);
-  const url = `https://${
-    org.providerDomain
-  }/login/token/sso?token=${encodeURIComponent(access_token)}`;
+  const url = `https://${providerDomain}/login/token/sso?token=${encodeURIComponent(access_token)}`;
   const response = await fetch(url, init);
   await validateResponse(response);
   const html = await response.text();
@@ -101,12 +116,15 @@ const fetchSamlResponse = async (
 export const oktaLogin = async (org: OrgData) =>
   oidcLogin<AuthorizeResponse, TokenResponse>(
     oidcLoginSteps(org, "openid email profile okta.apps.sso", () => {
-      if (org.providerType !== "okta") {
-        throw `Invalid provider type ${org.providerType} (expected "okta")`;
+      const providerType = getProviderType(org);
+      const providerDomain = getProviderDomain(org);
+
+      if (providerType !== "okta" || !providerDomain) {
+        throw `Invalid provider configuration (expected okta OIDC provider)`;
       }
       return {
-        deviceAuthorizationUrl: `https://${org.providerDomain}/oauth2/v1/device/authorize`,
-        tokenUrl: `https://${org.providerDomain}/oauth2/v1/token`,
+        deviceAuthorizationUrl: `https://${providerDomain}/oauth2/v1/device/authorize`,
+        tokenUrl: `https://${providerDomain}/oauth2/v1/token`,
       };
     })
   );

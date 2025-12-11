@@ -24,6 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import type { Readable } from "node:stream";
+import open from "open";
 import { sys } from "typescript";
 import { observedExit } from "./opentelemetry/otel-helpers";
 
@@ -238,4 +239,65 @@ export const osSafeCommand = (command: string, args: string[]) => {
   return isWindows
     ? { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] }
     : { command, args };
+};
+
+const OPEN_TIMEOUT_MS = 5000;
+
+/**
+ * Wraps the 'open' function to provide a timeout and error handling. This is
+ * necessary because on some OSes, 'open' may fail depending on whether the machine
+ * has the required dependencies installed (e.g., 'xdg-open' on Linux). Without
+ * proper error handling, the promise may hang indefinitely or throw an unhandled exception,
+ * which would crash the application entirely.
+ * @param target the URL to open
+ * @param options options to be passed directly to the 'open' function
+ */
+export const osSafeOpen = async (
+  target: string,
+  options?: open.Options
+): Promise<void> => {
+  const child = await open(target, options);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const settle = () => {
+      settled = true;
+      child.removeListener("error", errorHandler);
+      child.removeListener("spawn", spawnHandler);
+    };
+
+    // Timeout to avoid hanging indefinitely
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settle();
+        reject(new Error("Failed to open target: timeout exceeded"));
+      }
+    }, OPEN_TIMEOUT_MS);
+
+    const errorHandler = (err: Error) => {
+      if (!settled) {
+        settle();
+        clearTimeout(timeout);
+        reject(err);
+      }
+    };
+
+    const spawnHandler = () => {
+      if (!settled) {
+        settle();
+        clearTimeout(timeout);
+        resolve();
+      }
+    };
+
+    // Attach handlers synchronously to catch immediate errors
+    child.on("error", errorHandler);
+    child.on("spawn", spawnHandler);
+
+    // Handle already-spawned case (process started before handlers attached)
+    if (child.pid !== undefined) {
+      spawnHandler();
+    }
+  });
 };

@@ -48,4 +48,5 @@ export type RequestResponse<T> = {
   request: T;
   isPreexisting: boolean;
   isPersistent: boolean;
+  isPreapproved: boolean;
 };
