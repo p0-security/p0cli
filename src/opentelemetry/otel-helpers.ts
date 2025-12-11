@@ -8,9 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../drivers/stdio";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 export const observedExit = (code: number, error?: unknown) => {
+  print2(`observedExit: ${code} ${error}`);
   if (error || code !== 0) {
     const span = trace.getActiveSpan();
     if (span) {
