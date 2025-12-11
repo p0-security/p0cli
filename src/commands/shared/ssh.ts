@@ -46,6 +46,12 @@ export type ScpCommandArgs = BaseSshCommandArgs & {
   destination: string;
 };
 
+export type RsyncCommandArgs = BaseSshCommandArgs & {
+  source: string;
+  destination: string;
+  _commandType?: "rsync";
+};
+
 export type SshCommandArgs = BaseSshCommandArgs & {
   sudo?: boolean;
   destination: string;
@@ -66,7 +72,7 @@ export type SshProxyCommandArgs = {
   identityFile: string;
 };
 
-export type CommandArgs = ScpCommandArgs | SshCommandArgs;
+export type CommandArgs = ScpCommandArgs | SshCommandArgs | RsyncCommandArgs;
 
 export type SshRequestOptions = {
   approvedOnly?: boolean;

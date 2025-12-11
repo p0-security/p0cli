@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import {
   CommandArgs,
+  RsyncCommandArgs,
   ScpCommandArgs,
   SSH_PROVIDERS,
   SshAdditionalSetup,
@@ -117,6 +118,7 @@ const accessPropagationGuard = (
  * Parses and prints a chunk of SSH output to stderr.
  *
  * If debug is enabled, all output is printed. Otherwise, only selected messages are printed.
+ * For rsync commands, we also print progress output.
  *
  * @param chunkString the chunk to print
  * @param options SSH spawn options
@@ -125,9 +127,26 @@ const parseAndPrintSshOutputToStderr = (
   chunkString: string,
   options: SpawnSshNodeOptions
 ) => {
-  const lines = chunkString.split("\n");
   const isPreTest = options.isAccessPropagationPreTest;
+  const isRsync = options.command === "rsync";
 
+  if (isRsync && !isPreTest && !options.debug) {
+    // For rsync, we need to handle progress output specially
+    // rsync uses carriage returns (\r) to update the same line for progress
+    // We'll write directly to stderr to preserve the formatting
+    // Filter out only SSH debug messages
+    if (!chunkString.startsWith("debug1:") && 
+        !chunkString.startsWith("debug2:") && 
+        !chunkString.startsWith("debug3:") &&
+        !chunkString.trim().startsWith("debug")) {
+      // Write directly to stderr to preserve carriage returns and progress formatting
+      process.stderr.write(chunkString);
+      return;
+    }
+  }
+
+  // For non-rsync or debug mode, use the original line-by-line parsing
+  const lines = chunkString.split("\n");
   for (const line of lines) {
     if (options.debug) {
       print2(line);
@@ -139,6 +158,17 @@ const parseAndPrintSshOutputToStderr = (
       } else if (!isPreTest && line.includes("port forwarding failed")) {
         // We also want to let the user know if port forwarding failed
         print2(line);
+      } else if (isRsync && !isPreTest) {
+        // Fallback for rsync if we didn't handle it above
+        if (
+          !line.startsWith("debug1:") &&
+          !line.startsWith("debug2:") &&
+          !line.startsWith("debug3:") &&
+          !line.trim().startsWith("debug") &&
+          line.trim().length > 0
+        ) {
+          print2(line);
+        }
       }
     }
   }
@@ -258,7 +288,11 @@ async function spawnSshNode(
 
       if (!options.isAccessPropagationPreTest) {
         options.audit?.("end");
-        print2(`SSH session terminated`);
+        if (code !== null && code !== 0) {
+          print2(`Command failed with exit code ${code}`);
+        } else {
+          print2(`SSH session terminated`);
+        }
       }
 
       if (options.isAccessPropagationPreTest && isAccessPropagated()) {
@@ -272,7 +306,8 @@ async function spawnSshNode(
 
     child.on("error", (error: Error) => {
       cleanupAllListeners();
-      reject(`Failed to start SSH process: ${error.message}`);
+      const commandStr = `${options.command} ${options.args.join(" ")}`;
+      reject(`Failed to start process: ${error.message}\nCommand: ${commandStr}`);
     });
   });
 }
@@ -292,18 +327,116 @@ const createCommand = (
   const argsOverride = sshOptionsOverrides.flatMap((opt) => ["-o", opt]);
 
   if ("source" in args) {
-    addScpArgs(args);
+    // Check if this is rsync or scp
+    const isRsync = "_commandType" in args && args._commandType === "rsync";
+    if (isRsync) {
+      addRsyncArgs(args as RsyncCommandArgs);
+      
+      // Separate SSH options from rsync options
+      // SSH options are those that start with -i, -o, -v, -P, -p, or are -o values
+      // Everything else is a rsync option
+      const sshOptionsForCommand: string[] = [];
+      const rsyncOptions: string[] = [];
+      const allOptions = args.sshOptions ? args.sshOptions : [];
+      
+      let i = 0;
+      while (i < allOptions.length) {
+        const opt = allOptions[i];
+        if (!opt) {
+          i += 1;
+          continue;
+        }
+        if (opt === "-i" || opt === "-v" || opt === "-P" || opt === "-p") {
+          // SSH option with potential value
+          sshOptionsForCommand.push(opt);
+          if (opt === "-i" || opt === "-P" || opt === "-p") {
+            const nextOpt = allOptions[i + 1];
+            if (i + 1 < allOptions.length && nextOpt && !nextOpt.startsWith("-")) {
+              sshOptionsForCommand.push(nextOpt);
+              i += 2;
+            } else {
+              i += 1;
+            }
+          } else {
+            i += 1;
+          }
+        } else if (opt === "-o") {
+          // SSH -o option
+          sshOptionsForCommand.push(opt);
+          const nextOpt = allOptions[i + 1];
+          if (i + 1 < allOptions.length && nextOpt) {
+            sshOptionsForCommand.push(nextOpt);
+            i += 2;
+          } else {
+            i += 1;
+          }
+        } else {
+          // This is a rsync option
+          rsyncOptions.push(opt);
+          i += 1;
+        }
+      }
 
-    return {
-      command: "scp" as const,
-      args: [
-        ...(args.sshOptions ? args.sshOptions : []),
-        ...argsOverride,
-        ...(port ? ["-P", port] : []),
+      // Build SSH command string from SSH options
+      const sshCommandString = buildSshCommandStringForRsync(
+        sshOptionsForCommand,
+        request,
+        argsOverride,
+        port ?? undefined
+      );
+
+      // For rsync's -e option, we need to pass the SSH command as a single string
+      // that will be executed by the shell. The format should be: "ssh -i key -o ... user@host"
+      // rsync will then execute: ssh -i key -o ... user@host rsync --server ...
+      // For rsync's -e option, we need to pass the SSH command as a single string
+      // When using spawn with shell: false, we pass it as a single argument
+      // rsync will then execute: <ssh-command> rsync --server ...
+      // If sudo is requested, we need to tell rsync to use sudo on the remote side
+      const finalRsyncOptions = [...rsyncOptions];
+      if (args.sudo) {
+        // Check if --rsync-path is already specified
+        const hasRsyncPath = finalRsyncOptions.some(
+          (opt, idx) => opt === "--rsync-path" || (idx > 0 && finalRsyncOptions[idx - 1] === "--rsync-path")
+        );
+        if (!hasRsyncPath) {
+          finalRsyncOptions.push("--rsync-path", "sudo rsync");
+        }
+      }
+
+      const rsyncArgs = [
+        "-e",
+        sshCommandString, // This is already a properly escaped string
+        ...finalRsyncOptions,
         args.source,
         args.destination,
-      ],
-    };
+      ];
+
+      // Debug output for rsync commands
+      if (args.debug) {
+        print2(`[DEBUG] Rsync command: rsync ${rsyncArgs.map(arg => arg.includes(' ') ? `"${arg}"` : arg).join(" ")}`);
+        print2(`[DEBUG] SSH command string: ${sshCommandString}`);
+        print2(`[DEBUG] Full rsync args: ${JSON.stringify(rsyncArgs)}`);
+      }
+
+      return {
+        command: "rsync" as const,
+        args: rsyncArgs,
+      };
+    } else {
+      // This is scp
+      addScpArgs(args);
+
+      return {
+        command: "scp" as const,
+        args: [
+          ...(args.sshOptions ? args.sshOptions : []),
+          ...argsOverride,
+          ...(port ? ["-P", port] : []),
+          args.source,
+          args.destination,
+        ],
+      };
+    }
   }
 
   return {
@@ -426,6 +559,91 @@ const addScpArgs = (args: ScpCommandArgs) => {
   }
 };
 
+const addRsyncArgs = (args: RsyncCommandArgs) => {
+  const sshOptions = args.sshOptions ? args.sshOptions : [];
+
+  // if a response is not received after three 5 minute attempts,
+  // the connection will be closed.
+  const serverAliveCountMaxOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveCountMax")
+  );
+
+  if (!serverAliveCountMaxOptionExists) {
+    sshOptions.push("-o", "ServerAliveCountMax=3");
+  }
+
+  const serverAliveIntervalOptionExists = sshOptions.some(
+    (opt, idx) =>
+      opt === "-o" && sshOptions[idx + 1]?.startsWith("ServerAliveInterval")
+  );
+
+  if (!serverAliveIntervalOptionExists) {
+    sshOptions.push("-o", "ServerAliveInterval=300");
+  }
+};
+
+/** Builds the SSH command string for rsync's -e option.
+ *
+ * This constructs a command like: ssh -i key -o ProxyCommand='...' -o ... -p port
+ * The command string is properly escaped for use in rsync's -e option.
+ * 
+ * Note: When rsync uses -e, it will extract the host from the destination path
+ * and call: ssh ... user@host rsync --server ...
+ * So we build the SSH command without the user@host part.
+ */
+const buildSshCommandStringForRsync = (
+  sshOptions: string[],
+  _request: SshRequest,
+  argsOverride: string[],
+  port: string | undefined
+): string => {
+  const sshArgs: string[] = [];
+
+  // Add all SSH options
+  sshArgs.push(...sshOptions);
+
+  // Add override options (from setupData)
+  sshArgs.push(...argsOverride);
+
+  // Add port if specified (rsync uses -p for SSH, not -P like scp)
+  if (port) {
+    sshArgs.push("-p", port);
+  }
+
+  // Note: We do NOT add user@host here because rsync's -e option expects
+  // just the SSH command, and rsync will handle the destination separately
+  // via the source/destination paths. The user@host is already in the destination path.
+
+  // Build the command string
+  // For rsync's -e option, we need to pass the SSH command as a single string
+  // that can be executed. We'll join the arguments with spaces, but we need
+  // to be careful about escaping.
+  const commandParts = ["ssh", ...sshArgs];
+  
+  // For rsync's -e option, we need to properly escape the command string
+  // The safest approach is to wrap the entire command in a way that preserves
+  // arguments with spaces. We'll use a format that works with shell execution.
+  // Since rsync will execute this as: sh -c "ssh ...", we need to escape properly.
+  
+  // For rsync's -e option, we need to create a command string that can be executed
+  // We'll escape each argument properly, only quoting when necessary
+  const escapedParts = commandParts.map((part) => {
+    // If the part contains spaces, quotes, or special shell characters, wrap it in single quotes
+    // and escape any single quotes within it
+    if (part.includes(" ") || part.includes("'") || part.includes('"') || part.includes("$") || part.includes("`") || part.includes("\\")) {
+      // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+      const escaped = part.replace(/'/g, "'\\''");
+      return `'${escaped}'`;
+    }
+    // Simple arguments don't need quoting
+    return part;
+  });
+
+  // Join with spaces - this creates a command string that can be executed
+  return escapedParts.join(" ");
+};
+
 /** Converts arguments for manual execution - arguments may have to be quoted or certain characters escaped when executing the commands from a shell */
 const transformForShell = (args: string[]) => {
   return args.map((arg) => {
@@ -539,6 +757,8 @@ export const sshOrScp = async (args: {
         `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
       );
     }
+    // Always show the command being executed in debug mode
+    print2(`Executing: ${command} ${commandArgs.join(" ")}`);
   }
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
@@ -559,6 +779,10 @@ export const sshOrScp = async (args: {
       return exitCode; // Only exit if there was an error when pre-testing
     }
 
+    // For rsync, we want to see progress output which goes to stderr
+    // We still pipe stderr to filter SSH debug messages but show rsync progress
+    const isRsyncCommand = command === "rsync";
+    
     return await spawnSshNode({
       audit: (action) =>
         void auditSshSessionActivity({
@@ -572,7 +796,7 @@ export const sshOrScp = async (args: {
       abortController,
       command,
       args: commandArgs,
-      stdio: ["inherit", "inherit", "pipe"],
+      stdio: ["inherit", "inherit", "pipe"], // stderr piped to filter SSH noise but show rsync progress
       debug,
       provider: request.type,
       endTime: endTime,

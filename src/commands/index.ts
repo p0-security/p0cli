@@ -22,6 +22,7 @@ import { lsCommand } from "./ls";
 import { printBearerTokenCommand } from "./print-bearer-token";
 import { rdpCommand } from "./rdp";
 import { requestCommand } from "./request";
+import { rsyncCommand } from "./rsync";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sshProxyCommand } from "./ssh-proxy";
@@ -42,6 +43,7 @@ const commands = [
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
+  rsyncCommand,
   rdpCommand,
   kubeconfigCommand,
   printBearerTokenCommand,
