@@ -403,6 +403,41 @@ const createCommand = (
         }
       }
 
+      // Add default rsync options for better performance and visibility
+      // Compression: use -z to compress data during transfer
+      const hasCompression = finalRsyncOptions.some(opt => opt === "-z" || opt === "--compress");
+      if (!hasCompression) {
+        finalRsyncOptions.push("-z");
+      }
+
+      // Network stats: display transfer statistics
+      const hasStats = finalRsyncOptions.some(opt => opt === "--stats");
+      if (!hasStats) {
+        finalRsyncOptions.push("--stats");
+      }
+
+      // Progress: show progress information during transfer
+      const hasProgress = finalRsyncOptions.some(
+        opt => opt === "--progress" || opt === "--info=progress2" || opt.startsWith("--info=")
+      );
+      if (!hasProgress) {
+        // Use --info=progress2 for a more compact progress display
+        finalRsyncOptions.push("--info=progress2");
+      }
+
+      // Partial transfers: allow resuming interrupted transfers
+      const hasPartial = finalRsyncOptions.some(opt => opt === "--partial" || opt === "--partial-dir");
+      if (!hasPartial) {
+        finalRsyncOptions.push("--partial");
+      }
+
+      // Inplace: update files in-place for faster transfers (when safe)
+      // Only add if not explicitly disabled
+      const hasInplace = finalRsyncOptions.some(opt => opt === "--inplace" || opt === "--no-inplace");
+      if (!hasInplace) {
+        finalRsyncOptions.push("--inplace");
+      }
+
       const rsyncArgs = [
         "-e",
         sshCommandString, // This is already a properly escaped string
