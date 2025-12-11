@@ -17,12 +17,15 @@ import {
   aliasedArn,
   awsCloudAuth,
   getAndValidateK8sIntegration,
+  gcpKubeconfig,
+  K8sIntegrationConfig,
   profileName,
   requestAccessToCluster,
 } from "../plugins/kubeconfig";
-import { ensureEksInstall } from "../plugins/kubeconfig/install";
-import { ciEquals, exec } from "../util";
+import { ciEquals, exec, getAppName } from "../util";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./aws/files";
+import { asyncSpawn } from "../common/subprocess";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 export type KubeconfigCommandArgs = {
@@ -39,7 +42,7 @@ export type KubeconfigCommandArgs = {
 export const kubeconfigCommand = (yargs: yargs.Argv) =>
   yargs.command<KubeconfigCommandArgs>(
     "kubeconfig",
-    "Request access to and automatically configure kubectl for a k8s cluster hosted by a cloud provider. Currently supports AWS EKS only.",
+    "Request access to and automatically configure kubectl for a k8s cluster hosted by a cloud provider. Supports AWS EKS and GCP GKE.",
     (yargs) =>
       yargs
         .option("cluster", {
@@ -71,10 +74,46 @@ export const kubeconfigCommand = (yargs: yargs.Argv) =>
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
-        }),
+        })
+        .usage("$0 kubeconfig --cluster <CLUSTER_ID> --role <ROLE_NAME>")
+        .epilogue(
+          `Request access to and automatically configure kubectl for a Kubernetes cluster.
+
+Supports both AWS EKS and GCP GKE clusters. The command automatically
+detects the provider and uses the appropriate authentication method.
+
+For AWS EKS:
+  - Uses AWS SSO IAM authentication
+  - Automatically configures AWS SSO and generates credentials
+  - Configures kubectl with the cluster credentials
+
+For GCP GKE:
+  - Uses gcloud authentication
+  - Automatically gets cluster credentials via gcloud
+  - Configures kubectl with the cluster context
+
+Example:
+  $ ${getAppName()} kubeconfig --cluster my-cluster --role "ClusterRole / cluster-admin" --reason "Need to debug production issue"`
+        ),
     kubeconfigAction
   );
 
+/**
+ * Request access to and automatically configure kubectl for a k8s cluster
+ *
+ * Implicitly requests access to the cluster if not already granted.
+ * Supports both AWS EKS and GCP GKE clusters.
+ *
+ * For AWS EKS:
+ * - Automatically configures AWS SSO and generates credentials
+ * - Uses 'aws eks update-kubeconfig' to configure kubectl
+ * - Sets the kubectl context to the cluster
+ *
+ * For GCP GKE:
+ * - Uses gcloud authentication
+ * - Uses 'gcloud container clusters get-credentials' to configure kubectl
+ * - Sets the kubectl context to the cluster
+ */
 const kubeconfigAction = async (
   args: yargs.ArgumentsCamelCase<KubeconfigCommandArgs>
 ) => {
@@ -84,22 +123,44 @@ const kubeconfigAction = async (
     validateResourceArg(args.resource);
   }
 
+  // Validate all required tools BEFORE authentication/request
+  // Check kubectl, aws CLI, and gcloud CLI (we don't know provider yet, so check both)
+  await validateKubeconfigTools(args.debug);
+
   const authn = await authenticate();
 
-  const { clusterConfig, awsLoginType } = await getAndValidateK8sIntegration(
+  const integrationConfig = await getAndValidateK8sIntegration(
     authn,
     args.cluster,
     args.debug
   );
-  const { clusterId, awsAccountId, awsClusterArn } = clusterConfig;
 
-  if (!(await ensureEksInstall())) {
-    throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
+  // Tools already validated early, proceed with request
+  // No spinUntil(); there is one inside requestAccessToCluster() if needed
+  const request = await requestAccessToCluster(
+    authn,
+    args,
+    integrationConfig.clusterId,
+    role
+  );
+
+  // Route to provider-specific flow
+  if (integrationConfig.provider === "gcp") {
+    // GCP GKE flow
+    // Tools already validated early, proceed with GCP flow
+    await gcpKubeconfig(request, integrationConfig.clusterId, integrationConfig, args.debug);
+
+    print2(
+      "Access granted and kubectl configured successfully. Re-run this command to refresh access if credentials expire."
+    );
+    return;
   }
 
-  // No spinUntil(); there is one inside requestAccessToCluster() if needed
-  const request = await requestAccessToCluster(authn, args, clusterId, role);
+  // AWS EKS flow
+  // Tools already validated early, proceed with AWS flow
+  const { awsAccountId, awsClusterArn, awsLoginType } = integrationConfig;
 
+  // Tools already validated early, proceed with AWS flow
   const awsAuth = await awsCloudAuth(
     authn,
     awsAccountId,
@@ -108,7 +169,7 @@ const kubeconfigAction = async (
     args.debug
   );
 
-  const profile = profileName(clusterId);
+  const profile = profileName(integrationConfig.clusterId);
   const alias = aliasedArn(awsClusterArn);
 
   // The `aws eks update-kubeconfig` command can't handle the ARN of the EKS cluster.
@@ -264,6 +325,34 @@ const validateResourceArg = (resource: string): void => {
       "- <kind> / <namespace> / <name>\n" +
       "- <kind> / <name>"
     );
+  }
+};
+
+/**
+ * Validates that all required CLI tools are installed and available in PATH
+ * This is called early, before authentication, so we check all possible tools
+ * (kubectl, aws CLI, and gcloud CLI) since we don't know the provider yet.
+ *
+ * @param debug - Whether to print debug information
+ * @throws Exits with code 1 if any required tool is not found
+ */
+const validateKubeconfigTools = async (debug?: boolean) => {
+  const tools: Array<{ name: string; description: string }> = [
+    { name: "kubectl", description: "Kubernetes command-line tool" },
+    { name: "aws", description: "AWS CLI" },
+    { name: "gcloud", description: "Google Cloud CLI" },
+  ];
+
+  for (const tool of tools) {
+    try {
+      // Use 'where' on Windows or 'which' on Unix
+      const checkCommand = process.platform === "win32" ? "where" : "which";
+      await asyncSpawn({ debug }, checkCommand, [tool.name]);
+    } catch (error) {
+      print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
+      print2(`Please install ${tool.description} and ensure it's in your PATH.`);
+      sys.exit(1);
+    }
   }
 };
 

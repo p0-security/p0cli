@@ -12,7 +12,7 @@ import { decodeProvisionStatus } from "./shared";
 import { request } from "./shared/request";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
-import { getAppName } from "../util";
+import { getAppName, getOperatingSystem } from "../util";
 import { PsqlCommandArgs, PsqlPermissionSpec } from "../types/psql";
 import { PermissionRequest } from "../types/request";
 import { Authn } from "../types/identity";
@@ -23,14 +23,21 @@ import { createCleanChildEnv, spawnWithCleanEnv } from "../util";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as nodeOs from "node:os";
 import { sys } from "typescript";
 import { fetchCommand, fetchIntegrationConfig } from "../drivers/api";
 import { gcloudCommandArgs } from "../plugins/google/util";
+import { ensureGcloudAuth, setGcloudProject } from "../plugins/google/auth";
 
-export const psqlCommand = (yargs: yargs.Argv) =>
-  yargs.command<PsqlCommandArgs>(
-    "psql <destination>",
-    "Connect to a Postgres database via IAM authentication (AWS RDS or GCP CloudSQL)",
+type PgCommandArgs = PsqlCommandArgs & {
+  psql?: boolean;
+  url?: boolean;
+};
+
+export const pgCommand = (yargs: yargs.Argv) =>
+  yargs.command<PgCommandArgs>(
+    "pg <destination>",
+    "Connect to a Postgres database or get connection details (AWS RDS or GCP CloudSQL)",
     (yargs) =>
       yargs
         .positional("destination", {
@@ -41,7 +48,17 @@ export const psqlCommand = (yargs: yargs.Argv) =>
         .option("role", {
           type: "string",
           demandOption: true,
-          describe: "The AWS IAM SSO role name to use",
+          describe: "The IAM role name to use (AWS SSO role or GCP IAM role)",
+        })
+        .option("psql", {
+          type: "boolean",
+          describe: "Connect interactively using psql",
+          default: false,
+        })
+        .option("url", {
+          type: "boolean",
+          describe: "Get connection URL and details",
+          default: false,
         })
         .option("reason", {
           describe: "Reason access is needed",
@@ -57,12 +74,24 @@ export const psqlCommand = (yargs: yargs.Argv) =>
           describe: "Print debug information.",
           default: false,
         })
-        .usage("$0 psql <destination> --role <ROLE_NAME>")
+        .check((argv) => {
+          if (!argv.psql && !argv.url) {
+            throw new Error("Must specify either --psql or --url");
+          }
+          if (argv.psql && argv.url) {
+            throw new Error("Cannot specify both --psql and --url");
+          }
+          return true;
+        })
+        .usage("$0 pg <destination> --role <ROLE_NAME> --psql|--url")
         .epilogue(
-          `Connect to a Postgres database using IAM authentication.
+          `Connect to a Postgres database or get connection details with IAM authentication.
 
 Supports both AWS RDS and GCP CloudSQL instances. The command automatically
 detects the provider and uses the appropriate authentication method.
+
+Use --psql to connect interactively using the psql command-line client.
+Use --url to get connection details and postgresql:// URL for use with any client.
 
 For AWS RDS:
   - Uses AWS SSO IAM database authentication
@@ -73,38 +102,25 @@ For GCP CloudSQL:
   - Supports both private and public IP instances
   - Uses IAM-based authentication
 
-Example:
-  $ ${getAppName()} psql my-rds-instance --role MyRole --reason "Need to debug production issue"`
+Examples:
+  $ ${getAppName()} pg my-rds-instance --role MyRole --psql --reason "Need to debug production issue"
+  $ ${getAppName()} pg my-rds-instance --role MyRole --url --reason "Need connection details"`
         ),
-    psqlAction
+    pgAction
   );
 
 /**
- * Connect to a Postgres database via IAM authentication
+ * Connect to a Postgres database or get connection details
  *
  * Implicitly requests access to the database if not already granted.
  * Supports both AWS RDS and GCP CloudSQL instances.
  *
- * For AWS RDS:
- * - Automatically configures AWS SSO and generates IAM auth tokens
- * - Uses AWS RDS IAM database authentication
- *
- * For GCP CloudSQL:
- * - Uses Cloud SQL Proxy for secure connections
- * - Supports both private and public IP instances
- * - Uses IAM-based authentication
+ * With --psql: Connects interactively using psql
+ * With --url: Provides connection URL and details for use with any client
  */
-const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
-  // Validate psql is installed (required for both providers)
-  // We'll validate provider-specific tools after we know the provider
-  try {
-    const checkCommand = process.platform === "win32" ? "where" : "which";
-    await asyncSpawn({ debug: args.debug }, checkCommand, ["psql"]);
-  } catch (error) {
-    print2("Error: PostgreSQL client (psql) not found in PATH.");
-    print2("Please install PostgreSQL client and ensure it's in your PATH.");
-    sys.exit(1);
-  }
+const pgAction = async (args: yargs.ArgumentsCamelCase<PgCommandArgs>) => {
+  // Validate all required tools BEFORE authentication/request
+  await validatePgTools(args.psql || false, args.debug);
 
   let authn: Authn;
   try {
@@ -119,9 +135,13 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   }
 
   // Make request and wait for approval
+  // Always use "Lab Postgres connection" as the reason for --url mode
+  const requestArgs = args.url 
+    ? { ...args, reason: args.reason || "Lab Postgres connection" }
+    : args;
   let response: Awaited<ReturnType<typeof provisionRequest>>;
   try {
-    response = await provisionRequest(authn!, args);
+    response = await provisionRequest(authn!, requestArgs);
   } catch (error) {
     print2("Error: Failed to provision database access request.");
     if (args.debug && error instanceof Error) {
@@ -186,17 +206,98 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
   }
   const connectionDetails: ConnectionDetails = connectionDetailsResult!;
 
-  // Route to provider-specific connection flow
+  // Route to provider-specific connection flow based on mode
   try {
-    if (connectionDetails.provider === "gcp") {
-      // GCP CloudSQL connection flow
-      // Validate gcloud is installed
-      await validateCliTools("gcp", args.debug);
-      await connectToCloudSQL(connectionDetails, dbUser, args.debug);
+    if (args.url) {
+      // URL mode: provide connection details
+      if (connectionDetails.provider === "gcp") {
+        await launchPostgresForGcp(connectionDetails, dbUser, args.debug);
+      } else {
+        // AWS RDS URL mode
+        let profileName: string;
+        try {
+          profileName = await configureAwsSsoProfile(connectionDetails, args.debug);
+        } catch (error) {
+          print2("Error: Failed to configure AWS SSO profile.");
+          if (args.debug && error instanceof Error) {
+            print2(`Details: ${error.message}`);
+          }
+          sys.exit(1);
+          throw new Error("Unreachable");
+        }
+
+        try {
+          await loginAwsSso(profileName!, args.debug);
+        } catch (error) {
+          print2("Error: Failed to login to AWS SSO.");
+          if (args.debug && error instanceof Error) {
+            print2(`Details: ${error.message}`);
+          }
+          sys.exit(1);
+          throw new Error("Unreachable");
+        }
+
+        const hostParts = connectionDetails.rdsHost.split(".");
+        const isConstructedEndpoint = hostParts.length === 4 && 
+          hostParts[1] === connectionDetails.region && 
+          hostParts[2] === "rds" && 
+          hostParts[3] === "amazonaws.com";
+        
+        if (isConstructedEndpoint) {
+          const instanceIdentifier = hostParts[0] || connectionDetails.rdsHost;
+          const actualRdsHost = await getRdsEndpoint(
+            instanceIdentifier,
+            connectionDetails.region,
+            profileName!,
+            args.debug
+          );
+          if (actualRdsHost && actualRdsHost !== connectionDetails.rdsHost) {
+            connectionDetails.rdsHost = actualRdsHost;
+            if (args.debug) {
+              print2(`Updated RDS endpoint to: ${actualRdsHost}`);
+            }
+          }
+        }
+
+        let token: string;
+        try {
+          token = await generateDbAuthToken(
+            connectionDetails,
+            dbUser,
+            profileName!,
+            args.debug
+          );
+        } catch (error) {
+          print2("Error: Failed to generate database authentication token.");
+          if (args.debug && error instanceof Error) {
+            print2(`Details: ${error.message}`);
+          }
+          sys.exit(1);
+          throw new Error("Unreachable");
+        }
+
+        try {
+          await launchPostgresForAws(connectionDetails, dbUser, token!, args.debug);
+        } catch (error) {
+          print2("Error: Failed to launch Beekeeper Studio.");
+          if (args.debug && error instanceof Error) {
+            print2(`Details: ${error.message}`);
+          }
+          sys.exit(1);
+        }
+
+        if (process.env.NODE_ENV !== "unit") {
+          process.exit(0);
+        }
+      }
     } else {
+      // psql mode: connect interactively
+      if (connectionDetails.provider === "gcp") {
+        // GCP CloudSQL connection flow
+        await connectToCloudSQL(connectionDetails, dbUser, args.debug);
+      } else {
       // AWS RDS connection flow
-      // Validate aws CLI is installed
-      await validateCliTools("aws", args.debug);
+      // Tools already validated early, proceed with connection
       // Configure AWS SSO profile
       let profileName: string;
       try {
@@ -281,6 +382,7 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
         }
         sys.exit(1);
       }
+      }
     }
   } catch (error) {
     print2("Error: Failed to establish database connection.");
@@ -300,7 +402,50 @@ const psqlAction = async (args: yargs.ArgumentsCamelCase<PsqlCommandArgs>) => {
 };
 
 /**
+ * Validates that all required CLI tools are installed and available in PATH
+ * This is called early, before authentication, so we check all possible tools
+ * based on the mode (psql or url).
+ *
+ * @param psqlMode - Whether we're in psql mode (requires psql) or url mode (optional Beekeeper Studio)
+ * @param debug - Whether to print debug information
+ * @throws Exits with code 1 if any required tool is not found
+ */
+const validatePgTools = async (psqlMode: boolean, debug?: boolean) => {
+  const tools: Array<{ name: string; description: string }> = [];
+  
+  if (psqlMode) {
+    tools.push({ name: "psql", description: "PostgreSQL client" });
+  } else {
+    // URL mode: Beekeeper Studio is optional
+    const beekeeperPath = await findBeekeeperStudio(debug);
+    if (!beekeeperPath && debug) {
+      print2("Beekeeper Studio not found - will only provide connection details.");
+    }
+  }
+  
+  // Always check AWS and gcloud CLI (we don't know provider yet)
+  tools.push(
+    { name: "aws", description: "AWS CLI" },
+    { name: "gcloud", description: "Google Cloud CLI" }
+  );
+
+  for (const tool of tools) {
+    try {
+      // Use 'where' on Windows or 'which' on Unix
+      const checkCommand = process.platform === "win32" ? "where" : "which";
+      await asyncSpawn({ debug }, checkCommand, [tool.name]);
+    } catch (error) {
+      print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
+      print2(`Please install ${tool.description} and ensure it's in your PATH.`);
+      sys.exit(1);
+    }
+  }
+};
+
+/**
  * Validates that required CLI tools are installed and available in PATH
+ * This is a legacy function kept for backward compatibility, but validatePsqlTools
+ * should be used instead for early validation.
  *
  * @param provider - The cloud provider ("aws" or "gcp") to determine which tools to check
  * @param debug - Whether to print debug information
@@ -1323,7 +1468,7 @@ const configureAwsSsoProfile = async (
 
     // Create unique profile name
     const timestamp = Date.now();
-    const profileName = `p0-psql-${timestamp}`;
+    const profileName = `p0-pg-${timestamp}`;
     const sessionName = `${profileName}-sso-session`;
 
     // Create SSO session block
@@ -1537,122 +1682,6 @@ const connectToCloudSQL = async (
   await connectToCloudSQLViaProxy(details, dbUser, debug);
 };
 
-/**
- * Ensures gcloud CLI is authenticated
- *
- * Checks if gcloud is already authenticated. If not, initiates an interactive
- * login flow that opens a browser for authentication.
- *
- * @param debug - Whether to print debug information
- * @throws Error if authentication fails
- */
-const ensureGcloudAuth = async (debug?: boolean): Promise<void> => {
-  try {
-    // Check if gcloud is authenticated by trying to get an access token
-    // This will fail if authentication is needed or tokens are expired
-    const { command, args } = gcloudCommandArgs([
-      "auth",
-      "print-access-token",
-    ]);
-    await asyncSpawn({ debug: false }, command, args);
-    // If we get here, authentication is working
-    if (debug) {
-      print2("gcloud is already authenticated.");
-    }
-  } catch (error) {
-    // Not authenticated or tokens expired, need to login
-    print2("gcloud authentication required. Please login...");
-    try {
-      const { command, args } = gcloudCommandArgs(["auth", "login"]);
-      // Use interactive spawn for login (user needs to interact with browser)
-      const child = spawnWithCleanEnv(command, args, {
-        stdio: "inherit",
-        env: createCleanChildEnv(),
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        child.on("exit", (code) => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`gcloud auth login exited with code ${code}`));
-          }
-        });
-
-        child.on("error", (error) => {
-          reject(error);
-        });
-      });
-
-      print2("gcloud authentication successful.");
-    } catch (loginError) {
-      print2(`Error: gcloud authentication failed. ${loginError}`);
-      print2("Please run 'gcloud auth login' manually and try again.");
-      throw loginError;
-    }
-  }
-};
-
-/**
- * Sets the gcloud active project
- *
- * Checks the current project and updates it if it differs from the target
- * project ID.
- *
- * @param projectId - The GCP project ID to set as active
- * @param debug - Whether to print debug information
- * @throws Error if project setting fails
- */
-const setGcloudProject = async (
-  projectId: string,
-  debug?: boolean
-): Promise<void> => {
-  try {
-    // Check current project
-    const { command: getCommand, args: getArgs } = gcloudCommandArgs([
-      "config",
-      "get-value",
-      "project",
-    ]);
-    let currentProject: string;
-    try {
-      currentProject = (await asyncSpawn({ debug: false }, getCommand, getArgs)).trim();
-    } catch (error) {
-      // If getting current project fails, try to set it anyway
-      if (debug) {
-        print2(`Could not get current gcloud project, will set it to: ${projectId}`);
-      }
-      currentProject = "";
-    }
-
-    if (currentProject === projectId) {
-      if (debug) {
-        print2(`gcloud project is already set to: ${projectId}`);
-      }
-      return;
-    }
-
-    // Set the project
-    if (debug) {
-      print2(`Setting gcloud project to: ${projectId}`);
-    }
-    const { command, args } = gcloudCommandArgs([
-      "config",
-      "set",
-      "project",
-      projectId,
-    ]);
-    await asyncSpawn({ debug }, command, args);
-    if (debug) {
-      print2(`gcloud project set to: ${projectId}`);
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    print2(`Error: Failed to set gcloud project to ${projectId}.`);
-    print2(`Details: ${errorMessage}`);
-    throw new Error(`Failed to set gcloud project: ${errorMessage}`);
-  }
-};
 
 /**
  * Ensures the Cloud SQL Proxy component is installed and available
@@ -1949,6 +1978,534 @@ const connectToCloudSQLViaProxy = async (
       }
       proxyProcess.kill();
     }
+  }
+};
+
+/**
+ * Finds the Beekeeper Studio executable path
+ *
+ * @param debug - Whether to print debug information
+ * @returns The path to Beekeeper Studio executable, or null if not found
+ */
+const findBeekeeperStudio = async (debug?: boolean): Promise<string | null> => {
+  const operatingSystem = getOperatingSystem();
+
+  if (operatingSystem === "mac") {
+    // macOS: Check common locations
+    const macPaths = [
+      "/Applications/Beekeeper Studio.app/Contents/MacOS/Beekeeper Studio",
+      "/Applications/Beekeeper Studio.app",
+    ];
+
+    for (const appPath of macPaths) {
+      if (fs.existsSync(appPath)) {
+        if (debug) {
+          print2(`Found Beekeeper Studio at: ${appPath}`);
+        }
+        return appPath;
+      }
+    }
+
+    // Try using mdfind as fallback
+    try {
+      const result = await asyncSpawn(
+        { debug: false },
+        "mdfind",
+        ['kMDItemKind == "Application" && kMDItemDisplayName == "Beekeeper Studio"']
+      );
+      const foundPath = result.trim().split("\n")[0];
+      if (foundPath && fs.existsSync(foundPath)) {
+        // If it's an .app bundle, get the executable inside
+        if (foundPath.endsWith(".app")) {
+          const executablePath = path.join(foundPath, "Contents/MacOS/Beekeeper Studio");
+          if (fs.existsSync(executablePath)) {
+            if (debug) {
+              print2(`Found Beekeeper Studio via mdfind at: ${executablePath}`);
+            }
+            return executablePath;
+          }
+        }
+        if (debug) {
+          print2(`Found Beekeeper Studio via mdfind at: ${foundPath}`);
+        }
+        return foundPath;
+      }
+    } catch (error) {
+      if (debug) {
+        print2(`mdfind search failed: ${error}`);
+      }
+    }
+  } else if (operatingSystem === "win") {
+    // Windows: Check common install locations
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.PROGRAMFILES || "";
+    const programFilesX86 = process.env["PROGRAMFILES(X86)"] || "";
+
+    const winPaths = [
+      path.join(localAppData, "Programs", "beekeeper-studio", "Beekeeper Studio.exe"),
+      path.join(programFiles, "Beekeeper Studio", "Beekeeper Studio.exe"),
+      path.join(programFilesX86, "Beekeeper Studio", "Beekeeper Studio.exe"),
+    ];
+
+    for (const exePath of winPaths) {
+      if (fs.existsSync(exePath)) {
+        if (debug) {
+          print2(`Found Beekeeper Studio at: ${exePath}`);
+        }
+        return exePath;
+      }
+    }
+
+    // Try using 'where' command as fallback
+    try {
+      const result = await asyncSpawn({ debug: false }, "where", ["Beekeeper Studio.exe"]);
+      const foundPath = result.trim().split("\n")[0];
+      if (foundPath && fs.existsSync(foundPath)) {
+        if (debug) {
+          print2(`Found Beekeeper Studio via where at: ${foundPath}`);
+        }
+        return foundPath;
+      }
+    } catch (error) {
+      if (debug) {
+        print2(`where search failed: ${error}`);
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Launches Beekeeper Studio for AWS RDS connection and provides connection details
+ *
+ * Constructs a postgresql:// URL with the IAM authentication token embedded
+ * and provides connection details. Optionally launches Beekeeper Studio if installed.
+ *
+ * @param details - AWS connection details including host, port, and database name
+ * @param dbUser - The database username
+ * @param token - The IAM authentication token (used as password in URL)
+ * @param debug - Whether to print debug information
+ * @throws Error if connection setup fails
+ */
+const launchPostgresForAws = async (
+  details: AwsConnectionDetails,
+  dbUser: string,
+  token: string,
+  debug?: boolean
+): Promise<void> => {
+  // Construct postgresql:// URL with IAM token
+  const connectionUrl = `postgresql://${encodeURIComponent(dbUser)}:${encodeURIComponent(token)}@${details.rdsHost}:${details.port}/${encodeURIComponent(details.database)}?sslmode=require`;
+
+  print2("");
+  print2("═══════════════════════════════════════════════════════════════");
+  print2("  POSTGRES CONNECTION DETAILS");
+  print2("═══════════════════════════════════════════════════════════════");
+  print2(`  Host:     ${details.rdsHost}`);
+  print2(`  Port:     ${details.port}`);
+  print2(`  Database: ${details.database}`);
+  print2(`  Username: ${dbUser}`);
+  print2(`  Password: ${token}`);
+  print2(`  SSL Mode: require`);
+  print2("");
+  print2("Connection URL:");
+  print2(`  ${connectionUrl}`);
+  print2("═══════════════════════════════════════════════════════════════");
+  print2("");
+
+  // Copy connection URL to clipboard
+  const connectionDetails = `Host: ${details.rdsHost}
+Port: ${details.port}
+Database: ${details.database}
+Username: ${dbUser}
+Password: ${token}
+SSL Mode: require
+
+Connection URL:
+${connectionUrl}`;
+
+  const postgresPath = await findBeekeeperStudio(debug);
+  const operatingSystem = getOperatingSystem();
+
+  // Copy to clipboard
+  if (operatingSystem === "mac") {
+    try {
+      const copyProcess = spawnWithCleanEnv("pbcopy", [], {
+        stdio: "pipe",
+        env: createCleanChildEnv(),
+      });
+      copyProcess.stdin?.write(connectionDetails);
+      copyProcess.stdin?.end();
+      await new Promise<void>((resolve) => {
+        copyProcess.on("exit", () => resolve());
+        copyProcess.on("error", () => resolve());
+      });
+      print2("✓ Connection details copied to clipboard!");
+      print2("");
+    } catch (error) {
+      if (debug) {
+        print2(`Warning: Failed to copy to clipboard: ${error}`);
+      }
+    }
+  }
+
+  // Optionally launch Beekeeper Studio if installed
+  if (postgresPath) {
+    try {
+      if (operatingSystem === "mac") {
+        await asyncSpawn({ debug }, "open", ["-a", "Beekeeper Studio"]);
+        print2("✓ Beekeeper Studio opened. Connection details are in your clipboard.");
+      } else if (operatingSystem === "win") {
+        spawnWithCleanEnv(postgresPath, [], {
+          stdio: "ignore",
+          detached: true,
+        }).unref();
+        print2("✓ Beekeeper Studio opened. Connection details are shown above.");
+      }
+    } catch (error) {
+      if (debug) {
+        print2(`Warning: Failed to launch Beekeeper Studio: ${error}`);
+      }
+    }
+  } else {
+    print2("Note: Beekeeper Studio not found. Use the connection details above with any PostgreSQL client.");
+  }
+};
+
+/**
+ * Launches Beekeeper Studio for GCP CloudSQL connection and provides connection details
+ *
+ * Sets up application-default credentials, starts the Cloud SQL Proxy in the
+ * background on localhost:5433, generates an IAM login token, and provides
+ * connection details. Optionally launches Beekeeper Studio if installed.
+ * Monitors the proxy process and ensures it shuts down when p0cli exits.
+ *
+ * @param details - GCP connection details including instance connection name
+ * @param dbUser - The database username
+ * @param debug - Whether to print debug information
+ * @throws Error if connection setup fails
+ */
+const launchPostgresForGcp = async (
+  details: GcpConnectionDetails,
+  dbUser: string,
+  debug?: boolean
+): Promise<void> => {
+  // Ensure gcloud is authenticated (same as psql command)
+  // This will open a browser if authentication is needed
+  print2("Authenticating with Google Cloud...");
+  await ensureGcloudAuth(debug);
+  
+  // Set the GCP project (same as psql command)
+  print2(`Setting GCP project to ${details.projectId}...`);
+  await setGcloudProject(details.projectId, debug);
+
+  print2("Setting up Cloud SQL Proxy...");
+  print2("");
+
+  // Ensure application-default credentials
+  try {
+    const { command: adcCommand, args: adcArgs } = gcloudCommandArgs([
+      "auth",
+      "application-default",
+      "print-access-token",
+    ]);
+    await asyncSpawn({ debug: false }, adcCommand, adcArgs);
+  } catch (error) {
+    print2("Setting up application-default credentials for Cloud SQL Proxy...");
+    const { command: loginCommand, args: loginArgs } = gcloudCommandArgs([
+      "auth",
+      "application-default",
+      "login",
+    ]);
+    const loginChild = spawnWithCleanEnv(loginCommand, loginArgs, {
+      stdio: "inherit",
+      env: createCleanChildEnv(),
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      loginChild.on("exit", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`gcloud auth application-default login exited with code ${code}`));
+        }
+      });
+      loginChild.on("error", (error) => {
+        reject(error);
+      });
+    });
+    print2("Application-default credentials set up successfully.");
+  }
+
+  const proxyPath = await ensureCloudSqlProxy(debug);
+  const localPort = 5433;
+  const instanceConnectionName = details.instanceConnectionName;
+  const proxyArgs = [`-instances=${instanceConnectionName}=tcp:${localPort}`];
+
+  if (debug) {
+    print2(`Starting Cloud SQL Proxy: ${proxyPath} ${proxyArgs.join(" ")}`);
+  }
+
+  const proxyProcess = spawnWithCleanEnv(proxyPath, proxyArgs, {
+    stdio: debug ? "inherit" : "pipe",
+    env: createCleanChildEnv(),
+  });
+
+  // Set up cleanup handlers to ensure proxy is killed when p0cli exits
+  const cleanupProxy = () => {
+    if (proxyProcess && !proxyProcess.killed) {
+      if (debug) {
+        print2("Cleaning up Cloud SQL Proxy...");
+      }
+      proxyProcess.kill();
+    }
+  };
+
+  // Handle process termination signals
+  process.on('SIGINT', cleanupProxy);
+  process.on('SIGTERM', cleanupProxy);
+  process.on('exit', cleanupProxy);
+
+  // Wait for proxy to be ready
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve();
+    }, 2000);
+
+    let output = "";
+    if (proxyProcess.stdout) {
+      proxyProcess.stdout.on("data", (data: Buffer) => {
+        output += data.toString();
+        if (output.includes("Ready for new connections") || output.includes("ready")) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    }
+    if (proxyProcess.stderr) {
+      proxyProcess.stderr.on("data", (data: Buffer) => {
+        output += data.toString();
+        if (output.includes("Ready for new connections") || output.includes("ready")) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    }
+
+    proxyProcess.on("error", (error: Error) => {
+      clearTimeout(timeout);
+      print2(`Error: Failed to start Cloud SQL Proxy. ${error.message}`);
+      // Remove handlers before exiting
+      process.removeListener('SIGINT', cleanupProxy);
+      process.removeListener('SIGTERM', cleanupProxy);
+      process.removeListener('exit', cleanupProxy);
+      sys.exit(1);
+    });
+  });
+
+  // Generate login token
+  const { command: tokenCommand, args: tokenArgs } = gcloudCommandArgs([
+    "sql",
+    "generate-login-token",
+    "--project",
+    details.projectId,
+  ]);
+
+  let password: string;
+  try {
+    password = (await asyncSpawn({ debug: false }, tokenCommand, tokenArgs)).trim();
+    if (!password) {
+      throw new Error("Token generation returned empty result");
+    }
+    if (debug) {
+      print2("Generated CloudSQL login token successfully.");
+      print2(`Token length: ${password.length} characters`);
+      print2(`Token starts with: ${password.substring(0, 10)}...`);
+      print2(`Database username: ${dbUser}`);
+      print2(`Database name: ${details.database}`);
+    }
+  } catch (error) {
+    // Remove handlers before cleanup
+    process.removeListener('SIGINT', cleanupProxy);
+    process.removeListener('SIGTERM', cleanupProxy);
+    process.removeListener('exit', cleanupProxy);
+    cleanupProxy();
+    print2(`Error: Failed to generate CloudSQL login token. ${error}`);
+    print2("The token is required for IAM authentication.");
+    throw error;
+  }
+
+  // Construct postgresql:// URL
+  const connectionUrl = `postgresql://${encodeURIComponent(dbUser)}:${encodeURIComponent(password)}@localhost:${localPort}/${encodeURIComponent(details.database)}?sslmode=disable`;
+
+  // Prepare connection details for clipboard
+  const connectionDetails = `Host: localhost
+Port: ${localPort}
+Database: ${details.database}
+Username: ${dbUser}
+Password: ${password}
+SSL Mode: disable
+
+Connection URL:
+${connectionUrl}`;
+
+  if (debug) {
+    print2(`Connection details prepared`);
+    print2(`  Host: localhost, Port: ${localPort}, Database: ${details.database}`);
+    print2(`  Username: ${dbUser}`);
+  }
+
+  const postgresPath = await findBeekeeperStudio(debug);
+  const operatingSystem = getOperatingSystem();
+
+  try {
+    if (operatingSystem === "mac") {
+      // Print connection details
+      print2("");
+      print2("═══════════════════════════════════════════════════════════════");
+      print2("  POSTGRES CONNECTION DETAILS");
+      print2("═══════════════════════════════════════════════════════════════");
+      print2(`  Host:     localhost`);
+      print2(`  Port:     ${localPort}`);
+      print2(`  Database: ${details.database}`);
+      print2(`  Username: ${dbUser}`);
+      print2(`  Password: ${password}`);
+      print2(`  SSL Mode: disable`);
+      print2("");
+      print2("Connection URL:");
+      print2(`  ${connectionUrl}`);
+      print2("═══════════════════════════════════════════════════════════════");
+      print2("");
+
+      // Copy connection details to clipboard
+      try {
+        const copyProcess = spawnWithCleanEnv("pbcopy", [], {
+          stdio: "pipe",
+          env: createCleanChildEnv(),
+        });
+        copyProcess.stdin?.write(connectionDetails);
+        copyProcess.stdin?.end();
+        await new Promise<void>((resolve) => {
+          copyProcess.on("exit", () => resolve());
+          copyProcess.on("error", () => resolve());
+        });
+        print2("✓ Connection details copied to clipboard!");
+        print2("");
+      } catch (error) {
+        if (debug) {
+          print2(`Warning: Failed to copy to clipboard: ${error}`);
+        }
+      }
+
+      // Optionally launch Beekeeper Studio if installed
+      if (postgresPath) {
+        print2("Steps to connect:");
+        print2("  1. Beekeeper Studio will open automatically");
+        print2("  2. Click 'New Connection' in Beekeeper Studio");
+        print2("  3. Select 'Postgres' as the connection type");
+        print2("  4. Paste the connection details from clipboard (Cmd+V) or enter manually");
+        print2("  5. Click 'Connect'");
+        print2("");
+        print2(`Cloud SQL Proxy is running on localhost:${localPort}.`);
+        print2("The proxy will stop when you close this terminal or press Ctrl+C.");
+        print2("");
+
+        try {
+          await asyncSpawn({ debug: false }, "open", ["-a", "Beekeeper Studio"]);
+          print2("✓ Beekeeper Studio opened. Connection details are in your clipboard.");
+        } catch (error) {
+          if (debug) {
+            print2(`Warning: Failed to open Beekeeper Studio: ${error}`);
+          }
+        }
+      } else {
+        print2(`Cloud SQL Proxy is running on localhost:${localPort}.`);
+        print2("The proxy will stop when you close this terminal or press Ctrl+C.");
+        print2("");
+        print2("Note: Beekeeper Studio not found. Use the connection details above with any PostgreSQL client.");
+      }
+
+      // Keep the process alive and monitor for exit
+      // The cleanup handlers will kill the proxy when p0cli exits
+      print2("");
+      print2("Press Ctrl+C to stop the Cloud SQL Proxy and exit.");
+      print2("");
+
+      // Wait for user to exit (Ctrl+C will trigger SIGINT handler)
+      // Keep the process alive until the user exits
+      await new Promise<void>((resolve) => {
+        const onExit = () => {
+          process.removeListener('SIGINT', onExit);
+          process.removeListener('SIGTERM', onExit);
+          resolve();
+        };
+        process.on('SIGINT', onExit);
+        process.on('SIGTERM', onExit);
+        
+        // Keep process alive - wait indefinitely
+        // The signal handlers will resolve the promise when user exits
+      });
+    } else if (operatingSystem === "win") {
+      // Windows: Print connection details and optionally launch Beekeeper Studio
+      print2("");
+      print2("═══════════════════════════════════════════════════════════════");
+      print2("  POSTGRES CONNECTION DETAILS");
+      print2("═══════════════════════════════════════════════════════════════");
+      print2(`  Host:     localhost`);
+      print2(`  Port:     ${localPort}`);
+      print2(`  Database: ${details.database}`);
+      print2(`  Username: ${dbUser}`);
+      print2(`  Password: ${password}`);
+      print2(`  SSL Mode: disable`);
+      print2("");
+      print2("Connection URL:");
+      print2(`  ${connectionUrl}`);
+      print2("═══════════════════════════════════════════════════════════════");
+      print2("");
+
+      if (postgresPath) {
+        spawnWithCleanEnv(postgresPath, [], {
+          stdio: "ignore",
+          detached: true,
+        }).unref();
+        print2("✓ Beekeeper Studio opened. Connection details are shown above.");
+      } else {
+        print2("Note: Beekeeper Studio not found. Use the connection details above with any PostgreSQL client.");
+      }
+
+      print2(`Cloud SQL Proxy is running on localhost:${localPort}.`);
+      print2("The proxy will stop when you close this terminal or press Ctrl+C.");
+      print2("");
+
+      // Wait for user to exit
+      await new Promise<void>((resolve) => {
+        const onExit = () => {
+          process.removeListener('SIGINT', onExit);
+          process.removeListener('SIGTERM', onExit);
+          resolve();
+        };
+        process.on('SIGINT', onExit);
+        process.on('SIGTERM', onExit);
+        
+        // Keep process alive - wait indefinitely
+        // The signal handlers will resolve the promise when user exits
+      });
+    } else {
+      // Remove handlers before cleanup
+      process.removeListener('SIGINT', cleanupProxy);
+      process.removeListener('SIGTERM', cleanupProxy);
+      process.removeListener('exit', cleanupProxy);
+      cleanupProxy();
+      throw new Error(`Unsupported operating system: ${operatingSystem}`);
+    }
+  } finally {
+    // Remove signal handlers
+    process.removeListener('SIGINT', cleanupProxy);
+    process.removeListener('SIGTERM', cleanupProxy);
+    process.removeListener('exit', cleanupProxy);
+    
+    // Clean up proxy
+    cleanupProxy();
   }
 };
 

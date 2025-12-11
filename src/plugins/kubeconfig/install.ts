@@ -14,9 +14,13 @@ import {
   ensureInstall,
   InstallMetadata,
 } from "../../common/install";
+import { print2 } from "../../drivers/stdio";
 
 const EksItems = [...AwsItems, "kubectl"] as const;
 type EksItem = (typeof EksItems)[number];
+
+const GkeItems = ["gcloud", "kubectl"] as const;
+type GkeItem = (typeof GkeItems)[number];
 
 /**
  * Converts the current system architecture, as represented in TypeScript, to
@@ -67,3 +71,31 @@ const EksInstall: Readonly<Record<EksItem, InstallMetadata>> = {
 
 export const ensureEksInstall = async () =>
   await ensureInstall(EksItems, EksInstall);
+
+const GkeInstall: Readonly<Record<GkeItem, InstallMetadata>> = {
+  gcloud: {
+    label: "Google Cloud SDK (gcloud CLI)",
+    commands: {
+      darwin: [
+        'curl "https://sdk.cloud.google.com" | bash',
+        "exec -l $SHELL",
+        "gcloud init",
+      ],
+    },
+  },
+  kubectl: {
+    label: "Kubernetes command-line tool",
+    commands: {
+      get darwin() {
+        return kubectlInstallCommandsDarwin();
+      },
+    },
+  },
+};
+
+export const ensureGkeInstall = async (debug?: boolean) => {
+  if (debug) {
+    print2("Checking for GKE dependencies: gcloud, kubectl");
+  }
+  return await ensureInstall(GkeItems, GkeInstall);
+};

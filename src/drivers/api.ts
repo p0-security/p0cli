@@ -28,6 +28,42 @@ const RETRY_OPTIONS = {
   maxDelayMs: 30_000,
 };
 
+// Retry options for streaming that also retries on network errors
+// This allows recovery from temporary network issues during heartbeat reading
+const STREAMING_RETRY_OPTIONS = {
+  shouldRetry: (error: unknown) => {
+    // Retry on 429 errors
+    if (error === "HTTP Error: 429 Too Many Requests") {
+      return true;
+    }
+    // Retry on TimeoutError (DOMException from AbortSignal.timeout() or network timeouts)
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return true;
+    }
+    // Retry on network errors (TypeError from fetch or reader.read())
+    if (error instanceof TypeError) {
+      return (
+        error.message === "fetch failed" ||
+        error.message === "terminated" ||
+        error.message.includes("network") ||
+        error.message.includes("connection")
+      );
+    }
+    // Retry on string network error messages
+    if (typeof error === "string") {
+      return (
+        error.includes("Network error") ||
+        error.includes("Unable to reach the server")
+      );
+    }
+    return false;
+  },
+  retries: 3,
+  delayMs: 1_000,
+  multiplier: 2.0,
+  maxDelayMs: 30_000,
+};
+
 const tenantOrgUrl = (tenant: string) =>
   `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
@@ -265,7 +301,7 @@ export const fetchWithStreaming = async function* <T>(
 
   try {
     yield* regenerateWithSleep(() => attemptFetch(), {
-      ...RETRY_OPTIONS,
+      ...STREAMING_RETRY_OPTIONS,
       debug,
     });
   } catch (error) {

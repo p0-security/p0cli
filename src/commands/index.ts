@@ -20,7 +20,7 @@ import { loginCommand } from "./login";
 import { logoutCommand } from "./logout";
 import { lsCommand } from "./ls";
 import { printBearerTokenCommand } from "./print-bearer-token";
-import { psqlCommand } from "./psql";
+import { pgCommand } from "./pg";
 import { rdpCommand } from "./rdp";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
@@ -46,7 +46,7 @@ const commands = [
   rdpCommand,
   kubeconfigCommand,
   printBearerTokenCommand,
-  psqlCommand,
+  pgCommand,
 ];
 
 const buildArgv = async () => {

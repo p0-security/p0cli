@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
+import { ensureGcloudAuth } from "./auth";
 import { ImportSshPublicKeyResponse } from "./types";
 import { gcloudCommandArgs } from "./util";
 
@@ -29,6 +30,9 @@ export const importSshKey = async (
   options?: { debug?: boolean }
 ) => {
   const debug = options?.debug ?? false;
+
+  // Ensure gcloud is authenticated before trying to get access token
+  await ensureGcloudAuth(debug);
 
   // Force debug=false otherwise it prints the access token
   const { command: accessTokenCommand, args: accessTokenArgs } =
