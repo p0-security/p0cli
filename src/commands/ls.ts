@@ -32,6 +32,10 @@ type LsResponse = {
   arg: string;
 };
 
+/** Extract an argument value from list of arguments.
+ * These are parsed by yargs with "unknown-options-as-args" enabled. Each item in the array is a string representing an argument or option.
+ * Quoted arguments preserve spaces within them as part of the string. The quotes themselves are also preserved.
+ */
 const argValue = (args: string[], argName: string): string | undefined => {
   const index = args.indexOf(`--${argName}`);
   return index !== -1 && index + 1 < args.length ? args[index + 1] : undefined;
@@ -79,6 +83,7 @@ const ls = async (
 ) => {
   const authn = await authenticate();
 
+  // yargs parses all unknown options into the "arguments" array. Proper option parsing is done in the backend.
   const principal = argValue(args.arguments, "principal");
   const isAll = args.arguments.includes("--all");
 

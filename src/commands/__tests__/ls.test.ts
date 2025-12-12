@@ -68,14 +68,32 @@ describe("ls", () => {
   });
 
   describe("when --principal flag is used", () => {
-    const command = "ls ssh destination --principal alice@example.com";
-
-    it("should print list response with principal in message", async () => {
-      mockAdminItems(ITEMS);
-      await lsCommand(yargs()).exitProcess(false).parse(command);
-      expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
-      expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
-    });
+    it.each([
+      {
+        description: "unquoted",
+        command: "ls ssh destination --principal alice@example.com",
+      },
+      {
+        description: "double-quoted",
+        command: 'ls ssh destination --principal "alice@example.com"',
+      },
+      {
+        description: "single-quoted",
+        command: "ls ssh destination --principal 'alice@example.com'",
+      },
+      {
+        description: "double-quoted with space",
+        command: 'ls ssh destination --principal "alice @example.com"',
+      },
+    ])(
+      "should print list response with principal in message ($description)",
+      async ({ command }) => {
+        mockAdminItems(ITEMS);
+        await lsCommand(yargs()).exitProcess(false).parse(command);
+        expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+        expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+      }
+    );
   });
 
   describe("when --all flag is used", () => {
