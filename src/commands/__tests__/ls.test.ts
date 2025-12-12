@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchCommand } from "../../drivers/api";
+import { fetchAdminLsCommand, fetchCommand } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { failure } from "../../testing/yargs";
 import { lsCommand } from "../ls";
@@ -21,28 +21,39 @@ vi.mock("../../drivers/stdio");
 vi.spyOn(process, "exit");
 
 const mockFetchCommand = fetchCommand as Mock;
+const mockFetchAdminLsCommand = fetchAdminLsCommand as Mock;
 const mockPrint1 = print1 as Mock;
 const mockPrint2 = print2 as Mock;
 
+const ITEMS = [
+  { key: "instance-1", group: "Group", value: "Resource 1" },
+  { key: "instance-2", value: "Resource 2" },
+];
+
 describe("ls", () => {
+  const mockItems = (items: object[]) =>
+    mockFetchCommand.mockResolvedValue({
+      ok: true,
+      term: "",
+      arg: "destination",
+      items,
+    });
+
+  const mockAdminItems = (items: object[]) =>
+    mockFetchAdminLsCommand.mockResolvedValue({
+      ok: true,
+      term: "",
+      arg: "destination",
+      items,
+    });
+
   beforeEach(() => vi.clearAllMocks());
 
   describe("when valid ls command", () => {
     const command = "ls ssh destination";
 
-    const mockItems = (items: object[]) =>
-      mockFetchCommand.mockResolvedValue({
-        ok: true,
-        term: "",
-        arg: "destination",
-        items,
-      });
-
     it("should print list response", async () => {
-      mockItems([
-        { key: "instance-1", group: "Group", value: "Resource 1" },
-        { key: "instance-2", value: "Resource 2" },
-      ]);
+      mockItems(ITEMS);
       await lsCommand(yargs()).exitProcess(false).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
@@ -50,6 +61,46 @@ describe("ls", () => {
 
     it("should print friendly message if no items", async () => {
       mockItems([]);
+      await lsCommand(yargs()).exitProcess(false).parse(command);
+      expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+      expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+    });
+  });
+
+  describe("when --principal flag is used", () => {
+    it.each([
+      {
+        description: "unquoted",
+        command: "ls ssh destination --principal alice@example.com",
+      },
+      {
+        description: "double-quoted",
+        command: 'ls ssh destination --principal "alice@example.com"',
+      },
+      {
+        description: "single-quoted",
+        command: "ls ssh destination --principal 'alice@example.com'",
+      },
+      {
+        description: "double-quoted with space",
+        command: 'ls ssh destination --principal "alice @example.com"',
+      },
+    ])(
+      "should print list response with principal in message ($description)",
+      async ({ command }) => {
+        mockAdminItems(ITEMS);
+        await lsCommand(yargs()).exitProcess(false).parse(command);
+        expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+        expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+      }
+    );
+  });
+
+  describe("when --all flag is used", () => {
+    const command = "ls ssh destination --all";
+
+    it("should print list response with no indication of who can access", async () => {
+      mockAdminItems(ITEMS);
       await lsCommand(yargs()).exitProcess(false).parse(command);
       expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
       expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");

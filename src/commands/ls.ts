@@ -32,6 +32,15 @@ type LsResponse = {
   arg: string;
 };
 
+/** Extract an argument value from list of arguments.
+ * These are parsed by yargs with "unknown-options-as-args" enabled. Each item in the array is a string representing an argument or option.
+ * Quoted arguments preserve spaces within them as part of the string. The quotes themselves are also preserved.
+ */
+const argValue = (args: string[], argName: string): string | undefined => {
+  const index = args.indexOf(`--${argName}`);
+  return index !== -1 && index + 1 < args.length ? args[index + 1] : undefined;
+};
+
 const lsArgs = <T>(yargs: yargs.Argv<T>) =>
   yargs
     .parserConfiguration({ "unknown-options-as-args": true })
@@ -74,8 +83,11 @@ const ls = async (
 ) => {
   const authn = await authenticate();
 
-  const isAdminCommand =
-    args.arguments.includes("--all") || args.arguments.includes("--principal");
+  // yargs parses all unknown options into the "arguments" array. Proper option parsing is done in the backend.
+  const principal = argValue(args.arguments, "principal");
+  const isAll = args.arguments.includes("--all");
+
+  const isAdminCommand = isAll || principal;
 
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
@@ -121,9 +133,11 @@ const ls = async (
         ? ` (use \`${getAppName()} ${allArguments.join(" ")} <like>\` to narrow results)`
         : "";
 
-    print2(
-      `Showing${truncationPart} ${label}${postfixPart}.\nResources labeled with * are already accessible to you:`
-    );
+    const accessibleTo = principal ?? "you";
+    const accessiblePart = isAll
+      ? "" // do not show who they are accessible to because we are displaying all items
+      : `\nResources labeled with * are already accessible to ${accessibleTo}:`;
+    print2(`Showing${truncationPart} ${label}${postfixPart}.${accessiblePart}`);
     const truncated = slice(data.items, 0, args.size);
     const sortedItems = orderBy(truncated, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
