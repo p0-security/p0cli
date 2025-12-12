@@ -9,12 +9,15 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { login } from "../../commands/login";
-import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
+import {
+  setExporterAfterLogin,
+  setMetricsExporterAfterLogin,
+} from "../../opentelemetry/instrumentation";
 import { Authn, Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
 import { getAppName } from "../../util";
-import { tracesUrl } from "../api";
+import { metricsUrl, tracesUrl } from "../api";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { getExpiredCredentialsMessage } from "../util";
@@ -169,10 +172,13 @@ export const deleteIdentity = async () => {
   await clearIdentityFile();
 };
 
-/** Set up trace exporter to authenticated collector endpoint */
+/** Set up trace and metrics exporters to authenticated collector endpoint */
 const setOpentelemetryExporter = async (authn: Authn): Promise<void> => {
-  const url = tracesUrl(authn.identity.org.slug);
-  await setExporterAfterLogin(url, await authn.getToken());
+  const token = await authn.getToken();
+  const tracesUrlValue = tracesUrl(authn.identity.org.slug);
+  const metricsUrlValue = metricsUrl(authn.identity.org.slug);
+  await setExporterAfterLogin(tracesUrlValue, token);
+  await setMetricsExporterAfterLogin(metricsUrlValue, token);
 };
 
 export const authenticate = async (options?: {

@@ -13,6 +13,7 @@ import { createKeyPair } from "../../common/keys";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { observedExit } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
@@ -28,6 +29,7 @@ import {
   SupportedSshProviders,
 } from "../../types/ssh";
 import { request } from "./request";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { pick } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -175,7 +177,7 @@ export const provisionRequest = async (
         );
       }
     }
-    sys.exit(1);
+    observedExit(1, err);
   };
 
   let response;
@@ -211,11 +213,7 @@ export const provisionRequest = async (
     : "Waiting for access to be provisioned";
   print2(message);
 
-  const result = await decodeProvisionStatus<PluginSshRequest>(
-    response.request
-  );
-
-  if (!result) sys.exit(1);
+  decodeProvisionStatus<PluginSshRequest>(response.request);
 
   return {
     requestId: id,
