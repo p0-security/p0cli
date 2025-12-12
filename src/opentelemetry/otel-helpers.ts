@@ -8,11 +8,23 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { print2 } from "../drivers/stdio";
+import { getMeter } from "./instrumentation";
+import type { Counter } from "@opentelemetry/api";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 
+let proxyCommandCounter: Counter | undefined = undefined;
+
+const getProxyCommandCounter = (): Counter => {
+  if (!proxyCommandCounter) {
+    const meter = getMeter();
+    proxyCommandCounter = meter.createCounter("ssh.proxy_command.attempts", {
+      description: "Number of proxyCommand execution attempts",
+    });
+  }
+  return proxyCommandCounter;
+};
+
 export const observedExit = (code: number, error?: unknown) => {
-  print2(`observedExit: ${code} ${error}`);
   if (error || code !== 0) {
     const span = trace.getActiveSpan();
     if (span) {
@@ -23,4 +35,19 @@ export const observedExit = (code: number, error?: unknown) => {
     }
   }
   process.exit(code);
+};
+
+export const recordProxyCommandMetric = (
+  success: boolean,
+  provider: string
+) => {
+  try {
+    const counter = getProxyCommandCounter();
+    counter.add(1, {
+      success: success ? 1 : 0,
+      provider,
+    });
+  } catch (error) {
+    // Silently ignore metric recording errors - metrics are best-effort telemetry
+  }
 };

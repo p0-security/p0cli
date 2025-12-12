@@ -19,6 +19,7 @@ import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { auditSshSessionActivity } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { recordProxyCommandMetric } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
 import {
   AccessPattern,
@@ -27,13 +28,13 @@ import {
   SshRequest,
   SupportedSshProvider,
 } from "../../types/ssh";
-import { delay, createCleanChildEnv, getOperatingSystem } from "../../util";
+import { createCleanChildEnv, delay, getOperatingSystem } from "../../util";
 import { AwsCredentials } from "../aws/types";
 import {
   ChildProcessByStdio,
+  spawn,
   StdioNull,
   StdioPipe,
-  spawn,
 } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -633,7 +634,7 @@ export const sshProxy = async (args: {
       ...auditArgs,
       action: `ssh.session.start`,
     });
-    return await spawnSshNode({
+    const exitCode = await spawnSshNode({
       credential,
       abortController,
       command,
@@ -643,6 +644,12 @@ export const sshProxy = async (args: {
       provider: request.type,
       endTime: endTime,
     });
+    const success = exitCode === 0;
+    recordProxyCommandMetric(success, request.type);
+    return exitCode;
+  } catch (error) {
+    recordProxyCommandMetric(false, request.type);
+    throw error;
   } finally {
     await auditSshSessionActivity({
       ...auditArgs,
