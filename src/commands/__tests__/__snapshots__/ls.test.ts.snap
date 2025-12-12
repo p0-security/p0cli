@@ -1,5 +1,44 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`ls > when --all flag is used > should print list response with no indication of who can access > stderr 1`] = `
+[
+  [
+    "Showing destinations.",
+  ],
+]
+`;
+
+exports[`ls > when --all flag is used > should print list response with no indication of who can access > stdout 1`] = `
+[
+  [
+    "  instance-1[02m - Group / Resource 1[00m",
+  ],
+  [
+    "  instance-2[02m - Resource 2[00m",
+  ],
+]
+`;
+
+exports[`ls > when --principal flag is used > should print list response with principal in message > stderr 1`] = `
+[
+  [
+    "Showing destinations.
+Resources labeled with * are already accessible to alice@example.com:",
+  ],
+]
+`;
+
+exports[`ls > when --principal flag is used > should print list response with principal in message > stdout 1`] = `
+[
+  [
+    "  instance-1[02m - Group / Resource 1[00m",
+  ],
+  [
+    "  instance-2[02m - Resource 2[00m",
+  ],
+]
+`;
+
 exports[`ls > when error > should print error message 1`] = `
 {
   "error": "p0 ls
