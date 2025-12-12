@@ -4,7 +4,8 @@ import Foundation
 // This file contains reusable utilities for URL parsing, shell escaping, and command building
 // These functions can be imported into both the main app target and the test target
 
-// MARK: - URL Parsing
+/// Path to the P0 CLI executable
+let P0_PATH = "/usr/local/bin/p0"
 
 /// Parses a p0:// URL into an array of CLI arguments.
 /// Converts URL components (host, path, query params) into CLI format,
@@ -46,21 +47,16 @@ func parseURL(_ url: URL) -> [String]? {
     return arguments
 }
 
-// MARK: - Shell Command Building
-
 /// Builds a complete shell command with properly escaped arguments.
 /// Uses the p0 CLI path and escapes all arguments for safe shell execution.
 ///
 /// - Parameter arguments: The CLI arguments to pass to the p0 command
 /// - Returns: A fully-escaped shell command string
 func buildShellCommand(_ arguments: [String]) -> String {
-    let p0Path = "/usr/local/bin/p0"
-    let escapedPath = shellEscape(p0Path)
+    let escapedPath = shellEscape(P0_PATH)
     let escapedArgs = arguments.map { shellEscape($0) }.joined(separator: " ")
     return "\(escapedPath) \(escapedArgs)"
 }
-
-// MARK: - Security-Critical String Escaping
 
 /// Escapes a string for safe use in shell commands by wrapping it in single quotes
 /// and escaping any single quotes within using the '\'' pattern.
@@ -84,4 +80,28 @@ func applescriptEscape(_ string: String) -> String {
     return string
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
+}
+
+/// Builds a complete AppleScript that launches Terminal with the p0 CLI command.
+/// This function handles both shell escaping and AppleScript escaping to prevent
+/// command injection attacks.
+///
+/// - Parameter arguments: The CLI arguments to pass to the p0 command
+/// - Returns: A complete AppleScript string ready for execution
+func buildApplescript(_ arguments: [String]) -> String {
+    // Build the shell command with properly escaped arguments
+    let shellCommand = buildShellCommand(arguments)
+
+    // Escape the shell command for AppleScript
+    let applescriptEscaped = applescriptEscape(shellCommand)
+
+    // Build the complete AppleScript
+    let script = """
+    tell application "Terminal"
+        activate
+        do script "\(applescriptEscaped)"
+    end tell
+    """
+
+    return script
 }

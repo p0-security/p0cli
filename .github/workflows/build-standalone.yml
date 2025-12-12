@@ -229,7 +229,7 @@ jobs:
           codesign --force --verbose=5 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/bin/p0
 
           # Codesign P0 CLI.app
-          codesign --force --deep --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" "build/sea/root/Applications/P0 CLI.app"
+          codesign --force --deep --verbose=4 --timestamp --entitlements ./mac/url-handler/url-handler.entitlements --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" "build/sea/root/Applications/P0 CLI.app"
 
           # Codesign bundled OpenSSL libraries and binary for notarization
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib

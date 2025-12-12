@@ -6,6 +6,16 @@ A minimal macOS application that registers the `p0://` URL scheme and bridges br
 
 When a user clicks a `p0://` URL in their browser or any application, macOS Launch Services routes the URL to this handler, which parses the URL, locates the P0 CLI binary, and launches Terminal with the appropriate command.
 
+**URL Format:**
+```
+p0://command/resource/subresource?param1=value1&param2=value2
+```
+
+Query parameters are converted to CLI flags (`--param=value`), and boolean flags without values become `--flag`.
+
+Note: when including parameters with URL-encoded whitespace, URL-encoded single or double quotes are not required.
+
+
 ## Usage Examples
 
 | URL | CLI Command |
@@ -14,13 +24,8 @@ When a user clicks a `p0://` URL in their browser or any application, macOS Laun
 | `p0://request/aws/role/admin` | `p0 request aws role admin` |
 | `p0://ssh/prod-db-01?user=admin&port=2222` | `p0 ssh prod-db-01 --user=admin --port=2222` |
 | `p0://aws/role/assume/developer?reason=debugging` | `p0 aws role assume developer --reason=debugging` |
+| `p0://ssh/my-host?reason=urgent%20maintenance` | `p0 ssh my-host --reason="urgent maintenance"` |
 
-**URL Format:**
-```
-p0://command/resource/subresource?param1=value1&param2=value2
-```
-
-Query parameters are converted to CLI flags (`--param=value`), and boolean flags without values become `--flag`.
 
 ## Project Structure
 
@@ -86,6 +91,38 @@ open "p0://ssh/my-host"
 The handler expects the P0 CLI to be installed at `/usr/local/bin/p0`. This location is used by the standalone macOS installer.
 
 If the CLI is not found at this location, the handler displays an error message.
+
+## Debugging & Logs
+
+The URL handler logs to both the macOS unified logging system and process-specific log files for easy debugging.
+
+### Viewing Logs from the Most Recent Invocation
+
+**Option 1: View the log file**
+
+Each invocation creates a unique log file at `/tmp/p0-{PID}.log`:
+
+```bash
+# If you only need the most recent PID, it is embedded in the filename (use the top result):
+ls -t /tmp/p0-*.log
+
+# Print the most recent log file
+cat $(ls -t /tmp/p0-*.log 2>/dev/null | head -1)
+```
+
+**Option 2: View unified logs**
+
+For more detailed MacOS system logs:
+
+```bash
+# This prints enough lines to show all of the logs from the last invocation
+# Modify --last <time> or tail -n <number> if needed
+log show --predicate 'subsystem == "dev.p0.cli.urlhandler"' --last 1h | tail -n 200
+
+# The previous command also prints the PID of the last invocation as part of the structured logging
+# You can filter on that as well for just the most recent invocation
+log show --predicate 'subsystem == "dev.p0.cli.urlhandler" AND processID == <pid>' --last 1h
+```
 
 ## Troubleshooting
 
