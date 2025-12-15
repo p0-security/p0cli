@@ -52,6 +52,11 @@ export const scpCommand = (yargs: yargs.Argv) =>
             "Add user to sudoers file. Set P0_SSH_SUDO=1 to enable by default.",
           default: getDefaultSudo(),
         })
+        .option("break-glass-user", {
+          type: "string",
+          describe:
+            "Break-glass user for out-of-band SSH access (uses pre-configured emergency credentials)",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",

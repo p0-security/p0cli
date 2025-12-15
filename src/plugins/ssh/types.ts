@@ -20,4 +20,5 @@ export type SshConfig = {
 export type CommonSshPermissionSpec = {
   publicKey: string;
   sudo?: boolean;
+  breakGlassUser?: string;
 };

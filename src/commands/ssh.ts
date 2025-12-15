@@ -57,6 +57,11 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "The cloud provider where the instance is hosted",
           choices: ["aws", "azure", "gcloud", "self-hosted"],
         })
+        .option("break-glass-user", {
+          type: "string",
+          describe:
+            "Break-glass user for out-of-band SSH access (uses pre-configured emergency credentials)",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",

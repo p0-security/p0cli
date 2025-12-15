@@ -40,4 +40,5 @@ export type SelfHostedSshRequest = {
   type: "self-hosted";
   linuxUserName: string;
   id: string;
+  breakGlassUser?: string;
 };
