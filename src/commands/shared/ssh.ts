@@ -37,6 +37,7 @@ export type BaseSshCommandArgs = {
   reason?: string;
   parent?: string;
   provider?: SupportedSshProvider;
+  breakGlassUser?: string;
   debug?: boolean;
   sshOptions?: string[];
 };
@@ -153,6 +154,9 @@ export const provisionRequest = async (
             : []),
           ...(args.reason ? ["--reason", args.reason] : []),
           ...(args.parent ? ["--parent", args.parent] : []),
+          ...(args.breakGlassUser
+            ? ["--break-glass-user", args.breakGlassUser]
+            : []),
         ],
         wait: true,
         debug: args.debug,

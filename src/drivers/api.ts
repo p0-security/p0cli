@@ -35,6 +35,8 @@ const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
 const certSignRequestUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/certificates`;
+const breakGlassCredentialsUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/ssh/break-glass-credentials`;
 const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
@@ -140,6 +142,18 @@ export const certificateSigningRequest = async (
     body: JSON.stringify({
       requestId: args.requestId,
       publicKey: args.publicKey,
+    }),
+  });
+
+export const fetchBreakGlassCredentials = async (
+  authn: Authn,
+  args: { requestId: string }
+) =>
+  authFetch<{ privateKey: string; signedCertificate: string }>(authn, {
+    url: breakGlassCredentialsUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
+      requestId: args.requestId,
     }),
   });
 

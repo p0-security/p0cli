@@ -306,13 +306,18 @@ const createCommand = (
     };
   }
 
+  const userName =
+    "breakGlassUser" in request && request.breakGlassUser
+      ? request.breakGlassUser
+      : request.linuxUserName;
+
   return {
     command: "ssh" as const,
     args: [
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
       ...(port ? ["-p", port] : []),
-      `${request.linuxUserName}@${request.id}`,
+      `${userName}@${request.id}`,
       ...(args.command ? [args.command] : []),
       ...args.arguments.map(
         (argument) =>

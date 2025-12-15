@@ -10,9 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { createKeyPair } from "../../common/keys";
+import { print2 } from "../../drivers/stdio";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, getOperatingSystem } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
+import { breakGlassCredentials } from "./break-glass";
 import { generateSelfHostedCertificate } from "./keygen";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
 import * as fs from "fs/promises";
@@ -60,7 +62,23 @@ export const selfHostedSshProvider: SshProvider<
     return undefined;
   },
 
-  generateKeys: async (authn, _request, options) => {
+  generateKeys: async (authn, request, options) => {
+    // Check if break-glass user is specified
+    if (request.breakGlassUser) {
+      const { sshCertificateKeyPath, sshPrivateKeyPath, sshKeyPathCleanup } =
+        await breakGlassCredentials(authn, options);
+      if (options.debug) {
+        print2(
+          `Using break-glass credentials with certificatePath: ${sshCertificateKeyPath} and identityFile: ${sshPrivateKeyPath}`
+        );
+      }
+      return {
+        certificatePath: sshCertificateKeyPath,
+        privateKeyPath: sshPrivateKeyPath,
+        teardown: sshKeyPathCleanup,
+      };
+    }
+    // Normal flow: generate keys locally
     const { path: keyPath } = await createTempDirectoryForKeys();
     const { publicKey } = await createKeyPair();
 
@@ -71,14 +89,36 @@ export const selfHostedSshProvider: SshProvider<
 
     const certificatePath = path.join(keyPath, SELF_HOSTED_CERT_FILENAME);
     await fs.writeFile(certificatePath, signedCertificate);
+    if (options.debug) {
+      print2(
+        `Using locally generated credentials with certificatePath: ${certificatePath}`
+      );
+    }
     return {
       certificatePath,
     };
   },
 
-  setup: async (authn, _request, options) => {
+  setup: async (authn, request, options) => {
+    // Check if break-glass user is specified
+    if (request.breakGlassUser) {
+      const { sshCertificateKeyPath, sshPrivateKeyPath, sshKeyPathCleanup } =
+        await breakGlassCredentials(authn, options);
+      if (options.debug) {
+        print2(
+          `Using break-glass credentials with sshCertificateKeyPath: ${sshCertificateKeyPath} and sshPrivateKeyPath: ${sshPrivateKeyPath}`
+        );
+      }
+      return {
+        sshOptions: [`CertificateFile=${sshCertificateKeyPath}`],
+        identityFile: sshPrivateKeyPath,
+        teardown: sshKeyPathCleanup,
+      };
+    }
+    // Normal flow: generate keys locally
     const { path: keyPath, cleanup: sshKeyPathCleanup } =
       await createTempDirectoryForKeys();
+
     const { publicKey } = await createKeyPair();
 
     const signedCertificate = await generateSelfHostedCertificate(authn, {
@@ -110,6 +150,7 @@ export const selfHostedSshProvider: SshProvider<
       id: request.permission.resource.publicIp,
       linuxUserName: request.generated.linuxUserName,
       type: "self-hosted",
+      breakGlassUser: request.permission.breakGlassUser,
     };
   },
 

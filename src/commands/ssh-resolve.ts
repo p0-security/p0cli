@@ -65,6 +65,11 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
           describe: "Reason access is needed",
           type: "string",
         })
+        .option("break-glass-user", {
+          type: "string",
+          describe:
+            "Break-glass user for out-of-band SSH access (uses pre-configured emergency credentials)",
+        })
         .env(ENV_PREFIX),
 
     sshResolveAction
@@ -125,19 +130,17 @@ const sshResolveAction = async (
   if (args.debug) {
     print2("Generating Keys");
   }
-  const keys = await sshProvider?.generateKeys?.(
-    authn,
-    provisionedRequest.permission.resource,
-    {
-      requestId,
-      debug: args.debug,
-    }
-  );
+  const keys = await sshProvider?.generateKeys?.(authn, request, {
+    requestId,
+    debug: args.debug,
+  });
 
   const tmpFile = tmp.fileSync();
 
   if (args.debug) {
-    print2("Writing request output to disk for use by ssh-proxy");
+    print2(
+      `Writing request output to disk for use by ssh-proxy: ${tmpFile.name}`
+    );
   }
   fs.writeFileSync(
     tmpFile.name,
@@ -156,6 +159,11 @@ const sshResolveAction = async (
 
   const hostKeyAlias = alias ? `HostKeyAlias ${alias}` : "";
 
+  const userName =
+    "breakGlassUser" in request && request.breakGlassUser
+      ? request.breakGlassUser
+      : request.linuxUserName;
+
   const appPath = getAppPath();
 
   // The config file name must be a valid file name (without forward slashes) so we can create it.
@@ -169,7 +177,7 @@ const sshResolveAction = async (
   // address. Since we are using `p0 ssh-proxy`, it can be anything as long as we resolve it.
   const data = `Host ${args.destination}
   Hostname ${args.destination}
-  User ${request.linuxUserName}
+  User ${userName}
   IdentityFile ${identityFile}
   ${certificateInfo}
   PasswordAuthentication no
@@ -190,7 +198,7 @@ const sshResolveAction = async (
   );
 
   if (args.debug) {
-    print2("Writing ssh config file");
+    print2(`Writing ssh config file: ${configLocation}`);
     print2(data);
   }
   fs.writeFileSync(configLocation, data);

@@ -49,6 +49,11 @@ export const scpCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Add user to sudoers file",
         })
+        .option("break-glass-user", {
+          type: "string",
+          describe:
+            "Break-glass user for out-of-band SSH access (uses pre-configured emergency credentials)",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
