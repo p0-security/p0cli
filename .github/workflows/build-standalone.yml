@@ -13,6 +13,7 @@ jobs:
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
       APPLE_CODESIGN_CERT_NAME: "Developer ID Application: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_INSTALLER_CERT_NAME: "Developer ID Installer: P0 Security, Inc. (FFR8KSH76M)"
+      APPLE_DEVELOPER_TEAM: "FFR8KSH76M"
       VERSION: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
@@ -172,13 +173,23 @@ jobs:
         run: |
           yarn build:macos
           ./mac/build-macOS.sh
+      - name: Run Swift unit tests
+        run: |
+          xcodebuild test \
+            -project mac/url-handler.xcodeproj \
+            -scheme url-handler \
+            -destination 'platform=macOS'
       - name: Package application
         run: |
           mkdir -p build/sea/root/usr/local/bin
           mkdir -p build/sea/root/usr/local/lib/p0
+          mkdir -p build/sea/root/Applications
 
           # Copy the binary to lib directory (will be called by wrapper script)
           cp build/sea/p0 build/sea/root/usr/local/lib/p0/p0
+
+          # Copy P0 CLI.app to Applications
+          cp -R "build/P0 CLI.app" build/sea/root/Applications/
 
           # Create wrapper script that sets FIPS environment variables before Node.js starts
           # These must be set BEFORE Node.js initializes to ensure OpenSSL loads the correct
@@ -217,6 +228,9 @@ jobs:
           codesign --force --verbose=5 --timestamp --entitlements ./mac/entitlements.plist --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/p0
           codesign --force --verbose=5 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/bin/p0
 
+          # Codesign P0 CLI.app
+          codesign --force --deep --verbose=4 --timestamp --entitlements ./mac/url-handler/url-handler.entitlements --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" "build/sea/root/Applications/P0 CLI.app"
+
           # Codesign bundled OpenSSL libraries and binary for notarization
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verbose=4 --timestamp --options runtime --sign "${{ env.APPLE_CODESIGN_CERT_NAME }}" --keychain "build.keychain" build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
@@ -229,6 +243,7 @@ jobs:
           echo "::debug::Verifying signatures"
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/p0
           codesign --verify --verbose build/sea/root/usr/local/bin/p0
+          codesign --verify --verbose "build/sea/root/Applications/P0 CLI.app"
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libssl.3.dylib
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/libcrypto.3.dylib
           codesign --verify --verbose build/sea/root/usr/local/lib/p0/openssl

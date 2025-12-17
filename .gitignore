@@ -136,3 +136,5 @@ build/
 
 dist/
 
+# MacOS XCode user data
+xcuserdata
