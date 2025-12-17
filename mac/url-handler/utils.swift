@@ -61,7 +61,8 @@ func buildShellCommand(_ arguments: [String]) -> String {
 /// Escapes a string for safe use in shell commands by wrapping it in single quotes
 /// and escaping any single quotes within using the '\'' pattern.
 ///
-/// Example: `shellEscape("user's-file") // Returns: 'user'\''s-file'`
+/// Example input: user's-file
+/// Example output: 'user'\''s-file'
 ///
 /// - Parameter string: The string to escape
 /// - Returns: A shell-safe escaped string wrapped in single quotes
@@ -72,7 +73,8 @@ func shellEscape(_ string: String) -> String {
 /// Escapes a string for safe use in AppleScript string literals by escaping
 /// backslashes and double quotes.
 ///
-/// Example: `applescriptEscape("say \"hello\"") // Returns: say \"hello\"`
+/// Example input: say "hello"
+/// Example output: say \"hello\"
 ///
 /// - Parameter string: The string to escape
 /// - Returns: An AppleScript-safe escaped string (to be wrapped in double quotes)
