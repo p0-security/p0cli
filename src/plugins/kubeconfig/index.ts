@@ -112,10 +112,7 @@ export const requestAccessToCluster = async (
     throw "Did not receive access ID from server";
   }
 
-  const code = await decodeProvisionStatus(response.request);
-  if (!code) {
-    sys.exit(1);
-  }
+  decodeProvisionStatus(response.request);
   return response.request;
 };
 

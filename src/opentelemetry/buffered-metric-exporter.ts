@@ -10,29 +10,32 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { BufferedExporterBase } from "./buffered-exporter-base";
 import { ExportResult, ExportResultCode } from "@opentelemetry/core";
-import { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace-base";
+import {
+  PushMetricExporter,
+  ResourceMetrics,
+} from "@opentelemetry/sdk-metrics";
 
 /**
- * A SpanExporter that buffers spans in memory until a delegate exporter is available.
+ * A MetricExporter that buffers metrics in memory until a delegate exporter is available.
  *
- * This is useful when trace spans are created before authentication
+ * This is useful when metrics are created before authentication
  * and the actual exporter (e.g., OTLP exporter with access token)
  * can only be initialized after login.
  *
- * Spans exported before the delegate is set are stored in an internal buffer.
+ * Metrics exported before the delegate is set are stored in an internal buffer.
  * Once the delegate exporter is injected via `setDelegateAndExport()`,
- * all buffered spans are flushed to the delegate. Future spans are exported directly.
+ * all buffered metrics are flushed to the delegate. Future metrics are exported directly.
  *
- * @implements {import('@opentelemetry/sdk-trace-base').SpanExporter}
+ * @implements {import('@opentelemetry/sdk-metrics').PushMetricExporter}
  */
-export class BufferedSpanExporter
-  extends BufferedExporterBase<SpanExporter>
-  implements SpanExporter
+export class BufferedMetricExporter
+  extends BufferedExporterBase<PushMetricExporter>
+  implements PushMetricExporter
 {
-  private buffer: ReadableSpan[] = [];
+  private buffer: ResourceMetrics[] = [];
 
   export(
-    spans: ReadableSpan[],
+    metrics: ResourceMetrics,
     resultCallback: (result: ExportResult) => void
   ): void {
     if (this.checkShutdown()) {
@@ -42,32 +45,34 @@ export class BufferedSpanExporter
 
     if (this.delegate) {
       try {
-        this.delegate.export(spans, resultCallback);
+        this.delegate.export(metrics, resultCallback);
       } catch (error) {
-        // Silently ignore export errors - traces are best-effort telemetry
+        // Silently ignore export errors - metrics are best-effort telemetry
         resultCallback({ code: ExportResultCode.FAILED });
       }
     } else {
-      this.buffer.push(...spans);
+      this.buffer.push(metrics);
       resultCallback({ code: ExportResultCode.SUCCESS });
     }
   }
 
-  setDelegateAndExport(exporter: SpanExporter) {
+  setDelegateAndExport(exporter: PushMetricExporter) {
     if (this.checkShutdown()) return;
 
     this.setDelegate(exporter);
 
     if (this.buffer.length > 0) {
       const toFlush = this.buffer.splice(0);
-      try {
-        this.delegate!.export(toFlush, (result) => {
-          if (result.code === ExportResultCode.FAILED) {
-            // Silently ignore export failures
-          }
-        });
-      } catch (error) {
-        // Silently ignore export errors
+      for (const metrics of toFlush) {
+        try {
+          this.delegate!.export(metrics, (result: ExportResult) => {
+            if (result.code === ExportResultCode.FAILED) {
+              // Silently ignore export failures
+            }
+          });
+        } catch (error) {
+          // Silently ignore export errors
+        }
       }
     }
   }

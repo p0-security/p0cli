@@ -10,11 +10,18 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { p0VersionInfo } from "../version";
 import { BufferedSpanExporter } from "./buffered-exporter";
+import { BufferedMetricExporter } from "./buffered-metric-exporter";
+import { metrics } from "@opentelemetry/api";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { DnsInstrumentation } from "@opentelemetry/instrumentation-dns";
 import { NetInstrumentation } from "@opentelemetry/instrumentation-net";
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   ATTR_SERVICE_NAME,
@@ -22,12 +29,27 @@ import {
 } from "@opentelemetry/semantic-conventions";
 
 export const bufferedExporter = new BufferedSpanExporter();
+export const bufferedMetricExporter = new BufferedMetricExporter();
+
+const resource = resourceFromAttributes({
+  [ATTR_SERVICE_NAME]: p0VersionInfo.name,
+  [ATTR_SERVICE_VERSION]: p0VersionInfo.version,
+});
+
+const metricReader = new PeriodicExportingMetricReader({
+  exporter: bufferedMetricExporter,
+  exportIntervalMillis: 30000, // Export every 30 seconds
+});
+
+const meterProvider = new MeterProvider({
+  resource,
+  readers: [metricReader],
+});
+
+metrics.setGlobalMeterProvider(meterProvider);
 
 const sdk = new NodeSDK({
-  resource: resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: p0VersionInfo.name,
-    [ATTR_SERVICE_VERSION]: p0VersionInfo.version,
-  }),
+  resource,
   traceExporter: bufferedExporter,
   instrumentations: [
     new DnsInstrumentation(),
@@ -47,12 +69,34 @@ export const setExporterAfterLogin = async (url: string, token: string) => {
   bufferedExporter.setDelegateAndExport(realExporter);
 };
 
+export const setMetricsExporterAfterLogin = async (
+  url: string,
+  token: string
+) => {
+  const realMetricExporter = new OTLPMetricExporter({
+    url,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  bufferedMetricExporter.setDelegateAndExport(realMetricExporter);
+};
+
+export const getMeter = () => {
+  return metrics.getMeter("p0cli", "0.0.1");
+};
+
 export const startTracing = () => {
   sdk.start();
 };
 
 const shutdownSdk = () => {
-  void sdk.shutdown().finally(() => {
+  Promise.all([
+    metricReader.forceFlush(),
+    sdk.shutdown(),
+    meterProvider.shutdown(),
+  ]).finally(() => {
     process.exit();
   });
 };
