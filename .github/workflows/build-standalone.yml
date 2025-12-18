@@ -383,6 +383,8 @@ jobs:
             yarn.lock
       - name: Install dependencies
         run: yarn install
+      - name: Add build info to package.json
+        run: node preprocess-sea.cjs "Linux" $(node -p process.arch)
       - name: Build
         run: |
           yarn build:debian
