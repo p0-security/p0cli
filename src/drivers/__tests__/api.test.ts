@@ -16,7 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../config");
 vi.mock("../env");
 vi.mock("../../version", () => ({
-  p0VersionInfo: { version: "1.0.0" },
+  getStringifiedUserAgent: () =>
+    "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
 }));
 
 describe("fetchWithStreaming", () => {
@@ -95,7 +96,7 @@ describe("fetchWithStreaming", () => {
       headers: {
         authorization: "Bearer mock-token",
         "Content-Type": "application/json",
-        "User-Agent": "P0 CLI/1.0.0",
+        "User-Agent": "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
       },
       body: JSON.stringify({ test: "data" }),
       keepalive: true,
