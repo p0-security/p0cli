@@ -72,6 +72,18 @@ export const stringifyVersionInfo = (info: VersionInfo): string => {
   }
 };
 
+export const getUserAgent = (): string => {
+  const { version, build } = p0VersionInfo;
+
+  if (build.standalone) {
+    // For standalone builds: P0 CLI/1.0.0 (standalone build; macOS; arm64)
+    return `P0 CLI/${version} (standalone build; ${build.os}; ${build.arch})`;
+  } else {
+    // For npm builds: P0 CLI/1.0.0 (npm build; darwin; arm64; node/v20.0.0)
+    return `P0 CLI/${version} (npm build; ${os.platform()}; ${os.arch()}; node/${process.version})`;
+  }
+};
+
 // p0VersionInfo is a promise that resolves to the current version info
 // The importer needs to await this promise to actually read the version number
 // e.g. `const { name, version } = await p0VersionInfo;`
