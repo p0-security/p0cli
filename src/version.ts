@@ -72,7 +72,7 @@ export const stringifyVersionInfo = (info: VersionInfo): string => {
   }
 };
 
-export const getStringifiedUserAgent = (): string => {
+export const getUserAgent = (): string => {
   const { version, build } = p0VersionInfo;
 
   if (build.standalone) {

@@ -16,8 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../config");
 vi.mock("../env");
 vi.mock("../../version", () => ({
-  getStringifiedUserAgent: () =>
-    "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
+  getUserAgent: () => "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
 }));
 
 describe("fetchWithStreaming", () => {

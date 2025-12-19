@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
-import { getStringifiedUserAgent } from "../version";
+import { getUserAgent } from "../version";
 import { getTenantConfig } from "./config";
 import { defaultConfig } from "./env";
 import { print2 } from "./stdio";
@@ -160,7 +160,7 @@ export const fetchWithStreaming = async function* <T>(
     headers: {
       authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "User-Agent": getStringifiedUserAgent(),
+      "User-Agent": getUserAgent(),
     },
     body,
     keepalive: true,
@@ -332,7 +332,7 @@ const baseFetch = async <T>(args: {
     headers: {
       ...(headers ?? {}),
       "Content-Type": "application/json",
-      "User-Agent": getStringifiedUserAgent(),
+      "User-Agent": getUserAgent(),
     },
     body,
     keepalive: true,
