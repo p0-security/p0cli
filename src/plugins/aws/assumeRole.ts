@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { validateResponse } from "../../common/fetch";
 import { parseXml } from "../../common/xml";
+import { print2 } from "../../drivers/stdio";
 import { arnPrefix } from "./api";
 import { AWS_API_VERSION } from "./api";
 import { AwsCredentials } from "./types";
@@ -66,5 +67,13 @@ export const assumeRoleWithSaml = async (args: {
     // Note that, despite the name, AWS actually expects a SAML Response
     SAMLAssertion: args.saml.response,
   };
+
+  if (process.env.DEBUG || process.env.P0_DEBUG) {
+    print2(`[DEBUG] Calling AWS STS AssumeRoleWithSAML`);
+    print2(`[DEBUG] Role ARN: ${params.RoleArn}`);
+    print2(`[DEBUG] Principal ARN: ${params.PrincipalArn}`);
+    print2(`[DEBUG] SAML Response length: ${args.saml.response.length} characters`);
+  }
+
   return await stsAssume(params);
 };

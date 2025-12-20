@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../../common/retry";
 import { parseXml } from "../../common/xml";
 import { cached } from "../../drivers/auth";
+import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
@@ -27,9 +28,14 @@ const RETRY_MULTIPLIER = 2.0;
 const MAX_RETRY_DELAY_MS = 30000;
 
 /** Extracts all roles from a SAML assertion */
-const rolesFromSaml = (account: string, saml: string) => {
+const rolesFromSaml = (account: string, saml: string, debug?: boolean) => {
   const samlText = Buffer.from(saml, "base64").toString("ascii");
   const samlObject = parseXml(samlText);
+
+  if (debug) {
+    print2(`[DEBUG] Parsing SAML assertion for account ${account}`);
+  }
+
   const samlAttributes =
     samlObject["saml2p:Response"]["saml2:Assertion"][
       "saml2:AttributeStatement"
@@ -38,6 +44,23 @@ const rolesFromSaml = (account: string, saml: string) => {
     (a: any) =>
       a._attributes.Name === "https://aws.amazon.com/SAML/Attributes/Role"
   );
+
+  if (debug) {
+    if (!roleAttribute) {
+      print2(`[DEBUG] WARNING: No Role attribute found in SAML assertion`);
+      print2(`[DEBUG] Available SAML attributes:`);
+      samlAttributes.forEach((attr: any) => {
+        print2(`[DEBUG]   - ${attr._attributes.Name}`);
+      });
+    } else {
+      const rawRoleValues = flatten([roleAttribute?.["saml2:AttributeValue"]]);
+      print2(`[DEBUG] Raw role attribute values from SAML:`);
+      rawRoleValues.forEach((val: any) => {
+        print2(`[DEBUG]   - ${val}`);
+      });
+    }
+  }
+
   // Format:
   //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
   const arns = (
@@ -46,6 +69,17 @@ const rolesFromSaml = (account: string, saml: string) => {
   const roles = arns
     .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
     .map((r) => r.split("/").slice(1).join("/"));
+
+  if (debug) {
+    print2(`[DEBUG] Extracted ${roles.length} role(s) for account ${account}:`);
+    roles.forEach((role) => {
+      print2(`[DEBUG]   - ${role}`);
+    });
+    if (arns.length > roles.length) {
+      print2(`[DEBUG] Filtered out ${arns.length - roles.length} role(s) from other accounts`);
+    }
+  }
+
   return { arns, roles };
 };
 
@@ -93,7 +127,7 @@ export const assumeRoleWithOktaSaml = async (
             args.accountId,
             debug
           );
-          const { roles } = rolesFromSaml(account, samlResponse);
+          const { roles } = rolesFromSaml(account, samlResponse, debug);
           if (!roles.includes(args.role)) {
             throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
           }
