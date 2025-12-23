@@ -37,9 +37,9 @@ export const role = (
               demandOption: true,
               describe: "An AWS role name",
             })
-            .option("no-request", {
+            .option("request", {
               type: "boolean",
-              describe: "Do not create a new request when assuming the role",
+              describe: "Create a new request when assuming the role",
               default: true,
             }),
         // TODO: select based on uidLocation
