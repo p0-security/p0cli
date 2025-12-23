@@ -120,7 +120,7 @@ export const awsSshProvider: SshProvider<
     // TODO: Add manual commands for IDC login
     if (request.access !== "idc") {
       return [
-        `eval $(${getAppName()} aws role assume ${request.role} --account ${request.accountId})`,
+        `eval $(${getAppName()} aws role assume ${request.role} --account ${request.accountId} --request=false)`,
       ];
     }
     return undefined;
