@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 export type AssumeCommandArgs = {
   account?: string;
   reason?: string;
+  request?: boolean;
   debug?: boolean;
 };
 
