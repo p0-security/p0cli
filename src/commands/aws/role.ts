@@ -31,11 +31,17 @@ export const role = (
         "assume <role>",
         "Assume an AWS role",
         (y: yargs.Argv<{ account: string | undefined }>) =>
-          y.positional("role", {
-            type: "string",
-            demandOption: true,
-            describe: "An AWS role name",
-          }),
+          y
+            .positional("role", {
+              type: "string",
+              demandOption: true,
+              describe: "An AWS role name",
+            })
+            .option("request", {
+              type: "boolean",
+              describe: "Create a new request when assuming the role",
+              default: true,
+            }),
         // TODO: select based on uidLocation
         (argv) => oktaAwsAssumeRole(argv, authn)
       )
@@ -56,9 +62,11 @@ const oktaAwsAssumeRole = async (
   argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>,
   authn: Authn
 ) => {
-  const requestCommand = buildRoleRequestCommand(argv);
+  if (argv.request) {
+    const requestCommand = buildRoleRequestCommand(argv);
 
-  await provisionRequest(requestCommand, authn);
+    await provisionRequest(requestCommand, authn);
+  }
 
   const awsCredential = await assumeRoleWithOktaSaml(
     authn,
