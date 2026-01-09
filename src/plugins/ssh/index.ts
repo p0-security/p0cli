@@ -43,6 +43,12 @@ const RETRY_DELAY_MS = 5000;
 const AUTHENTICATION_SUCCESS_PATTERN =
   /Authenticated to [^\s]+ \(via proxy\) using "publickey"/;
 
+const FILE_PERMISSION_DENIED_ERROR_PATTERN = /^scp:.*Permission denied/;
+
+const NO_SUCH_FILE_ERROR_PATTERN = /^scp:.*No such file or directory/;
+
+const PORT_FORWARDING_FAILED_ERROR_PATTERN = /.*port forwarding failed.*/;
+
 /** Checks if access has propagated through AWS to the SSM agent
  *
  * AWS takes about 8 minutes, GCP takes under 1 minute
@@ -136,8 +142,20 @@ const parseAndPrintSshOutputToStderr = (
         // We want to let the user know that they successfully authenticated
         print2(line);
         options.audit?.("start");
-      } else if (!isPreTest && line.includes("port forwarding failed")) {
-        // We also want to let the user know if port forwarding failed
+      } else if (
+        !isPreTest &&
+        PORT_FORWARDING_FAILED_ERROR_PATTERN.test(line)
+      ) {
+        // Surface port forwarding failures to the user
+        print2(line);
+      } else if (
+        !isPreTest &&
+        FILE_PERMISSION_DENIED_ERROR_PATTERN.test(line)
+      ) {
+        // Surface permission denied errors to the user
+        print2(line);
+      } else if (!isPreTest && NO_SUCH_FILE_ERROR_PATTERN.test(line)) {
+        // Surface missing file/directory errors to the user
         print2(line);
       }
     }
