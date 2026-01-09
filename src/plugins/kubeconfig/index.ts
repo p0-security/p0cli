@@ -94,10 +94,9 @@ export const requestAccessToCluster = async (
       arguments: [
         "k8s",
         "resource",
+        role,
         "--cluster",
         clusterId,
-        "--role",
-        role,
         ...(args.resource ? ["--locator", args.resource] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
         ...(args.duration ? ["--duration", args.duration] : []),
