@@ -132,8 +132,8 @@ export const awsCloudAuth = async (
   debug?: boolean
 ): Promise<AwsCredentials> => {
   const { permission, generated } = request;
-  const { eksGenerated } = generated;
-  const { name } = eksGenerated;
+  const { aws } = generated;
+  const { name } = aws;
 
   switch (loginType) {
     case "idc": {

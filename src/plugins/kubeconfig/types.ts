@@ -47,7 +47,7 @@ export type K8sResourcePermission = {
 };
 
 export type K8sGenerated = {
-  eksGenerated: {
+  aws: {
     // For IDC, the name of the permission set. For Federated, the name of the assumed role
     name: string;
   };
