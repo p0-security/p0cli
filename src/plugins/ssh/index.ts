@@ -139,6 +139,12 @@ const parseAndPrintSshOutputToStderr = (
       } else if (!isPreTest && line.includes("port forwarding failed")) {
         // We also want to let the user know if port forwarding failed
         print2(line);
+      } else if (!isPreTest && line.includes("permission denied")) {
+        // Surface permission denied errors to the user
+        print2(line)
+      } else if (!isPreTest && line.includes("No such file or directory")) {
+        // Surface file stat errors to the user
+        print2(line)
       }
     }
   }
