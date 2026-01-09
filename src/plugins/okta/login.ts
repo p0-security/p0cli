@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { deleteIdentity } from "../../drivers/auth";
+import { print2 } from "../../drivers/stdio";
 import {
   getClientId,
   getProviderDomain,
@@ -32,6 +33,11 @@ const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
 const TOKEN_EXCHANGE_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange";
 const WEB_SSO_TOKEN_TYPE = "urn:okta:oauth:token-type:web_sso_token";
+
+const oktaConfigurationErrors = [
+  "The application's assurance requirements are not met by the 'subject_token'.",
+  "The target audience app must be configured to allow the client to request a 'web_sso_token'.",
+]
 
 /**
  * Exchanges an Okta OIDC SSO token for an Okta app SSO token.
@@ -75,7 +81,13 @@ const fetchSsoWebToken = async (
       const data = await response.json();
       if (data.error === "invalid_grant") {
         await deleteIdentity();
-        throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to re-authenticate.";
+        // Check for specific configuration errors so that they aren't conflated with session/token expiry errors.
+        if (oktaConfigurationErrors.includes(data.error_description)) {
+          print2("Invalid provider configuration - unable to perform token exchange")
+          throw data.error_description
+        } else {
+           throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to re-authenticate.";
+        }
       }
     }
 
