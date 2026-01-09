@@ -94,10 +94,9 @@ export const requestAccessToCluster = async (
       arguments: [
         "k8s",
         "resource",
+        role,
         "--cluster",
         clusterId,
-        "--role",
-        role,
         ...(args.resource ? ["--locator", args.resource] : []),
         ...(args.reason ? ["--reason", args.reason] : []),
         ...(args.duration ? ["--duration", args.duration] : []),
@@ -133,8 +132,8 @@ export const awsCloudAuth = async (
   debug?: boolean
 ): Promise<AwsCredentials> => {
   const { permission, generated } = request;
-  const { eksGenerated } = generated;
-  const { name } = eksGenerated;
+  const { aws } = generated;
+  const { name } = aws;
 
   switch (loginType) {
     case "idc": {
