@@ -37,7 +37,7 @@ const WEB_SSO_TOKEN_TYPE = "urn:okta:oauth:token-type:web_sso_token";
 const oktaConfigurationErrors = [
   "The application's assurance requirements are not met by the 'subject_token'.",
   "The target audience app must be configured to allow the client to request a 'web_sso_token'.",
-]
+];
 
 /**
  * Exchanges an Okta OIDC SSO token for an Okta app SSO token.
@@ -83,10 +83,12 @@ const fetchSsoWebToken = async (
         await deleteIdentity();
         // Check for specific configuration errors so that they aren't conflated with session/token expiry errors.
         if (oktaConfigurationErrors.includes(data.error_description)) {
-          print2("Invalid provider configuration - unable to perform token exchange")
-          throw data.error_description
+          print2(
+            "Invalid provider configuration - unable to perform token exchange"
+          );
+          throw data.error_description;
         } else {
-           throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to re-authenticate.";
+          throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to re-authenticate.";
         }
       }
     }
