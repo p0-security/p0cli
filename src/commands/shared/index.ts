@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { observedExit } from "../../opentelemetry/otel-helpers";
 import {
   DENIED_STATUSES,
   DONE_STATUSES,
@@ -17,24 +18,26 @@ import {
   PermissionRequest,
   PluginRequest,
 } from "../../types/request";
+import { sys } from "typescript";
 
 /**
  * process request status to determine the success of the operation
  * @param request
  * @returns
  */
-export const decodeProvisionStatus = async <P extends PluginRequest>(
+export const decodeProvisionStatus = <P extends PluginRequest>(
   request: PermissionRequest<P>
 ) => {
-  if (DONE_STATUSES.includes(request.status as any)) {
-    return true;
-  } else if (DENIED_STATUSES.includes(request.status as any)) {
+  if (DENIED_STATUSES.includes(request.status as any)) {
     print2("Your access request was denied");
+    sys.exit(1);
   } else if (ERROR_STATUSES.includes(request.status as any)) {
     const message =
       request.error?.message ??
       `Your access request encountered an unknown error. ${getContactMessage()}`;
     print2(message);
+    observedExit(1, message);
+  } else if (!DONE_STATUSES.includes(request.status as any)) {
+    sys.exit(1);
   }
-  return false;
 };

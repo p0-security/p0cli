@@ -26,6 +26,7 @@ import process from "node:process";
 import type { Readable } from "node:stream";
 import open from "open";
 import { sys } from "typescript";
+import { observedExit } from "./opentelemetry/otel-helpers";
 
 /**
  * Creates a clean environment for child processes by removing FIPS OpenSSL configuration
@@ -178,7 +179,7 @@ export const throwAssertNever = (value: never) => {
 export const conditionalAbortBeforeThrow =
   (abortBeforeThrow: boolean) => (err: any) => {
     if (abortBeforeThrow) {
-      sys.exit(1);
+      observedExit(1, err);
     }
     throw err;
   };

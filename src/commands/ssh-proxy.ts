@@ -13,7 +13,7 @@ import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { sshProxy } from "../plugins/ssh";
 import { P0_PATH } from "../util";
-import { SshProxyCommandArgs, SSH_PROVIDERS } from "./shared/ssh";
+import { SSH_PROVIDERS, SshProxyCommandArgs } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import * as fs from "fs/promises";
 import path from "path";

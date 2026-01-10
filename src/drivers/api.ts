@@ -41,6 +41,7 @@ const sshAuditUrl = (tenant: string) =>
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
+export const metricsUrl = (tenant: string) => `${tenantUrl(tenant)}/metrics`;
 
 export const fetchOrgData = async <T>(orgId: string) =>
   baseFetch<T>({ url: tenantOrgUrl(orgId), method: "GET" });
