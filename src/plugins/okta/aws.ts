@@ -67,7 +67,11 @@ const initOktaSaml = async (
   const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
-  const samlResponse = await fetchSamlAssertionForAws(identity, config.login);
+  const samlResponse = await fetchSamlAssertionForAws(
+    identity,
+    config.login,
+    debug
+  );
   return {
     samlResponse,
     config,
