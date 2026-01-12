@@ -49,7 +49,8 @@ const oktaConfigurationErrors = [
  */
 const fetchSsoWebToken = async (
   appId: string,
-  { org, credential }: Identity
+  { org, credential }: Identity,
+  debug?: boolean
 ) => {
   const providerType = getProviderType(org);
   const providerDomain = getProviderDomain(org);
@@ -84,11 +85,15 @@ const fetchSsoWebToken = async (
         // Check for specific configuration errors so that they aren't conflated with session/token expiry errors.
         if (oktaConfigurationErrors.includes(data.error_description)) {
           print2(
-            "Invalid provider configuration - unable to perform token exchange"
+            "Invalid provider configuration - unable to perform token exchange; please fix your configuration, \
+            then log out of Okta in your browser and re-execute the p0 command again to reauthenticate."
           );
+          if (debug) {
+            print2("Response and error information: " + data)
+          }
           throw data.error_description;
         } else {
-          throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to re-authenticate.";
+          throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to reauthenticate.";
         }
       }
     }
@@ -165,11 +170,13 @@ export const oktaLogin = async (org: OrgData) =>
 // TODO: Inject Okta app
 export const fetchSamlAssertionForAws = async (
   identity: Identity,
-  config: AwsFederatedLogin
+  config: AwsFederatedLogin,
+  debug?: boolean,
 ): Promise<string> => {
   const webTokenResponse = await fetchSsoWebToken(
     config.provider.appId,
-    identity
+    identity,
+    debug
   );
   const samlResponse = await fetchSamlResponse(identity.org, webTokenResponse);
   if (!samlResponse) {
