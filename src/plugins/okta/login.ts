@@ -89,7 +89,7 @@ const fetchSsoWebToken = async (
             then log out of Okta in your browser and re-execute the p0 command again to reauthenticate."
           );
           if (debug) {
-            print2("Response and error information: " + data)
+            print2("Fetch SSO Web Token Error Information: " + data);
           }
           throw data.error_description;
         } else {
@@ -171,7 +171,7 @@ export const oktaLogin = async (org: OrgData) =>
 export const fetchSamlAssertionForAws = async (
   identity: Identity,
   config: AwsFederatedLogin,
-  debug?: boolean,
+  debug?: boolean
 ): Promise<string> => {
   const webTokenResponse = await fetchSsoWebToken(
     config.provider.appId,
