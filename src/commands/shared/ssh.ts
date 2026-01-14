@@ -123,6 +123,14 @@ const validateSshInstall = async (
   }
 };
 
+/** Returns true if sudo should be enabled by default.
+ * Set P0_SSH_SUDO=1 to enable sudo by default.
+ */
+export const getDefaultSudo = (): boolean => {
+  const sudo = process.env.P0_SSH_SUDO;
+  return !!sudo && sudo !== "0" && sudo.toLowerCase() !== "false";
+};
+
 export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
   args.sudo || args.command === "sudo";
 
