@@ -40,7 +40,7 @@ export type K8sResourcePermission = {
   role: string;
   clusterId: string;
   type: "resource";
-  awsResourcePermission?: {
+  aws?: {
     idcRegion?: string;
     idcId?: string;
   };
