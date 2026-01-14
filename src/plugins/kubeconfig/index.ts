@@ -137,7 +137,7 @@ export const awsCloudAuth = async (
 
   switch (loginType) {
     case "idc": {
-      const { idcId, idcRegion } = permission.awsResourcePermission ?? {};
+      const { idcId, idcRegion } = permission.aws ?? {};
 
       if (!idcId || !idcRegion) {
         throw "AWS is configured to use Identity Center, but IDC information wasn't received in the request.";
