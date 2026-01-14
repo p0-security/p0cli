@@ -128,7 +128,7 @@ const validateSshInstall = async (
  */
 export const getDefaultSudo = (): boolean => {
   const sudo = process.env.P0_SSH_SUDO;
-  return !!sudo && sudo !== "0" && sudo.toLowerCase() !== "false";
+  return !!sudo && sudo !== "0" && sudo.toLowerCase?.() !== "false";
 };
 
 export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
