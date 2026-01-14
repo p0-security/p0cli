@@ -10,9 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../../drivers/auth";
 import { print2 } from "../../drivers/stdio";
+import { observedExit } from "../../opentelemetry/otel-helpers";
 import { getFirstAwsConfig } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
 import { role } from "./role";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -50,7 +52,7 @@ const awsArgs = async (yargs: yargs.Argv) => {
     // this occurs during command building
 
     print2(error);
-    sys.exit(1);
+    observedExit(1, error);
     throw error; // This will never be reached, but is needed to satisfy TypeScript
   }
 };
