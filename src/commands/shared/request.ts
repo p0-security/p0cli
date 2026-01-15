@@ -11,12 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { print2, spinUntil } from "../../drivers/stdio";
+import { markSpanError } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
 import {
   PermissionRequest,
   PluginRequest,
   RequestResponse,
 } from "../../types/request";
+import { trace } from "@opentelemetry/api";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -66,14 +68,37 @@ const resolveCode = (
   logMessage: boolean
 ) => {
   const { status } = permission;
+
+  // Get the active span from OpenTelemetry context
+  const activeSpan = trace.getActiveSpan();
+
   if (isCompletedStatus(status)) {
     const { message, code } = COMPLETED_REQUEST_STATUSES[status];
     const errorMessage = permission.error
       ? `${message}: ${permission.error.message}`
       : message;
+
+    // Mark span based on request outcome
+    if (activeSpan) {
+      if (code !== 0) {
+        markSpanError(activeSpan, `Request ${status}: ${errorMessage}`);
+      }
+      activeSpan.setAttribute("request.status", status);
+      activeSpan.setAttribute("request.exitCode", code);
+    }
+    // TODO(ENG-6770): Consider adding debug logging when activeSpan is null to detect
+    // when resolveCode is called outside of traced contexts
+
     if (code !== 0 || logMessage) print2(errorMessage);
     return code;
   } else {
+    // Request timed out
+    if (activeSpan) {
+      markSpanError(activeSpan, "Request timed out after 5 minutes");
+      activeSpan.setAttribute("request.status", "TIMEOUT");
+      activeSpan.setAttribute("request.exitCode", 4);
+    }
+    // TODO(ENG-6770): Consider adding debug logging when activeSpan is null
     print2("Your request did not complete within 5 minutes.");
     return 4;
   }

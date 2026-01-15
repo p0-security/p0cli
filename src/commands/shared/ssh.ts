@@ -13,6 +13,7 @@ import { createKeyPair } from "../../common/keys";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { traceSpan } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh";
 import { gcpSshProvider } from "../../plugins/google/ssh";
@@ -248,33 +249,40 @@ export const prepareRequest = async (
   destination: string,
   options?: SshRequestOptions
 ) => {
-  const result = await provisionRequest(authn, args, destination, options);
-  if (!result) {
-    throw `Server did not return a request id. ${getContactMessage()}`;
-  }
+  return await traceSpan("ssh.prepareRequest", async (span) => {
+    span.setAttribute("destination", destination);
 
-  const { requestId, publicKey, provisionedRequest } = result;
+    const result = await provisionRequest(authn, args, destination, options);
+    if (!result) {
+      throw `Server did not return a request id. ${getContactMessage()}`;
+    }
 
-  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+    const { requestId, publicKey, provisionedRequest } = result;
 
-  await sshProvider.submitPublicKey?.(
-    authn,
-    provisionedRequest,
-    requestId,
-    publicKey,
-    args.debug
-  );
+    const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
 
-  await sshProvider.ensureInstall();
+    span.setAttribute("provider", provisionedRequest.permission.provider);
+    span.setAttribute("requestId", requestId);
 
-  const cliRequest = await pluginToCliRequest(provisionedRequest, {
-    ...args,
-    publicKey,
+    await sshProvider.submitPublicKey?.(
+      authn,
+      provisionedRequest,
+      requestId,
+      publicKey,
+      args.debug
+    );
+
+    await sshProvider.ensureInstall();
+
+    const cliRequest = await pluginToCliRequest(provisionedRequest, {
+      ...args,
+      publicKey,
+    });
+
+    const request = sshProvider.requestToSsh(cliRequest);
+
+    const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
+
+    return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
   });
-
-  const request = sshProvider.requestToSsh(cliRequest);
-
-  const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
-
-  return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
 };
