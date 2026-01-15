@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authenticate } from "../drivers/auth";
 import { sshOrScp } from "../plugins/ssh";
 import { getAppName } from "../util";
-import { prepareRequest, SshCommandArgs } from "./shared/ssh";
+import { getDefaultSudo, prepareRequest, SshCommandArgs } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
 
@@ -37,7 +37,9 @@ export const sshCommand = (yargs: yargs.Argv) =>
         })
         .option("sudo", {
           type: "boolean",
-          describe: "Add user to sudoers file",
+          describe:
+            "Add user to sudoers file. Set P0_SSH_SUDO=1 to enable by default.",
+          default: getDefaultSudo(),
         })
         // Match `p0 request --reason`
         .option("reason", {
