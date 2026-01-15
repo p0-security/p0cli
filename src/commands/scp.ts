@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
+import { traceSpan } from "../opentelemetry/otel-helpers";
 import { sshOrScp } from "../plugins/ssh";
 import { SshRequest, SupportedSshProviders } from "../types/ssh";
 import { prepareRequest, ScpCommandArgs } from "./shared/ssh";
@@ -72,56 +73,73 @@ export const scpCommand = (yargs: yargs.Argv) =>
  * Implicitly gains access to the SSH resource if required.
  */
 const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
-  // Clean up any stale SSH config files before proceeding
-  await cleanupStaleSshConfigs(args.debug);
+  await traceSpan(
+    "scp.command",
+    async (span) => {
+      span.setAttribute("source", args.source);
+      span.setAttribute("destination", args.destination);
+      if (args.provider) {
+        span.setAttribute("provider", args.provider);
+      }
+      if (args.sudo) {
+        span.setAttribute("sudo", args.sudo);
+      }
 
-  const authn = await authenticate(args);
+      // Clean up any stale SSH config files before proceeding
+      await cleanupStaleSshConfigs(args.debug);
 
-  const sshOptions: string[] = Array.isArray(args["--"])
-    ? args["--"].map(String)
-    : [];
-  args.sshOptions = sshOptions;
+      const authn = await authenticate(args);
 
-  // TODO(ENG-3142): Azure SSH currently doesn't support specifying a port; throw an error if one is set.
-  if (
-    args.provider === "azure" &&
-    sshOptions.some((opt) => opt.startsWith("-P"))
-  ) {
-    throw "Azure SSH does not currently support specifying a port. SSH on the target VM must be listening on the default port 22.";
-  }
+      const sshOptions: string[] = Array.isArray(args["--"])
+        ? args["--"].map(String)
+        : [];
+      args.sshOptions = sshOptions;
 
-  const host = getHostIdentifier(args.source, args.destination);
+      // TODO(ENG-3142): Azure SSH currently doesn't support specifying a port; throw an error if one is set.
+      if (
+        args.provider === "azure" &&
+        sshOptions.some((opt) => opt.startsWith("-P"))
+      ) {
+        throw "Azure SSH does not currently support specifying a port. SSH on the target VM must be listening on the default port 22.";
+      }
 
-  if (!host) {
-    throw "Could not determine host identifier from source or destination";
-  }
+      const host = getHostIdentifier(args.source, args.destination);
 
-  const { request, requestId, privateKey, sshProvider, sshHostKeys } =
-    await prepareRequest(authn, args, host);
+      if (!host) {
+        throw "Could not determine host identifier from source or destination";
+      }
 
-  // replace the host with the linuxUserName@instanceId
-  const { source, destination } = replaceHostWithInstance(request, args);
+      const { request, requestId, privateKey, sshProvider, sshHostKeys } =
+        await prepareRequest(authn, args, host);
 
-  const exitCode = await sshOrScp({
-    authn,
-    request,
-    requestId,
-    cmdArgs: {
-      ...args,
-      source,
-      destination,
+      // replace the host with the linuxUserName@instanceId
+      const { source, destination } = replaceHostWithInstance(request, args);
+
+      const exitCode = await sshOrScp({
+        authn,
+        request,
+        requestId,
+        cmdArgs: {
+          ...args,
+          source,
+          destination,
+        },
+        privateKey,
+        sshProvider,
+        sshHostKeys,
+      });
+
+      // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
+      // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
+      // Skip in tests to avoid killing the test runner
+      if (process.env.NODE_ENV !== "unit") {
+        process.exit(exitCode ?? 0);
+      }
     },
-    privateKey,
-    sshProvider,
-    sshHostKeys,
-  });
-
-  // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
-  // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
-  // Skip in tests to avoid killing the test runner
-  if (process.env.NODE_ENV !== "unit") {
-    process.exit(exitCode ?? 0);
-  }
+    {
+      command: "scp",
+    }
+  );
 };
 
 /** If a path is not explicitly local, use this pattern to determine if it's remote */
