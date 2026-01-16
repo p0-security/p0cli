@@ -18,7 +18,9 @@ Supports creating access requests for cloud resources, assuming AWS roles, and c
   - [Configuration](#configuration)
 - [Command Reference](#cli-reference)
 - [Example Usage](#example-usage)
+- [macOS URL Handler](#macos-url-handler)
 - [Support](#support)
+- [Development](#development)
 - [Contributing](#contributing)
 - [Copyright](#copyright)
 
@@ -234,9 +236,46 @@ See [mac/url-handler/README.md](mac/url-handler/README.md) for complete document
 
 If you encounter any issues with the P0 CLI, you can open a GitHub issue on this repo, email `support@p0.dev`, or reach out to us on our [community slack](https://join.slack.com/t/p0securitycommunity/shared_invite/zt-1zouzlovp-1kuym9RfuzkJ17ZlvAf6mQ).
 
+## Development
+
+### Prerequisites
+
+- Node.js 22+ (use `nvm install 22 && nvm use 22`)
+- Yarn package manager
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/p0-security/p0cli.git
+cd p0cli
+
+# Install dependencies
+yarn install
+
+# Run tests
+yarn test
+
+# Build the CLI
+yarn build
+
+# Run locally
+yarn p0 --help
+```
+
+For detailed dependency management practices, see [yarn.md](yarn.md).
+
+### Available Scripts
+
+- `yarn build` - Compile TypeScript to JavaScript
+- `yarn test` - Run unit tests with Vitest
+- `yarn lint` - Run all linting checks (formatting, code, types)
+- `yarn format` - Auto-format code with Prettier
+- `yarn clean` - Remove build artifacts
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and coding standards.
 
 ## Copyright
 
