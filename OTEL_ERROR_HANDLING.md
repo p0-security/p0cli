@@ -21,14 +21,19 @@ The CLI uses three complementary layers to ensure comprehensive error tracking:
 **Implementation:** `src/opentelemetry/otel-helpers.ts`
 
 ```typescript
-await traceSpan("command.name", async (span) => {
-  span.setAttribute("key", value);
-  // Command logic here
-  // Exceptions automatically caught and recorded
-}, { command: "command_name" });
+await traceSpan(
+  "command.name",
+  async (span) => {
+    span.setAttribute("key", value);
+    // Command logic here
+    // Exceptions automatically caught and recorded
+  },
+  { command: "command_name" }
+);
 ```
 
 **What it does:**
+
 - Creates a new span for the operation
 - Catches any thrown exceptions
 - Records the exception in the span
@@ -54,11 +59,13 @@ if (exitCode !== 0) {
 ```
 
 **What it does:**
+
 - Manually sets span status to ERROR with a message
 - Allows adding context-specific attributes before marking
 - Doesn't throw or alter control flow
 
 **When to use:**
+
 - Process returns non-zero exit code but doesn't throw
 - Business logic determines an operation failed
 - Need to add diagnostic attributes alongside error marking
@@ -89,6 +96,7 @@ if (exitCode !== 0) {
 ```
 
 **What it does:**
+
 - Yargs calls this handler on any command failure (invalid args, missing commands, etc.)
 - Marks the currently active span as error (if one exists)
 - Defensively wrapped in try/catch to prevent telemetry from breaking CLI
@@ -145,15 +153,17 @@ if (process.env.NODE_ENV !== "unit") {
 To add instrumentation to a new command:
 
 1. Import the helper:
+
    ```typescript
    import { traceSpan } from "../opentelemetry/otel-helpers";
    ```
 
 2. Wrap the command action:
+
    ```typescript
    const commandAction = async (args) => {
      await traceSpan(
-       "command_name.command",  // Span name (low cardinality)
+       "command_name.command", // Span name (low cardinality)
        async (span) => {
          // Add attributes
          span.setAttribute("arg_name", args.value);
@@ -166,7 +176,7 @@ To add instrumentation to a new command:
            exitProcess(exitCode ?? 0);
          }
        },
-       { command: "command_name" }  // Root attribute
+       { command: "command_name" } // Root attribute
      );
    };
    ```
@@ -188,6 +198,7 @@ See `src/commands/__tests__/index.test.ts` and `src/opentelemetry/__tests__/otel
 ## Current Status
 
 **Implemented:**
+
 - ✅ Layer 1: `traceSpan()` and `traceSpanSync()` wrappers
 - ✅ Layer 2: `markSpanError()` and `markSpanOk()` helpers
 - ✅ Layer 3: Global `.fail()` handler in Yargs CLI
@@ -195,11 +206,13 @@ See `src/commands/__tests__/index.test.ts` and `src/opentelemetry/__tests__/otel
 - ✅ Tests for all error handling layers
 
 **Instrumented commands:**
+
 - `ssh` - Full instrumentation with span wrapper
 - `scp` - Full instrumentation with span wrapper
 - `rdp` - Uses `exitProcess()` but no span wrapper yet
 
 **Next steps:**
+
 - Monitor production telemetry to validate `.fail()` handler effectiveness
 - Consider instrumenting high-value commands (`ls`, `request`, `grant`, `allow`)
 - Evaluate if boilerplate reduction is needed after 5+ commands instrumented
