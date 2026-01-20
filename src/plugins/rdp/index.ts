@@ -13,6 +13,7 @@ import { request } from "../../commands/shared/request";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { exitProcess } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
 import { AzureRdpRequest, RdpCommandArgs } from "../../types/rdp";
 import { PermissionRequest } from "../../types/request";
@@ -82,7 +83,7 @@ const provisionRequest = async (
 
   const result = await decodeProvisionStatus<AzureRdpRequest>(response.request);
 
-  if (!result) process.exit(1);
+  if (!result) exitProcess(1);
 
   return {
     provisionedRequest: response.request,

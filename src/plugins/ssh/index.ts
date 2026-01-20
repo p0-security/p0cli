@@ -568,7 +568,7 @@ export const sshOrScp = async (args: {
     const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
     try {
-      const exitCode = await preTestAccessPropagationIfNeeded(
+      const preTestExitCode = await preTestAccessPropagationIfNeeded(
         sshProvider,
         request,
         cmdArgs,
@@ -579,14 +579,14 @@ export const sshOrScp = async (args: {
         abortController,
         sshHostKeys
       );
-      if (exitCode !== null && exitCode !== 0) {
-        span.setAttribute("ssh.exitCode", exitCode);
+      if (preTestExitCode !== null && preTestExitCode !== 0) {
+        span.setAttribute("ssh.exitCode", preTestExitCode);
         span.setAttribute("ssh.phase", "pre-test");
         markSpanError(span, "SSH connection pre-test failed");
-        return exitCode; // Only exit if there was an error when pre-testing
+        return preTestExitCode; // Only exit if there was an error when pre-testing
       }
 
-      const finalExitCode = await spawnSshNode({
+      const sessionExitCode = await spawnSshNode({
         audit: (action) =>
           void auditSshSessionActivity({
             authn,
@@ -605,13 +605,13 @@ export const sshOrScp = async (args: {
         endTime: endTime,
       });
 
-      if (finalExitCode !== null && finalExitCode !== 0) {
-        span.setAttribute("ssh.exitCode", finalExitCode);
+      if (sessionExitCode !== null && sessionExitCode !== 0) {
+        span.setAttribute("ssh.exitCode", sessionExitCode);
         span.setAttribute("ssh.phase", "session");
         markSpanError(span, "SSH session execution failed");
       }
 
-      return finalExitCode;
+      return sessionExitCode;
     } finally {
       await setupData?.teardown();
     }

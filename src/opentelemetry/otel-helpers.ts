@@ -25,11 +25,10 @@ const setSpanAttributes = (
   }
 };
 
-const handleSpanError = (span: Span, e: unknown): never => {
+const handleSpanError = (span: Span, e: unknown): void => {
   const err = e instanceof Error ? e : new Error(`Unknown error: ${String(e)}`);
   span.recordException(err);
   span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
-  throw e; // Re-throw original error to preserve type
 };
 
 /**
@@ -57,10 +56,9 @@ export const traceSpanSync = <T>(
       span.end();
       return result;
     } catch (e: unknown) {
-      span.end();
-      handleSpanError(span, e); // Never returns, always throws
-      // TypeScript doesn't recognize `never` return type, so we need this unreachable code
-      throw e; // This line is never reached but satisfies TypeScript
+      handleSpanError(span, e); // Mark span as error before ending
+      span.end(); // End span after marking error
+      throw e; // Re-throw original error to preserve type
     }
   });
 };
@@ -92,10 +90,9 @@ export const traceSpan = async <T>(
       span.end();
       return result;
     } catch (e: unknown) {
-      span.end();
-      handleSpanError(span, e); // Never returns, always throws
-      // TypeScript doesn't recognize `never` return type, so we need this unreachable code
-      throw e; // This line is never reached but satisfies TypeScript
+      handleSpanError(span, e); // Mark span as error before ending
+      span.end(); // End span after marking error
+      throw e; // Re-throw original error to preserve type
     }
   });
 };
@@ -120,4 +117,25 @@ export const markSpanError = (span: Span, message: string): void => {
  */
 export const markSpanOk = (span: Span): void => {
   span.setStatus({ code: SpanStatusCode.OK });
+};
+
+/**
+ * Exit the process with the given exit code, ensuring any active span is properly
+ * marked as error and ended before terminating.
+ *
+ * Use this instead of `process.exit()` to maintain telemetry consistency.
+ *
+ * @param exitCode the exit code to use (0 for success, non-zero for error)
+ */
+export const exitProcess = (exitCode: number): never => {
+  const activeSpan = trace.getActiveSpan();
+
+  if (activeSpan) {
+    if (exitCode !== 0) {
+      markSpanError(activeSpan, `Process exiting with code ${exitCode}`);
+    }
+    activeSpan.end();
+  }
+
+  process.exit(exitCode);
 };

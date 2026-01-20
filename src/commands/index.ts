@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { getHelpMessage } from "../drivers/config";
 import { print1, print2 } from "../drivers/stdio";
 import { checkVersion } from "../middlewares/version";
+import { exitProcess, markSpanError } from "../opentelemetry/otel-helpers";
 import { p0VersionInfo, stringifyVersionInfo } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
@@ -26,7 +27,7 @@ import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
-import { sys } from "typescript";
+import { trace } from "@opentelemetry/api";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
@@ -92,6 +93,20 @@ export const getCli = async () =>
     .strict()
     .demandCommand(1)
     .fail((message, error, yargs) => {
+      // Mark active span as error if it exists
+      // Wrapped in try/catch - telemetry must never break the CLI
+      try {
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan) {
+          const errorMessage = error ? String(error) : message;
+          markSpanError(activeSpan, errorMessage);
+        }
+      } catch (e) {
+        // Silently ignore telemetry failures
+        // CLI functionality takes precedence over observability
+      }
+
+      // Print error messages (existing behavior)
       if (error) {
         print2(error);
       } else {
@@ -99,5 +114,7 @@ export const getCli = async () =>
         print2(`\n${message}`);
         print2(`\n${getHelpMessage()}`);
       }
-      sys.exit(1);
+
+      // Use exitProcess instead of sys.exit for consistent span handling
+      exitProcess(1);
     });

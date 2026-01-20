@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { traceSpan } from "../opentelemetry/otel-helpers";
+import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import { sshOrScp } from "../plugins/ssh";
 import { getAppName } from "../util";
 import { prepareRequest, SshCommandArgs } from "./shared/ssh";
@@ -130,7 +130,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
       // Skip in tests to avoid killing the test runner
       if (process.env.NODE_ENV !== "unit") {
-        process.exit(exitCode ?? 0);
+        exitProcess(exitCode ?? 0);
       }
     },
     {

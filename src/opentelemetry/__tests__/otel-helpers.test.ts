@@ -9,13 +9,14 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
+  exitProcess,
   markSpanError,
   markSpanOk,
   traceSpan,
   traceSpanSync,
 } from "../otel-helpers";
 import type { Span } from "@opentelemetry/api";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Type for our mock span
 type MockSpan = {
@@ -390,5 +391,113 @@ describe("markSpanOk", () => {
     expect(() => {
       markSpanOk(mockSpan);
     }).not.toThrow();
+  });
+});
+
+describe("exitProcess", () => {
+  let processExitSpy: import("vitest").MockInstance<typeof process.exit>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Mock process.exit to prevent actual exit during tests
+    processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("Process exit called");
+    });
+  });
+
+  afterEach(() => {
+    processExitSpy.mockRestore();
+  });
+
+  it("should exit with code 0 without marking span as error", () => {
+    // Set up lastMockSpan with a fresh mock
+    lastMockSpan = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      end: vi.fn(),
+    };
+
+    expect(() => exitProcess(0)).toThrow("Process exit called");
+
+    expect(lastMockSpan.setStatus).not.toHaveBeenCalled();
+    expect(lastMockSpan.end).toHaveBeenCalledTimes(1);
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("should exit with non-zero code and mark span as error", () => {
+    // Set up lastMockSpan with a fresh mock
+    lastMockSpan = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      end: vi.fn(),
+    };
+
+    expect(() => exitProcess(1)).toThrow("Process exit called");
+
+    expect(lastMockSpan.setStatus).toHaveBeenCalledWith({
+      code: 2, // ERROR
+      message: "Process exiting with code 1",
+    });
+    expect(lastMockSpan.end).toHaveBeenCalledTimes(1);
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("should handle exit when no active span exists", () => {
+    // Set lastMockSpan to null to simulate no active span
+    lastMockSpan = null;
+
+    expect(() => exitProcess(0)).toThrow("Process exit called");
+
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("should end span before calling process.exit", () => {
+    const callOrder: string[] = [];
+
+    // Set up lastMockSpan with tracking
+    lastMockSpan = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(),
+      recordException: vi.fn(),
+      end: vi.fn(() => {
+        callOrder.push("span.end");
+      }),
+    };
+
+    processExitSpy.mockImplementation(() => {
+      callOrder.push("process.exit");
+      throw new Error("Process exit called");
+    });
+
+    expect(() => exitProcess(0)).toThrow("Process exit called");
+
+    expect(callOrder).toEqual(["span.end", "process.exit"]);
+  });
+
+  it("should mark error before ending span on non-zero exit", () => {
+    const callOrder: string[] = [];
+
+    // Set up lastMockSpan with tracking
+    lastMockSpan = {
+      setAttribute: vi.fn(),
+      setStatus: vi.fn(() => {
+        callOrder.push("setStatus");
+      }),
+      recordException: vi.fn(),
+      end: vi.fn(() => {
+        callOrder.push("span.end");
+      }),
+    };
+
+    processExitSpy.mockImplementation(() => {
+      callOrder.push("process.exit");
+      throw new Error("Process exit called");
+    });
+
+    expect(() => exitProcess(1)).toThrow("Process exit called");
+
+    expect(callOrder).toEqual(["setStatus", "span.end", "process.exit"]);
   });
 });

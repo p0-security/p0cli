@@ -102,6 +102,7 @@ export const withRedirectServer = async <S, T, U>(
 
   // Register signal handlers to ensure cleanup on interruption
   const signalHandler = () => {
+    // NOTE: Cannot use exitProcess() here - OAuth server runs outside of traced command context
     void cleanup().finally(() => process.exit(0));
   };
   process.once("SIGINT", signalHandler);
