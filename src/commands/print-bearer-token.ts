@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { print1, print2 } from "../drivers/stdio";
+import { exitProcess } from "../opentelemetry/otel-helpers";
 import yargs from "yargs";
 
 const printBearerTokenArgs = <T>(yargs: yargs.Argv<T>) => yargs.help(false);
@@ -28,7 +29,7 @@ export const printBearerToken = async () => {
   const token = await authn.getToken();
   if (!token) {
     print2("No access token found in identity.");
-    process.exit(1);
+    exitProcess(1);
   }
   print1(token);
 };

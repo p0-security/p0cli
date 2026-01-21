@@ -19,6 +19,7 @@ import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { auditSshSessionActivity } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
+import { traceSpan, markSpanError } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
 import {
   AccessPattern,
@@ -509,95 +510,112 @@ export const sshOrScp = async (args: {
   sshProvider: SshProvider<any, any, any, any>;
   sshHostKeys: SshHostKeyInfo;
 }) => {
-  const sshSessionId = randomUUID();
-  const {
-    authn,
-    request,
-    requestId,
-    cmdArgs,
-    privateKey,
-    sshProvider,
-    sshHostKeys,
-  } = args;
-  const { debug } = cmdArgs;
-
-  if (!privateKey) {
-    throw `Failed to load a private key for this request. ${getContactMessage()}`;
-  }
-
-  const abortController = new AbortController();
-
-  const credential: AwsCredentials | undefined =
-    await sshProvider.cloudProviderLogin(authn, request, debug);
-
-  const setupData = await sshProvider.setup?.(authn, request, {
-    requestId,
-    abortController,
-    debug,
-  });
-
-  const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
-
-  const { command, args: commandArgs } = createCommand(
-    request,
-    cmdArgs,
-    setupData,
-    proxyCommand,
-    sshHostKeys
-  );
-
-  if (debug) {
-    const reproCommands = sshProvider.reproCommands(request, setupData);
-    if (reproCommands) {
-      const repro = [
-        ...reproCommands,
-        `${command} ${transformForShell(commandArgs).join(" ")}`,
-      ].join("\n");
-      print2(
-        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
-      );
-    }
-  }
-
-  const endTime = Date.now() + sshProvider.propagationTimeoutMs;
-
-  try {
-    const exitCode = await preTestAccessPropagationIfNeeded(
+  return await traceSpan("ssh.connect", async (span) => {
+    const sshSessionId = randomUUID();
+    const {
+      authn,
+      request,
+      requestId,
+      cmdArgs,
+      privateKey,
       sshProvider,
+      sshHostKeys,
+    } = args;
+    const { debug } = cmdArgs;
+
+    span.setAttribute("requestId", requestId);
+    span.setAttribute("provider", request.type);
+    span.setAttribute("sshSessionId", sshSessionId);
+
+    if (!privateKey) {
+      throw `Failed to load a private key for this request. ${getContactMessage()}`;
+    }
+
+    const abortController = new AbortController();
+
+    const credential: AwsCredentials | undefined =
+      await sshProvider.cloudProviderLogin(authn, request, debug);
+
+    const setupData = await sshProvider.setup?.(authn, request, {
+      requestId,
+      abortController,
+      debug,
+    });
+
+    const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
+
+    const { command, args: commandArgs } = createCommand(
       request,
       cmdArgs,
-      proxyCommand,
-      credential,
       setupData,
-      endTime,
-      abortController,
+      proxyCommand,
       sshHostKeys
     );
-    if (exitCode && exitCode !== 0) {
-      return exitCode; // Only exit if there was an error when pre-testing
+
+    if (debug) {
+      const reproCommands = sshProvider.reproCommands(request, setupData);
+      if (reproCommands) {
+        const repro = [
+          ...reproCommands,
+          `${command} ${transformForShell(commandArgs).join(" ")}`,
+        ].join("\n");
+        print2(
+          `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
+        );
+      }
     }
 
-    return await spawnSshNode({
-      audit: (action) =>
-        void auditSshSessionActivity({
-          authn,
-          requestId,
-          sshSessionId,
-          debug,
-          action: `ssh.session.${action}`,
-        }),
-      credential,
-      abortController,
-      command,
-      args: commandArgs,
-      stdio: ["inherit", "inherit", "pipe"],
-      debug,
-      provider: request.type,
-      endTime: endTime,
-    });
-  } finally {
-    await setupData?.teardown();
-  }
+    const endTime = Date.now() + sshProvider.propagationTimeoutMs;
+
+    try {
+      const preTestExitCode = await preTestAccessPropagationIfNeeded(
+        sshProvider,
+        request,
+        cmdArgs,
+        proxyCommand,
+        credential,
+        setupData,
+        endTime,
+        abortController,
+        sshHostKeys
+      );
+      if (preTestExitCode !== null && preTestExitCode !== 0) {
+        span.setAttribute("ssh.exitCode", preTestExitCode);
+        span.setAttribute("ssh.phase", "pre-test");
+        markSpanError(span, "SSH connection pre-test failed");
+        return preTestExitCode; // Only exit if there was an error when pre-testing
+      }
+
+      const sessionExitCode = await spawnSshNode({
+        audit: (action) =>
+          void auditSshSessionActivity({
+            authn,
+            requestId,
+            sshSessionId,
+            debug,
+            action: `ssh.session.${action}`,
+          }),
+        credential,
+        abortController,
+        command,
+        args: commandArgs,
+        stdio: ["inherit", "inherit", "pipe"],
+        debug,
+        provider: request.type,
+        endTime: endTime,
+      });
+
+      if (sessionExitCode !== null && sessionExitCode !== 0) {
+        span.setAttribute("ssh.exitCode", sessionExitCode);
+        span.setAttribute("ssh.phase", "session");
+        markSpanError(span, "SSH session execution failed");
+      }
+
+      return sessionExitCode;
+    } finally {
+      await setupData?.teardown();
+    }
+  });
 };
 
 export const sshProxy = async (args: {

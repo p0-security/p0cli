@@ -33,6 +33,7 @@ const enableFipsMode = async () => {
     const fipsEnabled = crypto.getFips();
     if (!fipsEnabled) {
       print2(`Failed to enable FIPS mode`);
+      // NOTE: Cannot use exitProcess() here - FIPS initialization happens before tracing is initialized
       process.exit(1);
     }
 
@@ -43,6 +44,7 @@ const enableFipsMode = async () => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     print2(`Failed to enable FIPS mode: ${errorMessage}`);
+    // NOTE: Cannot use exitProcess() here - FIPS initialization happens before tracing is initialized
     process.exit(1);
   }
 };
@@ -93,11 +95,13 @@ const run = async () => {
 // We still exit with a non-zero code to indicate failure.
 process.on("uncaughtException", (error) => {
   print2("Uncaught Exception: " + error.message);
+  // NOTE: Consideration of exitProcess() is reserved for future in-depth analysis
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
   print2("Unhandled Rejection: " + (reason instanceof Error ? reason.message : String(reason)));
+  // NOTE: Consideration of exitProcess() is reserved for future in-depth analysis
   process.exit(1);
 });
 

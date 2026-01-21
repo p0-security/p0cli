@@ -53,6 +53,7 @@ export const startTracing = () => {
 
 const shutdownSdk = () => {
   void sdk.shutdown().finally(() => {
+    // NOTE: Cannot use exitProcess() here - this IS the span flushing mechanism itself
     process.exit();
   });
 };

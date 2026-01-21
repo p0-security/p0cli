@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
+import { exitProcess } from "../opentelemetry/otel-helpers";
 import { rdp } from "../plugins/rdp";
 import { RdpCommandArgs } from "../types/rdp";
 import { getAppName, getOperatingSystem } from "../util";
@@ -65,7 +66,7 @@ const rdpAction = async (cmdArgs: yargs.ArgumentsCamelCase<RdpCommandArgs>) => {
   const os = getOperatingSystem();
   if (os !== "win") {
     print2("RDP session connections are only supported on Windows.");
-    process.exit(1);
+    exitProcess(1);
   }
 
   const authn = await authenticate(cmdArgs);
@@ -74,6 +75,6 @@ const rdpAction = async (cmdArgs: yargs.ArgumentsCamelCase<RdpCommandArgs>) => {
   // Force exit to prevent hanging due to orphaned child processes
   // Skip in tests to avoid killing the test runner
   if (process.env.NODE_ENV !== "unit") {
-    process.exit(0);
+    exitProcess(0);
   }
 };
