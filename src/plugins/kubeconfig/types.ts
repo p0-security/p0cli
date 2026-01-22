@@ -29,7 +29,20 @@ export type K8sPermissionSpec = PermissionSpec<
   "k8s",
   K8sResourcePermission,
   K8sGenerated
->;
+> & {
+  delegation?: {
+    aws?: {
+      generated: {
+        // For IDC, the name of the permission set. For Federated, the name of the assumed role
+        name: string;
+      };
+      permission: {
+        idcRegion?: string;
+        idcId?: string;
+      };
+    };
+  };
+};
 
 export type K8sResourcePermission = {
   resource: {
@@ -40,16 +53,8 @@ export type K8sResourcePermission = {
   role: string;
   clusterId: string;
   type: "resource";
-  aws?: {
-    idcRegion?: string;
-    idcId?: string;
-  };
 };
 
 export type K8sGenerated = {
-  aws: {
-    // For IDC, the name of the permission set. For Federated, the name of the assumed role
-    name: string;
-  };
   role: string; // The name of the generated role in k8s itself
 };

@@ -131,13 +131,16 @@ export const awsCloudAuth = async (
   loginType: "federated" | "idc",
   debug?: boolean
 ): Promise<AwsCredentials> => {
-  const { permission, generated } = request;
-  const { aws } = generated;
-  const { name } = aws;
+  const { delegation } = request;
+  const name = delegation?.aws?.generated?.name;
+
+  if (!name) {
+    throw "Backend granted k8s access, but this is not an EKS cluster.";
+  }
 
   switch (loginType) {
     case "idc": {
-      const { idcId, idcRegion } = permission.aws ?? {};
+      const { idcId, idcRegion } = delegation?.aws?.permission ?? {};
 
       if (!idcId || !idcRegion) {
         throw "AWS is configured to use Identity Center, but IDC information wasn't received in the request.";
