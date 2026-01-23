@@ -21,6 +21,8 @@ let tenantConfig: Config;
 
 export const getTenantConfig = () => tenantConfig;
 
+export const getAppUrl = () => tenantConfig?.appUrl ?? defaultConfig.appUrl;
+
 export const getContactMessage = () =>
   tenantConfig?.contactMessage ?? defaultConfig.contactMessage;
 
