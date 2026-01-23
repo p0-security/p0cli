@@ -11,8 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { getUserAgent } from "../version";
-import { getTenantConfig } from "./config";
-import { defaultConfig } from "./env";
+import { getAppUrl, getTenantConfig } from "./config";
 import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
@@ -28,8 +27,7 @@ const RETRY_OPTIONS = {
   maxDelayMs: 30_000,
 };
 
-const tenantOrgUrl = (tenant: string) =>
-  `${getTenantConfig()?.appUrl ?? defaultConfig.appUrl}/orgs/${tenant}`;
+const tenantOrgUrl = (tenant: string) => `${getAppUrl()}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;

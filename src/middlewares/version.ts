@@ -8,8 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { getTenantConfig, shouldSkipCheckVersion } from "../drivers/config";
-import { defaultConfig } from "../drivers/env";
+import { getAppUrl, shouldSkipCheckVersion } from "../drivers/config";
 import { print2 } from "../drivers/stdio";
 import { P0_PATH, timeout } from "../util";
 import { getUserAgent, p0VersionInfo } from "../version";
@@ -75,8 +74,7 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
       print2("Checking that your CLI is up to date with the latest version...");
     }
 
-    const appUrl = getTenantConfig()?.appUrl ?? defaultConfig.appUrl;
-    const versionUrl = `${appUrl}/cli/version`;
+    const versionUrl = `${getAppUrl()}/cli/version`;
 
     const fetchVersion = async (): Promise<CliVersionResponse> => {
       const response = await fetch(versionUrl, {
