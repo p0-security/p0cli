@@ -8,10 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { shouldSkipCheckVersion } from "../drivers/config";
+import { getTenantConfig, shouldSkipCheckVersion } from "../drivers/config";
+import { defaultConfig } from "../drivers/env";
 import { print2 } from "../drivers/stdio";
-import { P0_PATH, exec, osSafeCommand, timeout } from "../util";
-import { p0VersionInfo } from "../version";
+import { P0_PATH, timeout } from "../util";
+import { getUserAgent, p0VersionInfo } from "../version";
 import fs from "node:fs/promises";
 import path from "node:path";
 import semver from "semver";
@@ -25,10 +26,8 @@ const VERSION_CHECK_TIMEOUT_MILLIS = 2e3;
 
 const VERSION_CHECK_INTERVAL_MILLIS = 86400e3; // 1 day
 
-type NpmPackageOutput = {
-  "dist-tags": {
-    latest: string;
-  };
+type CliVersionResponse = {
+  version: string;
 };
 
 /** Checks if there is a new version of the CLI
@@ -76,37 +75,33 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
       print2("Checking that your CLI is up to date with the latest version...");
     }
 
-    const { command, args } = osSafeCommand("npm", ["view", name, "--json"]);
+    const appUrl = getTenantConfig()?.appUrl ?? defaultConfig.appUrl;
+    const versionUrl = `${appUrl}/cli/version`;
 
-    // wrap the exec call in a function to add enhanced error handling logic
-    const protectedExec = async () => {
-      try {
-        return await exec(command, args, { check: true });
-      } catch (error: any) {
-        let errorDetails: string = error?.message || "Unknown error";
-        if (error?.code != null) {
-          errorDetails += `\nError Code: ${error.code}`;
-        }
+    const fetchVersion = async (): Promise<CliVersionResponse> => {
+      const response = await fetch(versionUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": getUserAgent(),
+        },
+      });
 
-        if (error?.stderr) {
-          errorDetails += `\nStderr: ${error.stderr.trim()}`;
-        }
-
-        if (error?.stdout) {
-          errorDetails += `\nStdout: ${error.stdout.trim()}`;
-        }
-
-        throw new Error(errorDetails);
+      if (!response.ok) {
+        throw new Error(
+          `HTTP Error: ${response.status} ${response.statusText}`
+        );
       }
+
+      return response.json();
     };
 
-    const processResult = await timeout(
-      protectedExec(),
+    const versionResponse = await timeout(
+      fetchVersion(),
       VERSION_CHECK_TIMEOUT_MILLIS
     );
 
-    const npmPackage: NpmPackageOutput = JSON.parse(processResult.stdout);
-    const { latest } = npmPackage["dist-tags"];
+    const latest = versionResponse.version;
 
     if (isDebug) {
       print2("Package info successfully retrieved.");
