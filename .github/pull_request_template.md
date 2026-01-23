@@ -62,7 +62,6 @@ Check off any of the following areas of code that are modified:
 - [ ] Performance improvement
 - [ ] Security fix
 
-
 **Validation**
 
 How do you know that this change solves the problem? Is testing manual, or are automated

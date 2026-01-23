@@ -71,6 +71,8 @@
     "eslint-plugin-n": "^16.6.2",
     "eslint-plugin-notice": "^0.9.10",
     "eslint-plugin-promise": "^6.1.1",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
     "prettier": "^3.2.4",
     "ts-node": "^10.9.2",
     "vite-tsconfig-paths": "^5.1.4",
@@ -90,7 +92,12 @@
     "lint:code": "eslint --max-warnings 0 .",
     "lint:types": "tsc",
     "p0": "node --no-deprecation ./p0",
+    "prepare": "husky",
     "prepublishOnly": "npm run clean && npm run build"
+  },
+  "lint-staged": {
+    "*.@(md|yaml|yml|json|cjs|mjs|js|ts|jsx|tsx)": "prettier --check",
+    "(!(vitest.config.mts|tsconfig*.json|.eslintrc.*|mac/**/*|win/**/*|debian/**/*|build/**/*))*.@(cjs|mjs|js|ts|jsx|tsx)": "eslint --max-warnings 0"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
