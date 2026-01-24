@@ -139,11 +139,15 @@ export const awsSshProvider: SshProvider<
   },
 
   requestToSsh: (request) => {
-    const { permission, generated } = request;
+    const { permission, delegation, generated } = request;
     const { resource, region } = permission;
-    const { idcId, idcRegion, instanceId, accountId } = resource;
-    const { linuxUserName, hostKeys, resource: generatedResource } = generated;
-    const { name } = generatedResource;
+    const { instanceId } = resource;
+    const { linuxUserName, hostKeys } = generated;
+    // TODO: Update after P0 backend data-model update
+    const { idcId, idcRegion, accountId } =
+      delegation?.aws?.permission ?? resource;
+    const name =
+      delegation?.aws?.generated.name ?? generated?.resource?.name ?? "";
     const common = {
       linuxUserName,
       accountId,

@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { K8sPermissionSpec } from "../plugins/kubeconfig/types";
 import { AzureRdpRequest } from "./rdp";
-import { PluginSshRequest, SupportedSshProvider } from "./ssh";
+import { PluginSshRequest } from "./ssh";
 
 export const DONE_STATUSES = ["DONE", "DONE_NOTIFIED"] as const;
 export const DENIED_STATUSES = ["DENIED", "DENIED_NOTIFIED"] as const;
@@ -22,12 +22,17 @@ export const ERROR_STATUSES = [
 
 export type PermissionSpec<
   K extends string,
-  P extends { provider: SupportedSshProvider } | { type: string },
+  P extends Record<string, any>,
   G extends object | undefined = undefined,
+  D extends Record<string, PermissionSpec<any, any, any, any>> = Record<
+    string,
+    never
+  >,
 > = {
   type: K;
   permission: P;
   generated: G;
+  delegation: D;
 };
 
 export type PluginRequest =

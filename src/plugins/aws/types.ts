@@ -69,29 +69,44 @@ export type AwsSshPermission = CommonSshPermissionSpec & {
   provider: "aws";
   region: string;
   alias: string;
-  resource: {
-    account: string;
-    accountId: string;
-    arn: string;
-    idcId: string;
-    idcRegion: string;
+  // TODO: Remove 'AwsResourcePermission' after P0 backend data model update
+  resource: Partial<AwsResourcePermission> & {
     instanceId: string;
-    name: string;
     userName: string;
   };
 };
 
+type AwsResourcePermission = {
+  account: string;
+  accountId: string;
+  arn: string;
+  idcId: string;
+  idcRegion: string;
+  name: string;
+};
+
+// TODO: Remove after P0 backend data model update
+type AwsResourceGenerated = { name: string };
+
+type AwsResourcePermissionSpec = PermissionSpec<
+  "aws",
+  AwsResourcePermission,
+  AwsResourceGenerated,
+  Record<string, never>
+>;
+
 export type AwsSshGenerated = {
-  resource: { name: string };
   hostKeys: string[];
   linuxUserName: string;
   publicKey: string;
+  resource?: { name?: string };
 };
 
 export type AwsSshPermissionSpec = PermissionSpec<
   "ssh",
   AwsSshPermission,
-  AwsSshGenerated
+  AwsSshGenerated,
+  { aws: AwsResourcePermissionSpec }
 >;
 
 export type AwsSsh = CliPermissionSpec<AwsSshPermissionSpec, undefined>;
