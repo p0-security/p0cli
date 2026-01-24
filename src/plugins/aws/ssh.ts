@@ -146,8 +146,8 @@ export const awsSshProvider: SshProvider<
     // TODO: Update after P0 backend data-model update
     const { idcId, idcRegion, accountId } =
       delegation?.aws?.permission ?? resource;
-    const { name } =
-      delegation?.aws?.generated ?? generated?.resource?.name ?? "";
+    const name =
+      delegation?.aws?.generated.name ?? generated?.resource?.name ?? "";
     const common = {
       linuxUserName,
       accountId,
