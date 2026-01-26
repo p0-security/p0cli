@@ -523,7 +523,125 @@ export const getRdsEndpoint = async (
 };
 
 /**
+ * Parses an AWS config file and returns a map of section names to their key-value pairs
+ */
+const parseAwsConfig = (configPath: string): Map<string, Map<string, string>> => {
+    const sections = new Map<string, Map<string, string>>();
+
+    if (!fs.existsSync(configPath)) {
+        return sections;
+    }
+
+    const content = fs.readFileSync(configPath, "utf-8");
+    const lines = content.split("\n");
+    let currentSection: string | null = null;
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+
+        // Skip empty lines and comments
+        if (!trimmedLine || trimmedLine.startsWith("#") || trimmedLine.startsWith(";")) {
+            continue;
+        }
+
+        // Check for section header [section-name] or [profile name]
+        const sectionMatch = trimmedLine.match(/^\[(.+)\]$/);
+        if (sectionMatch && sectionMatch[1]) {
+            currentSection = sectionMatch[1];
+            if (!sections.has(currentSection)) {
+                sections.set(currentSection, new Map());
+            }
+            continue;
+        }
+
+        // Parse key = value
+        if (currentSection) {
+            const kvMatch = trimmedLine.match(/^([^=]+)=(.*)$/);
+            if (kvMatch && kvMatch[1] && kvMatch[2] !== undefined) {
+                const key = kvMatch[1].trim();
+                const value = kvMatch[2].trim();
+                sections.get(currentSection)!.set(key, value);
+            }
+        }
+    }
+
+    return sections;
+};
+
+/**
+ * Finds an existing AWS SSO profile that matches the given connection details
+ * Returns the profile name if found, null otherwise
+ */
+const findExistingSsoProfile = (
+    details: AwsConnectionDetails,
+    debug?: boolean
+): string | null => {
+    const awsConfigPath = path.join(os.homedir(), ".aws", "config");
+    const sections = parseAwsConfig(awsConfigPath);
+
+    if (debug) {
+        print2(`Searching for existing SSO profile matching:`);
+        print2(`  sso_start_url: ${details.ssoStartUrl}`);
+        print2(`  sso_region: ${details.ssoRegion}`);
+        print2(`  sso_account_id: ${details.ssoAccountId}`);
+        print2(`  sso_role_name: ${details.roleName}`);
+        print2(`  region: ${details.region}`);
+    }
+
+    // Look for p0-pg-* profiles that match our configuration
+    for (const [sectionName, sectionData] of sections) {
+        // Only check profile sections that start with "profile p0-pg-"
+        if (!sectionName.startsWith("profile p0-pg-")) {
+            continue;
+        }
+
+        const profileName = sectionName.replace("profile ", "");
+
+        // Check profile-level attributes
+        const ssoAccountId = sectionData.get("sso_account_id");
+        const ssoRoleName = sectionData.get("sso_role_name");
+        const region = sectionData.get("region");
+        const ssoSessionName = sectionData.get("sso_session");
+
+        if (ssoAccountId !== details.ssoAccountId) continue;
+        if (ssoRoleName !== details.roleName) continue;
+        if (region !== details.region) continue;
+
+        // If this profile uses sso_session, check the session block
+        if (ssoSessionName) {
+            const sessionSection = sections.get(`sso-session ${ssoSessionName}`);
+            if (!sessionSection) continue;
+
+            const sessionStartUrl = sessionSection.get("sso_start_url");
+            const sessionRegion = sessionSection.get("sso_region");
+
+            if (sessionStartUrl !== details.ssoStartUrl) continue;
+            if (sessionRegion !== details.ssoRegion) continue;
+        } else {
+            // Legacy profile format (inline sso_* fields)
+            const ssoStartUrl = sectionData.get("sso_start_url");
+            const ssoRegion = sectionData.get("sso_region");
+
+            if (ssoStartUrl !== details.ssoStartUrl) continue;
+            if (ssoRegion !== details.ssoRegion) continue;
+        }
+
+        // Found a matching profile!
+        if (debug) {
+            print2(`Found existing matching SSO profile: ${profileName}`);
+        }
+        return profileName;
+    }
+
+    if (debug) {
+        print2("No existing matching SSO profile found");
+    }
+    return null;
+};
+
+/**
  * Configures an AWS SSO profile in the AWS config file
+ * Reuses an existing profile if one matches the connection details
  */
 export const configureAwsSsoProfile = async (
     details: AwsConnectionDetails,
@@ -538,7 +656,16 @@ export const configureAwsSsoProfile = async (
             fs.mkdirSync(awsConfigDir, { recursive: true });
         }
 
-        // Create unique profile name
+        // Check for existing matching profile first
+        const existingProfile = findExistingSsoProfile(details, debug);
+        if (existingProfile) {
+            if (debug) {
+                print2(`Reusing existing SSO profile: ${existingProfile}`);
+            }
+            return existingProfile;
+        }
+
+        // Create unique profile name (only if no existing match)
         const timestamp = Date.now();
         const profileName = `p0-pg-${timestamp}`;
         const sessionName = `${profileName}-sso-session`;
@@ -572,7 +699,7 @@ output = json
         }
 
         if (debug) {
-            print2(`Configured AWS SSO profile: ${profileName}`);
+            print2(`Configured new AWS SSO profile: ${profileName}`);
             print2(`Appended to ${awsConfigPath}`);
         }
 
