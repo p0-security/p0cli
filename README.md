@@ -259,6 +259,9 @@ yarn test
 # Build the CLI
 yarn build
 
+# Install the precommit hooks
+yarn prepare
+
 # Run locally
 yarn p0 --help
 ```
@@ -267,6 +270,7 @@ For detailed dependency management practices, see [yarn.md](yarn.md).
 
 ### Available Scripts
 
+- `yarn prepare` - Installs precommit hooks which run linters
 - `yarn build` - Compile TypeScript to JavaScript
 - `yarn test` - Run unit tests with Vitest
 - `yarn lint` - Run all linting checks (formatting, code, types)
