@@ -911,14 +911,14 @@ export const connectToDatabase = async (
 };
 
 /**
- * Prints AWS RDS connection details and copies to clipboard
+ * Prints AWS RDS connection details
  */
 export const printAwsConnectionDetails = async (
     details: AwsConnectionDetails,
     dbUser: string,
     token: string,
     ssl?: boolean,
-    debug?: boolean
+    _debug?: boolean
 ): Promise<void> => {
     // Construct postgresql:// URL with IAM token
     const sslMode = ssl ? "require" : "prefer";
@@ -939,41 +939,6 @@ export const printAwsConnectionDetails = async (
     print2(`  ${connectionUrl}`);
     print2("═══════════════════════════════════════════════════════════════");
     print2("");
-
-    // Copy connection details to clipboard
-    const connectionDetailsText = `Host: ${details.rdsHost}
-Port: ${details.port}
-Database: ${details.database}
-Username: ${dbUser}
-Password: ${token}
-SSL Mode: ${sslMode}
-
-Connection URL:
-${connectionUrl}`;
-
-    const operatingSystem = getOperatingSystem();
-
-    // Copy to clipboard on macOS
-    if (operatingSystem === "mac") {
-        try {
-            const copyProcess = spawnWithCleanEnv("pbcopy", [], {
-                stdio: "pipe",
-                env: createCleanChildEnv(),
-            });
-            copyProcess.stdin?.write(connectionDetailsText);
-            copyProcess.stdin?.end();
-            await new Promise<void>((resolve) => {
-                copyProcess.on("exit", () => resolve());
-                copyProcess.on("error", () => resolve());
-            });
-            print2("✓ Connection details copied to clipboard!");
-            print2("");
-        } catch (error) {
-            if (debug) {
-                print2(`Warning: Failed to copy to clipboard: ${error}`);
-            }
-        }
-    }
 
     print2("Use these details with psql or any PostgreSQL client.");
 };
