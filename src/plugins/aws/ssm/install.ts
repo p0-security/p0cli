@@ -35,53 +35,40 @@ const SsmInstall: Readonly<Record<SsmItem, InstallMetadata>> = {
   },
 };
 
-/** Checks the AWS CLI version */
 const checkAwsCliVersion = async (
   debug?: boolean
-): Promise<string | undefined> => {
-  const output = await checkToolVersion("AWS CLI", ["aws", "--version"], debug);
-  if (!output) return undefined;
+): Promise<string | undefined> =>
+  await checkToolVersion("AWS CLI", ["aws", "--version"], debug);
 
-  // Parse: "aws-cli/2.15.23 Python/3.11.6 Darwin/25.2.0..."
-  const match = output.match(/aws-cli\/(\d+\.\d+\.\d+)/);
-  return match ? match[1] : undefined;
-};
-
-/** Checks the Session Manager Plugin version */
 const checkSsmPluginVersion = async (
   debug?: boolean
-): Promise<string | undefined> => {
-  const output = await checkToolVersion(
+): Promise<string | undefined> =>
+  await checkToolVersion(
     "Session Manager Plugin",
     ["session-manager-plugin", "--version"],
     debug
   );
-  // Output is just the version number: "1.2.764.0"
-  return output;
-};
 
 const validateSsmVersions = async (debug?: boolean): Promise<void> => {
   if (!debug) return;
 
-  print2("[SSM Install Check] Checking AWS CLI installation...");
+  print2("Checking AWS CLI installation...");
   const awsVersion = await checkAwsCliVersion(debug);
   if (awsVersion) {
-    print2(`[SSM Install Check] AWS CLI version: ${awsVersion}`);
+    print2(`AWS CLI version: ${awsVersion}`);
   } else {
-    print2("[SSM Install Check] Warning: Could not determine AWS CLI version");
+    print2("Warning: Could not determine AWS CLI version");
   }
 
-  print2("[SSM Install Check] Checking Session Manager Plugin installation...");
+  print2("Checking Session Manager Plugin installation...");
   const ssmVersion = await checkSsmPluginVersion(debug);
   if (ssmVersion) {
-    print2(`[SSM Install Check] Session Manager Plugin version: ${ssmVersion}`);
+    print2(`Session Manager Plugin version: ${ssmVersion}`);
   } else {
-    print2(
-      "[SSM Install Check] Warning: Could not determine Session Manager Plugin version"
-    );
+    print2("Warning: Could not determine Session Manager Plugin version");
   }
 
-  print2("[SSM Install Check] All tools installed and validated");
+  print2("All tools installed and validated");
 };
 
 /** Ensures that AWS CLI and SSM plugin are installed on the user environment
