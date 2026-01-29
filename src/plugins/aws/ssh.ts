@@ -78,8 +78,8 @@ export const awsSshProvider: SshProvider<
         : throwAssertNever(config.login);
   },
 
-  ensureInstall: async () => {
-    if (!(await ensureSsmInstall())) {
+  ensureInstall: async (options) => {
+    if (!(await ensureSsmInstall(options?.debug))) {
       throw "Please try again after installing the required AWS utilities";
     }
   },

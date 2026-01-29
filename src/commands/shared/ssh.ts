@@ -264,6 +264,8 @@ export const prepareRequest = async (
     span.setAttribute("provider", provisionedRequest.permission.provider);
     span.setAttribute("requestId", requestId);
 
+    await sshProvider.ensureInstall({ debug: args.debug });
+
     await sshProvider.submitPublicKey?.(
       authn,
       provisionedRequest,

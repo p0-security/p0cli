@@ -10,11 +10,51 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print1, print2 } from "../drivers/stdio";
 import { isa } from "../types";
-import { spawnWithCleanEnv } from "../util";
+import { osSafeCommand, spawnWithCleanEnv } from "../util";
+import { asyncSpawn } from "./subprocess";
 import { compact } from "lodash";
 import os from "node:os";
 import { sys } from "typescript";
 import which from "which";
+
+export const checkToolVersion = async (
+  toolName: string,
+  versionCommand: string[],
+  debug?: boolean
+): Promise<string | undefined> => {
+  if (versionCommand.length === 0) {
+    if (debug) {
+      print2(
+        `[Version Check] Warning: No version command provided for ${toolName}`
+      );
+    }
+    return undefined;
+  }
+
+  const command = versionCommand[0];
+  const args = versionCommand.slice(1);
+
+  // TypeScript doesn't narrow array indexing, so we assert after length check
+  if (!command) {
+    return undefined;
+  }
+
+  const data = osSafeCommand(command, args);
+
+  try {
+    const output = await asyncSpawn({ debug }, data.command, data.args, {
+      timeout: 5000,
+    });
+    return output.trim();
+  } catch (error) {
+    if (debug) {
+      print2(
+        `[Version Check] Warning: Could not determine ${toolName} version`
+      );
+    }
+    return undefined;
+  }
+};
 
 export const SupportedPlatforms = ["darwin"] as const;
 export type SupportedPlatform = (typeof SupportedPlatforms)[number];
