@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print1, print2 } from "../drivers/stdio";
 import { isa } from "../types";
-import { spawnWithCleanEnv } from "../util";
+import { osSafeCommand, spawnWithCleanEnv } from "../util";
 import { asyncSpawn } from "./subprocess";
 import { compact } from "lodash";
 import os from "node:os";
@@ -39,8 +39,10 @@ export const checkToolVersion = async (
     return undefined;
   }
 
+  const data = osSafeCommand(command, args);
+
   try {
-    const output = await asyncSpawn({ debug }, command, args, {
+    const output = await asyncSpawn({ debug }, data.command, data.args, {
       timeout: 5000,
     });
     return output.trim();

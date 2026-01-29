@@ -61,7 +61,7 @@ const checkSsmPluginVersion = async (
 };
 
 const validateSsmVersions = async (debug?: boolean): Promise<void> => {
-  if (!debug) return; // Only run when debug is enabled
+  if (!debug) return;
 
   print2("[SSM Install Check] Checking AWS CLI installation...");
   const awsVersion = await checkAwsCliVersion(debug);
