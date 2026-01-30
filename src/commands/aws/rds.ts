@@ -186,7 +186,7 @@ On CloudShell, you can execute:
 
   export RDSSSLCA='/certs/global-bundle.pem'
   export RDSHOST='${pgConfig.hostname}'
-  export PGPASSWORD='${result.stdout}'
+  export PGPASSWORD='${result.stdout.trim()}'
 
   psql "host=$\{RDSHOST} port=${port} sslmode=verify-full sslrootcert=$\{RDSSSLCA} dbname=${pgConfig.database} user=${userName}"
 
