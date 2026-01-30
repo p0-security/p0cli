@@ -176,12 +176,19 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
   const result = await exec("aws", generateTokenArgs, { check: true });
 
   print2(result.stderr);
-  print2(`Access your database by exporting the result of this command and executing psql in an environment with network access to the instance:
+  print2(`Access your database by exporting the result of this command and executing psql in an environment with network access to the instance.
 
-export RDSHOST='${pgConfig.hostname}'
-export PGPASSWORD=$(${argv.$0} aws rds generate-db-auth-token ${argv.role} --database ${access.permission.databaseId})
+Ensure that your execution environment has downloaded the RDS SSL certificate authority (see https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html).
 
-psql "host=$RDSHOST port=${port} sslmode=verify-full sslrootcert=/etc/ssl/global-bundle.pem dbname=${pgConfig.database} user=${userName}"
+If you are executing from CloudShell this will be done for you already, and the CA will be available at \`/certs/global-bundle.pem\`.
+
+Example usage:
+
+  export RDSSSLCA='/certs/global-bundle.pem'
+  export RDSHOST='${pgConfig.hostname}'
+  export PGPASSWORD=$(${argv.$0} aws rds generate-db-auth-token ${argv.role} --database ${access.permission.databaseId})
+
+  psql "host=$\{RDSHOST} port=${port} sslmode=verify-full sslrootcert=$\{RDSSSLCA} dbname=${pgConfig.database} user=${userName}"
 
 `);
   print1(result.stdout);
