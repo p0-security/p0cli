@@ -12,10 +12,10 @@ import { retryWithSleep } from "../common/retry";
 import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
 import { print2, spinUntil } from "../drivers/stdio";
+import { awsCloudAuth } from "../plugins/aws/auth";
 import { parseArn } from "../plugins/aws/utils";
 import {
   aliasedArn,
-  awsCloudAuth,
   getAndValidateK8sIntegration,
   profileName,
   requestAccessToCluster,
@@ -86,12 +86,12 @@ const kubeconfigAction = async (
 
   const authn = await authenticate();
 
-  const { clusterConfig, awsLoginType } = await getAndValidateK8sIntegration(
+  const { clusterConfig } = await getAndValidateK8sIntegration(
     authn,
     args.cluster,
     args.debug
   );
-  const { clusterId, awsAccountId, awsClusterArn } = clusterConfig;
+  const { clusterId, awsClusterArn } = clusterConfig;
 
   if (!(await ensureEksInstall())) {
     throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
@@ -100,13 +100,12 @@ const kubeconfigAction = async (
   // No spinUntil(); there is one inside requestAccessToCluster() if needed
   const request = await requestAccessToCluster(authn, args, clusterId, role);
 
-  const awsAuth = await awsCloudAuth(
-    authn,
-    awsAccountId,
-    request,
-    awsLoginType,
-    args.debug
-  );
+  const awsDelegation = request.delegation.aws;
+  if (!awsDelegation) {
+    throw "Backend granted k8s access, but this is not an EKS cluster.";
+  }
+
+  const awsAuth = await awsCloudAuth(authn, awsDelegation, args.debug);
 
   const profile = profileName(clusterId);
   const alias = aliasedArn(awsClusterArn);
