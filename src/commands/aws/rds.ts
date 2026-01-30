@@ -168,6 +168,8 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     region,
     "--username",
     userName,
+    "--profile",
+    profileName,
   ];
 
   const result = await exec("aws", generateTokenArgs, { check: true });
