@@ -182,11 +182,11 @@ Ensure that your execution environment has downloaded the RDS SSL certificate au
 
 If you are executing from CloudShell this will be done for you already, and the CA will be available at \`/certs/global-bundle.pem\`.
 
-Example usage:
+On CloudShell, you can execute:
 
   export RDSSSLCA='/certs/global-bundle.pem'
   export RDSHOST='${pgConfig.hostname}'
-  export PGPASSWORD=$(${argv.$0} aws rds generate-db-auth-token ${argv.role} --database ${access.permission.databaseId})
+  export PGPASSWORD='${result.stdout}'
 
   psql "host=$\{RDSHOST} port=${port} sslmode=verify-full sslrootcert=$\{RDSSSLCA} dbname=${pgConfig.database} user=${userName}"
 
