@@ -135,11 +135,12 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const awsDelegation = access.delegation?.["aws-rds"].delegation?.aws;
   if (!awsDelegation) {
-    throw "Backend granted RDS access, but this is not a RDS database.";
+    throw `P0 granted access, but ${access.permission.databaseId} is not a RDS database.`;
   }
 
   const awsAuth = await awsCloudAuth(authn, awsDelegation, argv.debug);
   const pgConfig = await fetchPgConfig(argv, access, authn);
+  const port = pgConfig.port ?? 5432;
 
   const dbResource = access.delegation["aws-rds"].delegation.aws.permission.arn;
 
@@ -163,7 +164,7 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     "--hostname",
     pgConfig.hostname,
     "--port",
-    pgConfig.port ?? 5432,
+    port,
     "--region",
     region,
     "--username",
@@ -175,6 +176,14 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
   const result = await exec("aws", generateTokenArgs, { check: true });
 
   print2(result.stderr);
+  print2(`Access your database by exporting the result of this command and executing psql in an environment with network access to the instance:
+
+export RDSHOST='${pgConfig.hostname}'
+export PGPASSWORD=$(${argv.$0} aws rds generate-db-auth-token ${argv.role} --database ${access.permission.databaseId})
+
+psql "host=$RDSHOST port=${port} sslmode=verify-full sslrootcert=/etc/ssl/global-bundle.pem dbname=${pgConfig.database} user=${userName}"
+
+`);
   print1(result.stdout);
   if (result.code !== null) sys.exit(result.code);
 };
