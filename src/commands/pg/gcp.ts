@@ -301,7 +301,7 @@ export const ensureCloudSqlProxy = async (debug?: boolean): Promise<string> => {
     );
   } catch (error) {
     print2(
-      `Error: Failed to check/install Cloud SQL Proxy component. ${error}`
+      `Error: Failed to check/install Cloud SQL Proxy component. ${String(error)}`
     );
     print2(
       "Please install it manually with: gcloud components install cloud_sql_proxy"
@@ -365,7 +365,7 @@ export const connectToCloudSQLViaProxy = async (
       print2("Application-default credentials set up successfully.");
     } catch (loginError) {
       print2(
-        `Error: Failed to set up application-default credentials. ${loginError}`
+        `Error: Failed to set up application-default credentials. ${String(loginError)}`
       );
       print2(
         "Please run 'gcloud auth application-default login' manually and try again."
@@ -658,7 +658,7 @@ export const printGcpConnectionDetails = async (
     process.removeListener("SIGTERM", cleanupProxy);
     process.removeListener("exit", cleanupProxy);
     cleanupProxy();
-    print2(`Error: Failed to generate CloudSQL login token. ${error}`);
+    print2(`Error: Failed to generate CloudSQL login token. ${String(error)}`);
     throw error;
   }
 
@@ -716,7 +716,7 @@ ${connectionUrl}`;
         print2("");
       } catch (error) {
         if (debug) {
-          print2(`Warning: Failed to copy to clipboard: ${error}`);
+          print2(`Warning: Failed to copy to clipboard: ${String(error)}`);
         }
       }
     }

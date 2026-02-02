@@ -13,11 +13,7 @@ import { fetchCommand, fetchIntegrationConfig } from "../../drivers/api";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PsqlCommandArgs } from "../../types/psql";
-import {
-  createCleanChildEnv,
-  getOperatingSystem,
-  spawnWithCleanEnv,
-} from "../../util";
+import { createCleanChildEnv, spawnWithCleanEnv } from "../../util";
 import { AwsConnectionDetails } from "./types";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -353,14 +349,14 @@ export const queryBackendForEndpoint = async (
         } catch (error) {
           if (debug) {
             print2(
-              `Failed to fetch integration config for ${integrationName}: ${error}`
+              `Failed to fetch integration config for ${integrationName}: ${String(error)}`
             );
           }
         }
       }
     } catch (error) {
       if (debug) {
-        print2(`Integration config query failed: ${error}`);
+        print2(`Integration config query failed: ${String(error)}`);
       }
     }
 
@@ -370,14 +366,14 @@ export const queryBackendForEndpoint = async (
         if (debug) {
           print2(`Trying query with full instance path: ${fullInstancePath}`);
         }
-        response = (await fetchCommand<Record<string, unknown>>(authn, args, [
+        response = await fetchCommand<Record<string, unknown>>(authn, args, [
           "ls",
           "pg",
           "role",
           "instance",
           fullInstancePath,
           "--json",
-        ])) as Record<string, unknown>;
+        ]);
         if (
           response &&
           response.items &&
@@ -389,7 +385,7 @@ export const queryBackendForEndpoint = async (
         }
       } catch (error) {
         if (debug) {
-          print2(`Query with full path failed: ${error}`);
+          print2(`Query with full path failed: ${String(error)}`);
         }
       }
     }
@@ -400,17 +396,17 @@ export const queryBackendForEndpoint = async (
         if (debug) {
           print2(`Trying query with instance name: ${instanceName}`);
         }
-        response = (await fetchCommand<Record<string, unknown>>(authn, args, [
+        response = await fetchCommand<Record<string, unknown>>(authn, args, [
           "ls",
           "pg",
           "role",
           "instance",
           instanceName,
           "--json",
-        ])) as Record<string, unknown>;
+        ]);
       } catch (error) {
         if (debug) {
-          print2(`Query with instance name failed: ${error}`);
+          print2(`Query with instance name failed: ${String(error)}`);
         }
       }
     }
@@ -419,22 +415,22 @@ export const queryBackendForEndpoint = async (
       // Look for endpoint in the response items
       for (const item of response.items as Record<string, unknown>[]) {
         if (item.value && typeof item.value === "string") {
-          if ((item.value as string).includes(".rds.amazonaws.com")) {
+          if (item.value.includes(".rds.amazonaws.com")) {
             if (debug) {
               print2(`Found RDS endpoint in backend response: ${item.value}`);
             }
-            return item.value as string;
+            return item.value;
           }
         }
         if (
           item.key &&
           typeof item.key === "string" &&
-          (item.key as string).includes(".rds.amazonaws.com")
+          item.key.includes(".rds.amazonaws.com")
         ) {
           if (debug) {
             print2(`Found RDS endpoint in backend response (key): ${item.key}`);
           }
-          return item.key as string;
+          return item.key;
         }
       }
     }
@@ -445,7 +441,7 @@ export const queryBackendForEndpoint = async (
     }
   } catch (error) {
     if (debug) {
-      print2(`Failed to query backend for endpoint: ${error}`);
+      print2(`Failed to query backend for endpoint: ${String(error)}`);
     }
   }
 
@@ -500,7 +496,7 @@ export const getRdsEndpoint = async (
       }
     } catch (error) {
       if (debug) {
-        print2(`Failed to query AWS RDS for endpoint: ${error}`);
+        print2(`Failed to query AWS RDS for endpoint: ${String(error)}`);
         print2("Falling back to constructed endpoint");
       }
     }
@@ -724,19 +720,13 @@ export const loginAwsSso = async (
 ): Promise<void> => {
   print2(`Logging in to AWS SSO with profile ${profileName}...`);
 
-  try {
-    await asyncSpawn({ debug }, "aws", [
-      "sso",
-      "login",
-      "--profile",
-      profileName,
-    ]);
-    print2("AWS SSO login successful.");
-  } catch (error) {
-    print2(`Error: AWS SSO login failed. ${error}`);
-    print2("Please check your SSO configuration or browser login.");
-    throw error;
-  }
+  await asyncSpawn({ debug }, "aws", [
+    "sso",
+    "login",
+    "--profile",
+    profileName,
+  ]);
+  print2("AWS SSO login successful.");
 };
 
 /**
@@ -752,35 +742,31 @@ export const generateDbAuthToken = async (
     print2(`Generating IAM auth token for user '${dbUser}'...`);
   }
 
-  try {
-    const token = await asyncSpawn({ debug }, "aws", [
-      "rds",
-      "generate-db-auth-token",
-      "--hostname",
-      details.rdsHost,
-      "--port",
-      String(details.port),
-      "--region",
-      details.region,
-      "--username",
-      dbUser,
-      "--profile",
-      profileName,
-    ]);
+  const token = await asyncSpawn({ debug }, "aws", [
+    "rds",
+    "generate-db-auth-token",
+    "--hostname",
+    details.rdsHost,
+    "--port",
+    String(details.port),
+    "--region",
+    details.region,
+    "--username",
+    dbUser,
+    "--profile",
+    profileName,
+  ]);
 
-    const trimmedToken = token.trim();
-    if (!trimmedToken) {
-      throw new Error("Failed to generate DB auth token: empty response");
-    }
-
-    if (debug) {
-      print2("Token generated successfully.");
-    }
-
-    return trimmedToken;
-  } catch (error) {
-    throw error;
+  const trimmedToken = token.trim();
+  if (!trimmedToken) {
+    throw new Error("Failed to generate DB auth token: empty response");
   }
+
+  if (debug) {
+    print2("Token generated successfully.");
+  }
+
+  return trimmedToken;
 };
 
 /**
@@ -922,7 +908,7 @@ export const connectToDatabase = async (
       });
     });
   } catch (error) {
-    print2(`Error: Failed to connect to database. ${error}`);
+    print2(`Error: Failed to connect to database. ${String(error)}`);
     throw error;
   }
 };

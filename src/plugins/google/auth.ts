@@ -118,7 +118,7 @@ export const ensureGcloudAuth = async (debug?: boolean): Promise<void> => {
 
       print2("gcloud authentication successful.");
     } catch (loginError) {
-      print2(`Error: gcloud authentication failed. ${loginError}`);
+      print2(`Error: gcloud authentication failed. ${String(loginError)}`);
       print2("Please run 'gcloud auth login' manually and try again.");
       throw loginError;
     }
