@@ -414,6 +414,14 @@ const addCommonArgs = (
   if (!verboseOptionExists) {
     sshOptions.push("-v");
   }
+
+  // Use FIPS-compliant signature algorithms for public key authentication
+  // This ensures we use rsa-sha2-512 or rsa-sha2-256 instead of ssh-rsa (which uses SHA-1)
+  // Added at the beginning so it takes precedence over any user-specified options
+  sshOptions.unshift(
+    "-o",
+    "PubkeyAcceptedAlgorithms=rsa-sha2-512,rsa-sha2-256"
+  );
 };
 
 const addScpArgs = (args: ScpCommandArgs) => {
