@@ -163,7 +163,7 @@ const pgAction = async (args: yargs.ArgumentsCamelCase<PgCommandArgs>) => {
     throw new Error("Unreachable");
   }
 
-  const provisionedRequest = response!.request!;
+  const provisionedRequest = response.request;
 
   // Get user email for database username
   let dbUserResult: string | null;
@@ -185,7 +185,7 @@ const pgAction = async (args: yargs.ArgumentsCamelCase<PgCommandArgs>) => {
     sys.exit(1);
     throw new Error("Unreachable");
   }
-  const dbUser: string = dbUserResult!;
+  const dbUser: string = dbUserResult;
 
   // Extract connection details from the request
   let connectionDetailsResult: ConnectionDetails | null;
@@ -215,7 +215,7 @@ const pgAction = async (args: yargs.ArgumentsCamelCase<PgCommandArgs>) => {
     sys.exit(1);
     throw new Error("Unreachable");
   }
-  const connectionDetails: ConnectionDetails = connectionDetailsResult!;
+  const connectionDetails: ConnectionDetails = connectionDetailsResult;
 
   // Route to provider-specific connection flow based on mode
   try {

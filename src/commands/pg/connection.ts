@@ -8,20 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PsqlCommandArgs, PsqlPermissionSpec } from "../../types/psql";
 import { PermissionRequest } from "../../types/request";
-import { getOperatingSystem } from "../../util";
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { extractAwsConnectionDetails } from "./aws";
 import { extractGcpConnectionDetails } from "./gcp";
 import { ConnectionDetails } from "./types";
 import { pick } from "lodash";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import yargs from "yargs";
 
 /**
@@ -188,8 +184,8 @@ export const extractConnectionDetails = async (
       integrationType === "cloud-sql" ||
       instancePath.toLowerCase().startsWith("cloud-sql/") ||
       instancePath.toLowerCase().includes("cloudsql") ||
-      (resource as Record<string, unknown>)?.provider === "gcp" ||
-      (resource as Record<string, unknown>)?.type === "gcp";
+      resource?.provider === "gcp" ||
+      resource?.type === "gcp";
 
     if (debug) {
       print2(`Detected provider: ${isGcp ? "GCP CloudSQL" : "AWS RDS"}`);
@@ -274,7 +270,7 @@ export const extractConnectionDetails = async (
       );
     }
   } catch (error) {
-    print2(`Error extracting connection details: ${error}`);
+    print2(`Error extracting connection details: ${String(error)}`);
     if (debug) {
       print2(`Stack: ${error instanceof Error ? error.stack : String(error)}`);
     }
