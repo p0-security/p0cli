@@ -22,35 +22,35 @@ import { sys } from "typescript";
  * @throws Exits with code 1 if any required tool is not found
  */
 export const validatePgTools = async (
-    psqlMode: boolean,
-    debug?: boolean
+  psqlMode: boolean,
+  debug?: boolean
 ): Promise<void> => {
-    const tools: Array<{ name: string; description: string }> = [];
+  const tools: Array<{ name: string; description: string }> = [];
 
-    if (psqlMode) {
-        tools.push({ name: "psql", description: "PostgreSQL client" });
+  if (psqlMode) {
+    tools.push({ name: "psql", description: "PostgreSQL client" });
+  }
+  // URL mode doesn't require any specific tools - we just print connection details
+
+  // Always check AWS and gcloud CLI (we don't know provider yet)
+  tools.push(
+    { name: "aws", description: "AWS CLI" },
+    { name: "gcloud", description: "Google Cloud CLI" }
+  );
+
+  for (const tool of tools) {
+    try {
+      // Use 'where' on Windows or 'which' on Unix
+      const checkCommand = process.platform === "win32" ? "where" : "which";
+      await asyncSpawn({ debug }, checkCommand, [tool.name]);
+    } catch {
+      print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
+      print2(
+        `Please install ${tool.description} and ensure it's in your PATH.`
+      );
+      sys.exit(1);
     }
-    // URL mode doesn't require any specific tools - we just print connection details
-
-    // Always check AWS and gcloud CLI (we don't know provider yet)
-    tools.push(
-        { name: "aws", description: "AWS CLI" },
-        { name: "gcloud", description: "Google Cloud CLI" }
-    );
-
-    for (const tool of tools) {
-        try {
-            // Use 'where' on Windows or 'which' on Unix
-            const checkCommand = process.platform === "win32" ? "where" : "which";
-            await asyncSpawn({ debug }, checkCommand, [tool.name]);
-        } catch {
-            print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
-            print2(
-                `Please install ${tool.description} and ensure it's in your PATH.`
-            );
-            sys.exit(1);
-        }
-    }
+  }
 };
 
 /**
@@ -63,32 +63,32 @@ export const validatePgTools = async (
  * @throws Exits with code 1 if any required tool is not found
  */
 export const validateCliTools = async (
-    provider?: "aws" | "gcp",
-    debug?: boolean
+  provider?: "aws" | "gcp",
+  debug?: boolean
 ): Promise<void> => {
-    const tools: Array<{ name: string; description: string }> = [
-        { name: "psql", description: "PostgreSQL client" },
-    ];
+  const tools: Array<{ name: string; description: string }> = [
+    { name: "psql", description: "PostgreSQL client" },
+  ];
 
-    // Add provider-specific tools
-    if (provider === "gcp") {
-        tools.push({ name: "gcloud", description: "Google Cloud CLI" });
-    } else {
-        // Default to AWS if not specified
-        tools.push({ name: "aws", description: "AWS CLI" });
-    }
+  // Add provider-specific tools
+  if (provider === "gcp") {
+    tools.push({ name: "gcloud", description: "Google Cloud CLI" });
+  } else {
+    // Default to AWS if not specified
+    tools.push({ name: "aws", description: "AWS CLI" });
+  }
 
-    for (const tool of tools) {
-        try {
-            // Use 'command -v' on Unix or 'where' on Windows, but 'which' works on most systems
-            const checkCommand = process.platform === "win32" ? "where" : "which";
-            await asyncSpawn({ debug }, checkCommand, [tool.name]);
-        } catch {
-            print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
-            print2(
-                `Please install ${tool.description} and ensure it's in your PATH.`
-            );
-            sys.exit(1);
-        }
+  for (const tool of tools) {
+    try {
+      // Use 'command -v' on Unix or 'where' on Windows, but 'which' works on most systems
+      const checkCommand = process.platform === "win32" ? "where" : "which";
+      await asyncSpawn({ debug }, checkCommand, [tool.name]);
+    } catch {
+      print2(`Error: ${tool.description} (${tool.name}) not found in PATH.`);
+      print2(
+        `Please install ${tool.description} and ensure it's in your PATH.`
+      );
+      sys.exit(1);
     }
+  }
 };
