@@ -14,38 +14,38 @@ import { PsqlCommandArgs } from "../../types/psql";
  * Command arguments for the pg command
  */
 export type PgCommandArgs = PsqlCommandArgs & {
-    psql?: boolean;
-    url?: boolean;
-    ssl?: boolean;
+  psql?: boolean;
+  url?: boolean;
+  ssl?: boolean;
 };
 
 /**
  * AWS RDS connection details
  */
 export type AwsConnectionDetails = {
-    provider: "aws";
-    rdsHost: string;
-    region: string;
-    port: number;
-    database: string;
-    ssoStartUrl: string;
-    ssoRegion: string;
-    ssoAccountId: string;
-    roleName: string;
+  provider: "aws";
+  rdsHost: string;
+  region: string;
+  port: number;
+  database: string;
+  ssoStartUrl: string;
+  ssoRegion: string;
+  ssoAccountId: string;
+  roleName: string;
 };
 
 /**
  * GCP CloudSQL connection details
  */
 export type GcpConnectionDetails = {
-    provider: "gcp";
-    projectId: string;
-    instanceConnectionName: string;
-    region: string;
-    port: number;
-    database: string;
-    instanceName: string;
-    publicIp?: string;
+  provider: "gcp";
+  projectId: string;
+  instanceConnectionName: string;
+  region: string;
+  port: number;
+  database: string;
+  instanceName: string;
+  publicIp?: string;
 };
 
 /**

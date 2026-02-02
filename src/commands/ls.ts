@@ -149,11 +149,12 @@ const ls = async (
       const tagPart = `${item.group ? `${item.group} / ` : ""}${item.value}`;
       const prefix = item.isPreexisting ? "* " : "  ";
       print1(
-        `${prefix}${isSameValue
-          ? item.key
-          : maxLength > 30
-            ? `${item.key}\n  ${AnsiSgr.Dim}${tagPart}${AnsiSgr.Reset}`
-            : `${item.key.padEnd(maxLength)}${AnsiSgr.Dim} - ${tagPart}${AnsiSgr.Reset}`
+        `${prefix}${
+          isSameValue
+            ? item.key
+            : maxLength > 30
+              ? `${item.key}\n  ${AnsiSgr.Dim}${tagPart}${AnsiSgr.Reset}`
+              : `${item.key.padEnd(maxLength)}${AnsiSgr.Dim} - ${tagPart}${AnsiSgr.Reset}`
         }`
       );
     }

@@ -12,30 +12,30 @@ import { PermissionSpec } from "./request";
 
 // AWS RDS request type
 export type AwsPsqlRequest = {
-    resource: {
-        rdsHost: string;
-        region: string;
-        port: number;
-        database: string;
-        ssoStartUrl: string;
-        ssoRegion: string;
-        ssoAccountId: string;
-        roleName: string;
-    };
-    type: "aws";
+  resource: {
+    rdsHost: string;
+    region: string;
+    port: number;
+    database: string;
+    ssoStartUrl: string;
+    ssoRegion: string;
+    ssoAccountId: string;
+    roleName: string;
+  };
+  type: "aws";
 };
 
 // GCP CloudSQL request type
 export type GcpPsqlRequest = {
-    resource: {
-        projectId: string;
-        instanceConnectionName: string;
-        region: string;
-        port: number;
-        database: string;
-        instanceName: string;
-    };
-    type: "gcp";
+  resource: {
+    projectId: string;
+    instanceConnectionName: string;
+    region: string;
+    port: number;
+    database: string;
+    instanceName: string;
+  };
+  type: "gcp";
 };
 
 // Union type for both providers
@@ -43,17 +43,17 @@ export type PsqlRequest = AwsPsqlRequest | GcpPsqlRequest;
 
 // Permission spec can be either AWS or GCP
 export type PsqlPermissionSpec =
-    | PermissionSpec<"psql", AwsPsqlRequest, PsqlGenerated>
-    | PermissionSpec<"psql", GcpPsqlRequest, PsqlGenerated>;
+  | PermissionSpec<"psql", AwsPsqlRequest, PsqlGenerated>
+  | PermissionSpec<"psql", GcpPsqlRequest, PsqlGenerated>;
 
 export type PsqlGenerated = {
-    username?: string;
+  username?: string;
 };
 
 export type PsqlCommandArgs = {
-    debug?: boolean;
-    destination: string;
-    reason?: string;
-    role: string;
-    duration?: string;
+  debug?: boolean;
+  destination: string;
+  reason?: string;
+  role: string;
+  duration?: string;
 };
