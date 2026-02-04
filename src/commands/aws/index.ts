@@ -13,6 +13,7 @@ import { print2 } from "../../drivers/stdio";
 import { getFirstAwsConfig } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
 import { role } from "./role";
+import { ssh } from "./ssh";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -40,10 +41,12 @@ const awsArgs = async (yargs: yargs.Argv) => {
       })
       .env("P0_AWS");
 
+    const withSsh = ssh(base, authn);
+
     const withCommand =
       config.login?.type === "idc"
-        ? permissionSet(base, authn)
-        : role(base, authn);
+        ? permissionSet(withSsh, authn)
+        : role(withSsh, authn);
     return withCommand;
   } catch (error) {
     // Handle authentication errors here, since
