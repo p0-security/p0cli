@@ -8,9 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { AwsResourcePermissionSpec } from "../../aws/types";
+import { AwsResourcePermissionSpec } from "../aws/types";
 
-export type Pg2PermissionSpec = {
+export type DbPermissionSpec = {
   delegation: {
     "aws-rds": {
       delegation: { aws: AwsResourcePermissionSpec };
@@ -18,6 +18,6 @@ export type Pg2PermissionSpec = {
     };
   };
   generated: object;
-  permission: { databaseId: string };
-  type: "pg2";
+  permission: { instanceId: string };
+  type: "mysql" | "pg2";
 };
