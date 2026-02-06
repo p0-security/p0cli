@@ -12,14 +12,13 @@ import { fetchIntegrationConfig } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { awsCloudAuth } from "../../plugins/aws/auth";
 import { parseArn } from "../../plugins/aws/utils";
-import { Pg2PermissionSpec } from "../../plugins/kubeconfig/pg/types";
+import { DbPermissionSpec } from "../../plugins/db/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { exec } from "../../util";
+import { exec, throwAssertNever } from "../../util";
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./files";
-import { pick } from "lodash";
 import { sys } from "typescript";
 import yargs from "yargs";
 
@@ -30,7 +29,7 @@ type AnyConfig = {
 };
 
 type PgDatabaseConfig = AnyConfig & {
-  database: string;
+  defaultDb?: string;
   hostname: string;
   port: string;
   hosting: { type: "aws-rds"; databaseArn: string; vpcId: string };
@@ -40,9 +39,13 @@ type PgConfig = {
   "iam-write": Record<string, PgDatabaseConfig>;
 };
 
+type DbResourceKey = "mysql" | "pg2";
+
 type RdsArgs = yargs.ArgumentsCamelCase<{
+  arch: "mysql" | "pg";
   database?: string;
   debug?: boolean;
+  instance?: string;
   role: string;
 }>;
 
@@ -57,18 +60,28 @@ export const rds = (
       // always correctly display a help message
       .demandCommand(1)
       .command(
-        "generate-db-auth-token <role>",
+        "generate-db-auth-token <arch>",
         "Generate an RDS database authentication token",
         (y: yargs.Argv<{ account: string | undefined }>) =>
           y
-            .positional("role", {
+            .positional("arch", {
+              type: "string",
+              choices: ["mysql", "pg"] as const,
+              demandOption: true,
+              describe: "Database architecture; use 'mysql' for MariaDB",
+            })
+            .option("role", {
               type: "string",
               demandOption: true,
               describe: "Database role to access",
             })
+            .option("instance", {
+              type: "string",
+              describe: "P0 instance identifier",
+            })
             .option("database", {
               type: "string",
-              describe: "P0 database identifier",
+              describe: "Database to access",
             })
             .option("debug", {
               type: "boolean",
@@ -79,16 +92,27 @@ export const rds = (
       )
   );
 
+const argvToResource = (argv: RdsArgs): DbResourceKey =>
+  argv.arch === "mysql"
+    ? "mysql"
+    : argv.arch === "pg"
+      ? "pg2"
+      : throwAssertNever(argv.arch);
+
 const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
+  const integration = argvToResource(argv);
+
   const response = await request("request")<
-    PermissionRequest<Pg2PermissionSpec>
+    PermissionRequest<DbPermissionSpec>
   >(
     {
-      ...pick(argv, "$0", "_"),
+      $0: argv.$0,
+      _: [],
       arguments: [
-        "pg2",
+        integration,
         "role",
         argv.role,
+        ...(argv.instance ? ["--instance", argv.instance] : []),
         ...(argv.database ? ["--database", argv.database] : []),
       ],
       wait: true,
@@ -111,20 +135,20 @@ const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
   return access;
 };
 
-const fetchPgConfig = async (
+const fetchConfig = async (
   argv: RdsArgs,
-  access: Pg2PermissionSpec,
+  access: DbPermissionSpec,
   authn: Authn
 ) => {
-  const { databaseId } = access.permission;
+  const { instanceId } = access.permission;
   const install = await fetchIntegrationConfig<{ config: PgConfig }>(
     authn,
-    "pg2",
+    argvToResource(argv),
     argv.debug
   );
-  const config = install.config["iam-write"]?.[access.permission.databaseId];
+  const config = install.config["iam-write"]?.[instanceId];
   if (!config || config.state !== "installed") {
-    throw `No database with ID ${databaseId}`;
+    throw `No instance with ID ${instanceId}`;
   }
 
   return config;
@@ -135,17 +159,25 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const awsDelegation = access.delegation?.["aws-rds"].delegation?.aws;
   if (!awsDelegation) {
-    throw `P0 granted access, but ${access.permission.databaseId} is not a RDS database.`;
+    throw `P0 granted access, but ${access.permission.instanceId} is not a RDS instance.`;
   }
 
   const awsAuth = await awsCloudAuth(authn, awsDelegation, argv.debug);
-  const pgConfig = await fetchPgConfig(argv, access, authn);
-  const port = pgConfig.port ?? 5432;
+  const dbConfig = await fetchConfig(argv, access, authn);
+  const port =
+    dbConfig.port ??
+    (argv.arch === "mysql"
+      ? 3306
+      : argv.arch === "pg"
+        ? 5432
+        : throwAssertNever(argv.arch));
+
+  const database = argv.database ?? dbConfig.defaultDb;
 
   const dbResource = access.delegation["aws-rds"].delegation.aws.permission.arn;
 
   const { region } = parseArn(dbResource);
-  const profileName = `p0_${access.permission.databaseId}`;
+  const profileName = `p0_${access.permission.instanceId}`;
 
   const userEmailName = access.principal.split("@")[0];
 
@@ -162,7 +194,7 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     "rds",
     "generate-db-auth-token",
     "--hostname",
-    pgConfig.hostname,
+    dbConfig.hostname,
     "--port",
     port,
     "--region",
@@ -175,6 +207,14 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const result = await exec("aws", generateTokenArgs, { check: true });
 
+  const pgInstructions = `export PGPASSWORD="${result.stdout}"
+  
+  psql "host=$\{RDS_HOST} port=${port} sslmode=verify-full sslrootcert=$\{RDS_SSL_CA} ${database ? `dbname=${database} ` : ""}user=${userName}"`;
+
+  const mysqlInstructions = `export MYSQL_PWD="${result.stdout.trim()}"
+  
+  mysql -h $\{RDS_HOST} --ssl-ca=$\{RDS_SSL_CA} --ssl-verify-server-cert -P ${port} -u ${userName} ${database}`;
+
   print2(result.stderr);
   print2(`Access your database by exporting the result of this command and executing psql in an environment with network access to the instance.
 
@@ -184,11 +224,9 @@ If you are executing from CloudShell this will be done for you already, and the 
 
 On CloudShell, you can execute:
 
-  export RDSSSLCA='/certs/global-bundle.pem'
-  export RDSHOST='${pgConfig.hostname}'
-  export PGPASSWORD='${result.stdout}'
-
-  psql "host=$\{RDSHOST} port=${port} sslmode=verify-full sslrootcert=$\{RDSSSLCA} dbname=${pgConfig.database} user=${userName}"
+  export RDS_SSL_CA='/certs/global-bundle.pem'
+  export RDS_HOST='${dbConfig.hostname}'
+  ${argv.arch === "mysql" ? mysqlInstructions : argv.arch === "pg" ? pgInstructions : throwAssertNever(argv.arch)}
 
 `);
   print1(result.stdout);
