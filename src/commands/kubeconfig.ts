@@ -21,7 +21,7 @@ import {
   requestAccessToCluster,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
-import { ciEquals, exec } from "../util";
+import { ciEquals, exec, osSafeCommand } from "../util";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./aws/files";
 import yargs from "yargs";
 
@@ -143,7 +143,10 @@ const kubeconfigAction = async (
     const awsResult = await spinUntil(
       "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
       retryWithSleep(
-        async () => await exec("aws", updateKubeconfigArgs, { check: true }),
+        async () => {
+          const { command, args } = osSafeCommand("aws", updateKubeconfigArgs);
+          return await exec(command, args, { check: true });
+        },
         {
           shouldRetry: (error: any) => {
             if (error?.stderr) {
@@ -174,11 +177,12 @@ const kubeconfigAction = async (
   // We'll set the context manually anyway, just in case. `aws update-kubeconfig` names the context
   // with the EKS cluster's ARN.
   try {
-    const kubectlResult = await exec(
-      "kubectl",
-      ["config", "use-context", alias],
-      { check: true }
-    );
+    const { command, args } = osSafeCommand("kubectl", [
+      "config",
+      "use-context",
+      alias,
+    ]);
+    const kubectlResult = await exec(command, args, { check: true });
     print2(kubectlResult.stdout);
   } catch (error: any) {
     print2("Failed to invoke `kubectl config use-context`");
