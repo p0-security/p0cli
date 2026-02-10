@@ -309,6 +309,12 @@ const createCommand = (
   const port = setupData?.port;
 
   const argsOverride = sshOptionsOverrides.flatMap((opt) => ["-o", opt]);
+  const passwordAuthArgs = [
+    "-o",
+    "PreferredAuthentications=publickey",
+    "-o",
+    "PasswordAuthentication=no",
+  ];
 
   if ("source" in args) {
     addScpArgs(args);
@@ -316,6 +322,7 @@ const createCommand = (
     return {
       command: "scp" as const,
       args: [
+        ...passwordAuthArgs,
         ...(args.sshOptions ? args.sshOptions : []),
         ...argsOverride,
         ...(port ? ["-P", port] : []),
@@ -328,6 +335,7 @@ const createCommand = (
   return {
     command: "ssh" as const,
     args: [
+      ...passwordAuthArgs,
       ...(args.sshOptions ? args.sshOptions : []),
       ...argsOverride,
       ...(port ? ["-p", port] : []),
