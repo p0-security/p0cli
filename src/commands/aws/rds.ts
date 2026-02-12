@@ -28,15 +28,15 @@ type AnyConfig = {
   state: string;
 };
 
-type PgDatabaseConfig = AnyConfig & {
+type DatabaseConfig = AnyConfig & {
   defaultDb?: string;
   hostname: string;
   port: string;
   hosting: { type: "aws-rds"; databaseArn: string; vpcId: string };
 };
 
-type PgConfig = {
-  "iam-write": Record<string, PgDatabaseConfig>;
+type DbConfig = {
+  "iam-write": Record<string, DatabaseConfig>;
 };
 
 type DbResourceKey = "mysql" | "pg2";
@@ -141,7 +141,7 @@ const fetchConfig = async (
   authn: Authn
 ) => {
   const { instanceId } = access.permission;
-  const install = await fetchIntegrationConfig<{ config: PgConfig }>(
+  const install = await fetchIntegrationConfig<{ config: DbConfig }>(
     authn,
     argvToResource(argv),
     argv.debug
@@ -229,6 +229,9 @@ On CloudShell, you can execute:
   ${argv.arch === "mysql" ? mysqlInstructions : argv.arch === "pg" ? pgInstructions : throwAssertNever(argv.arch)}
 
 `);
-  print1(result.stdout);
+
+  if (!process.stderr.isTTY || !process.stdout.isTTY) {
+    print1(result.stdout);
+  }
   if (result.code !== null) sys.exit(result.code);
 };
