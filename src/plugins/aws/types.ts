@@ -80,15 +80,15 @@ type AwsResourcePermission = {
   account: string;
   accountId: string;
   arn: string;
-  idcId: string;
-  idcRegion: string;
+  idcId: string | undefined;
+  idcRegion: string | undefined;
   name: string;
 };
 
 // TODO: Remove after P0 backend data model update
 type AwsResourceGenerated = { name: string };
 
-type AwsResourcePermissionSpec = PermissionSpec<
+export type AwsResourcePermissionSpec = PermissionSpec<
   "aws",
   AwsResourcePermission,
   AwsResourceGenerated,

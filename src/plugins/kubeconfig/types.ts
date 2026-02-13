@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { PermissionSpec } from "../../types/request";
+import { AwsResourcePermissionSpec } from "../aws/types";
 
 export type K8sClusterConfig = {
   label?: string;
@@ -31,16 +32,7 @@ export type K8sPermissionSpec = PermissionSpec<
   K8sGenerated
 > & {
   delegation?: {
-    aws?: {
-      generated: {
-        // For IDC, the name of the permission set. For Federated, the name of the assumed role
-        name: string;
-      };
-      permission: {
-        idcRegion?: string;
-        idcId?: string;
-      };
-    };
+    aws?: AwsResourcePermissionSpec;
   };
 };
 
