@@ -127,6 +127,8 @@ Examples:
  * With --url: Provides connection URL and details for use with any client
  */
 const pgAction = async (args: yargs.ArgumentsCamelCase<PgCommandArgs>) => {
+  args.destination =
+    "rds/391052057035/391052057035:us-east-1:private-pg-1/test_shop";
   // Validate all required tools BEFORE authentication/request
   await validatePgTools(args.psql || false, args.debug);
 

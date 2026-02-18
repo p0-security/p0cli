@@ -81,6 +81,19 @@ const ls = async (
     debug: boolean;
   }>
 ) => {
+  const instanceIdx = args.arguments.indexOf("--instance");
+  if (instanceIdx > -1) {
+    args.arguments.splice(
+      instanceIdx + 1,
+      1,
+      "rds/391052057035/391052057035:us-east-1:private-pg-1/test_shop"
+    );
+  }
+  const roleIdx = args.arguments.indexOf("role");
+  if (roleIdx > -1) {
+    args.arguments.splice(roleIdx, 1, "role", "role");
+  }
+
   const authn = await authenticate();
 
   // yargs parses all unknown options into the "arguments" array. Proper option parsing is done in the backend.

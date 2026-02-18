@@ -13,7 +13,7 @@ import { fetchCommand, fetchIntegrationConfig } from "../../drivers/api";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { PsqlCommandArgs } from "../../types/psql";
-import { createCleanChildEnv, spawnWithCleanEnv } from "../../util";
+import { createCleanChildEnv, sleep, spawnWithCleanEnv } from "../../util";
 import { AwsConnectionDetails } from "./types";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -836,6 +836,7 @@ export const generateDbAuthTokenWithAutoLogin = async (
     }
 
     // Retry token generation after login
+    await sleep(2000);
     print2("Retrying token generation after login...");
     try {
       const token = await generateDbAuthToken(
