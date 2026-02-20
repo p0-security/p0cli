@@ -15,7 +15,7 @@ export const createKeyPair = vi.fn().mockImplementation(() => ({
   publicKey: "test-public-key",
   privateKey: "test-private-key",
 }));
-export const saveHostKeys = vi.fn().mockResolvedValue(undefined);
+export const saveHostKeysToFile = vi.fn().mockResolvedValue(undefined);
 export const getKnownHostsFilePath = vi
   .fn()
   .mockReturnValue("/mock/path/to/known_hosts/instance");

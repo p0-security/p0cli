@@ -70,7 +70,7 @@ export const KNOWN_HOSTS_PATH = path.join(P0_KEY_FOLDER, "known_hosts_config");
  * - Replaces the entire file with the most up-to-date host keys for that host
  * - Creates an SSH config file that includes all host key files
  */
-export const saveHostKeys = async (
+export const saveHostKeysToFile = async (
   instanceId: string,
   hostKeys: string[],
   options?: { debug?: boolean }
