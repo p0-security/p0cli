@@ -15,8 +15,8 @@ import {
   SshAdditionalSetup,
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
-import { PRIVATE_KEY_PATH } from "../../common/keys";
-import { auditSshSessionActivity } from "../../drivers/api";
+import { PRIVATE_KEY_PATH, saveHostKeysToFile } from "../../common/keys";
+import { auditSshSessionActivity, fetchSshHostKeys } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan, markSpanError } from "../../opentelemetry/otel-helpers";
@@ -40,6 +40,9 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 
 const RETRY_DELAY_MS = 5000;
+
+const HOST_KEY_MISMATCH_PATTERN =
+  /WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed/;
 
 const AUTHENTICATION_SUCCESS_PATTERN =
   /Authenticated to [^\s]+ \(via proxy\) using "publickey"/;
@@ -76,10 +79,15 @@ const accessPropagationGuard = (
   let isEphemeralAccessDeniedException = false;
   let isLoginException = false;
   let isValidError = false;
+  let isHostKeyMismatch = false;
 
   const stderrHandler = (chunk: Buffer) => {
     const chunkString: string = chunk.toString("utf-8");
     parseAndPrintSshOutputToStderr(chunkString, options);
+
+    if (HOST_KEY_MISMATCH_PATTERN.test(chunkString)) {
+      isHostKeyMismatch = true;
+    }
 
     const matchUnprovisionedPattern = invalidAccessPatterns.find((message) =>
       chunkString.match(message.pattern)
@@ -113,6 +121,7 @@ const accessPropagationGuard = (
     isAccessPropagated: () =>
       !isEphemeralAccessDeniedException &&
       (!validAccessPatterns || isValidError),
+    isHostKeyMismatch: () => isHostKeyMismatch,
     isLoginException: () => isLoginException,
     cleanup: () => {
       child.stderr.removeListener("data", stderrHandler);
@@ -174,6 +183,7 @@ type SpawnSshNodeOptions = {
   debug?: boolean;
   isAccessPropagationPreTest?: boolean;
   audit?: (action: "end" | "start") => void;
+  onHostKeyMismatch?: () => Promise<boolean>;
 };
 
 async function spawnSshNode(
@@ -220,6 +230,7 @@ async function spawnSshNode(
     // TODO ENG-2284 support login with Google Cloud: currently return a boolean to indicate if the exception was a Google login error.
     const {
       isAccessPropagated,
+      isHostKeyMismatch,
       isLoginException,
       cleanup: cleanupStderr,
     } = accessPropagationGuard(
@@ -267,11 +278,32 @@ async function spawnSshNode(
           .then((code) => resolve(code))
           .catch(reject);
         return;
-      } else if (isLoginException()) {
+      }
+
+      if (isLoginException()) {
         reject(
           provider.loginRequiredMessage ??
             `Please log in to the ${provider.friendlyName} CLI to SSH`
         );
+        return;
+      }
+
+      const handleHostKeyMismatch = async () => {
+        const shouldRetry = options.onHostKeyMismatch
+          ? await options.onHostKeyMismatch()
+          : false;
+        if (shouldRetry) {
+          // Retry without the callback to prevent re-prompting on a second mismatch
+          resolve(
+            await spawnSshNode({ ...options, onHostKeyMismatch: undefined })
+          );
+        } else {
+          resolve(code);
+        }
+      };
+
+      if (isHostKeyMismatch()) {
+        handleHostKeyMismatch().catch(reject);
         return;
       }
 
@@ -594,6 +626,27 @@ export const sshOrScp = async (args: {
         return preTestExitCode; // Only exit if there was an error when pre-testing
       }
 
+      const refreshHostKeys = async () => {
+        print2(
+          "The SSH host key for this instance has changed and could not be verified."
+        );
+        const inquirer = (await import("inquirer")).default;
+        const { shouldUpdate } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "shouldUpdate",
+            message: "Would you like to fetch a fresh host key and reconnect?",
+          },
+        ]);
+        if (!shouldUpdate) return false;
+        const freshResult = await fetchSshHostKeys(authn, requestId, {
+          force: true,
+          debug,
+        });
+        await saveHostKeysToFile(request.id, freshResult.hostKeys, { debug });
+        return true;
+      };
+
       const sessionExitCode = await spawnSshNode({
         audit: (action) =>
           void auditSshSessionActivity({
@@ -611,6 +664,7 @@ export const sshOrScp = async (args: {
         debug,
         provider: request.type,
         endTime: endTime,
+        onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
       });
 
       if (sessionExitCode !== null && sessionExitCode !== 0) {

@@ -283,7 +283,11 @@ export const prepareRequest = async (
 
     const request = sshProvider.requestToSsh(cliRequest);
 
-    const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
+    const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
+      ...args,
+      authn,
+      requestId,
+    });
 
     return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
   });
