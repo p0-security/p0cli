@@ -150,8 +150,10 @@ export const awsSshProvider: SshProvider<
         print2(`Using cached host keys for instance ${id}`);
       }
       return { alias: id, path: existingPath, keys };
-    } catch {
-      // File does not exist — fetch from backend
+    } catch (error) {
+      if (options?.debug) {
+        print2(`No cached host keys for instance ${id}: ${String(error)}`);
+      }
     }
 
     // Fetch from the host keys endpoint

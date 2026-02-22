@@ -630,6 +630,8 @@ export const sshOrScp = async (args: {
         print2(
           "The SSH host key for this instance has changed and could not be verified."
         );
+        // inquirer v9+ is ESM-only and cannot be statically imported from
+        // a CommonJS module, so a dynamic import is required here.
         const inquirer = (await import("inquirer")).default;
         const { shouldUpdate } = await inquirer.prompt([
           {
