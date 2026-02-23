@@ -8,8 +8,13 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { PRIVATE_KEY_PATH, saveHostKeys } from "../../common/keys";
-import { submitPublicKey } from "../../drivers/api";
+import {
+  PRIVATE_KEY_PATH,
+  getKnownHostsFilePath,
+  saveHostKeysToFile,
+} from "../../common/keys";
+import { fetchSshHostKeys, submitPublicKey } from "../../drivers/api";
+import { print2 } from "../../drivers/stdio";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -23,6 +28,7 @@ import {
   AwsSshRequest,
   AwsSshRoleRequest,
 } from "./types";
+import * as fs from "fs/promises";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 30 * 1000;
 
@@ -132,10 +138,34 @@ export const awsSshProvider: SshProvider<
     };
   },
 
-  saveHostKeys: async (request, options) => {
-    const { hostKeys, id } = request;
-    const path = await saveHostKeys(id, hostKeys, { ...options });
-    return path ? { alias: id, path, keys: hostKeys } : undefined;
+  resolveHostKeys: async (request, options) => {
+    const { id } = request;
+    const existingPath = getKnownHostsFilePath(id);
+
+    // Use cached file if it exists
+    try {
+      const content = await fs.readFile(existingPath, "utf8");
+      const keys = content.trim().split("\n").filter(Boolean);
+      if (options?.debug) {
+        print2(`Using cached host keys for instance ${id}`);
+      }
+      return { alias: id, path: existingPath, keys };
+    } catch (error) {
+      if (options?.debug) {
+        print2(`No cached host keys for instance ${id}: ${String(error)}`);
+      }
+    }
+
+    // Fetch from the host keys endpoint
+    const result = await fetchSshHostKeys(options.authn, options.requestId, {
+      debug: options.debug,
+    });
+    const filePath = await saveHostKeysToFile(id, result.hostKeys, {
+      debug: options.debug,
+    });
+    return filePath
+      ? { alias: id, path: filePath, keys: result.hostKeys }
+      : undefined;
   },
 
   requestToSsh: (request) => {
