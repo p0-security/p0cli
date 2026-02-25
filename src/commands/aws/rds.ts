@@ -15,7 +15,7 @@ import { parseArn } from "../../plugins/aws/utils";
 import { DbPermissionSpec } from "../../plugins/db/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { exec, throwAssertNever } from "../../util";
+import { exec, osSafeCommand, throwAssertNever } from "../../util";
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./files";
@@ -205,7 +205,9 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     profileName,
   ];
 
-  const result = await exec("aws", generateTokenArgs, { check: true });
+  const {command, args} = osSafeCommand("aws", generateTokenArgs)
+
+  const result = await exec(command, args, { check: true });
 
   const pgInstructions = `export PGPASSWORD="${result.stdout}"
   
