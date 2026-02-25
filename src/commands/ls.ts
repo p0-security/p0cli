@@ -91,9 +91,12 @@ const ls = async (
 
   const command = isAdminCommand ? fetchAdminLsCommand : fetchCommand;
 
+  // The backend uses 'pg' as the integration name for PostgreSQL databases
+  // Users should run 'p0 ls pg role instance' to list available instances
+  const stringArgs = [...args._, ...args.arguments].map(String);
+
   const allArguments = [
-    ...args._,
-    ...args.arguments,
+    ...stringArgs,
     /**
      * If the user has requested a size, replace it with double the requested size,
      * otherwise request double the default.
@@ -101,8 +104,8 @@ const ls = async (
      * This is done so that we can give the user a sense of the number of results
      * that are not displayed.
      */
-    ...(args.size ? ["--size", args.size * 2] : []),
-  ].map(String); // make sure all elements are strings to satisfy command line args
+    ...(args.size ? ["--size", String(args.size * 2)] : []),
+  ];
 
   const responsePromise: Promise<LsResponse> = command<LsResponse>(
     authn,
