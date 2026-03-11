@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import {
   fetchIntegrationConfig,
+  fetchSshHostKeys,
   fetchStreamingCommand,
 } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
@@ -37,6 +38,7 @@ const mockPrint1 = print1 as Mock;
 const mockPrint2 = print2 as Mock;
 const mockIntegrationConfig = fetchIntegrationConfig as Mock;
 const mockFetchStreamingCommand = fetchStreamingCommand as Mock;
+const mockFetchSshHostKeys = fetchSshHostKeys as Mock;
 
 const MOCK_PERMISSION: AwsSshPermission = {
   provider: "aws",
@@ -119,6 +121,7 @@ describe("ssh", () => {
   ])("%s access", (_, isPersistent) => {
     beforeEach(() => {
       vi.clearAllMocks();
+      mockFetchSshHostKeys.mockResolvedValue({ hostKeys: [] });
     });
 
     afterEach(() => {

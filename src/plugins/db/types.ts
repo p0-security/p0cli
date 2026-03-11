@@ -8,14 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { vi } from "vitest";
+import { AwsResourcePermissionSpec } from "../aws/types";
 
-export const TEST_PUBLIC_KEY = "test-public-key";
-export const createKeyPair = vi.fn().mockImplementation(() => ({
-  publicKey: "test-public-key",
-  privateKey: "test-private-key",
-}));
-export const saveHostKeysToFile = vi.fn().mockResolvedValue(undefined);
-export const getKnownHostsFilePath = vi
-  .fn()
-  .mockReturnValue("/mock/path/to/known_hosts/instance");
+export type DbPermissionSpec = {
+  delegation: {
+    "aws-rds": {
+      delegation: { aws: AwsResourcePermissionSpec };
+      permission: { vpcId: string };
+    };
+  };
+  generated: object;
+  permission: { instanceId: string };
+  type: "mysql" | "pg2";
+};

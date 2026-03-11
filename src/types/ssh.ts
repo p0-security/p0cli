@@ -80,7 +80,7 @@ export type SshProvider<
   ) => Promise<C>;
 
   /** Callback to ensure that this provider's CLI utils are installed */
-  ensureInstall: () => Promise<void>;
+  ensureInstall: (options?: { debug?: boolean }) => Promise<void>;
 
   /** A human-readable name for this CSP */
   friendlyName: string;
@@ -125,9 +125,9 @@ export type SshProvider<
     port: string;
   }>;
 
-  saveHostKeys?: (
+  resolveHostKeys?: (
     request: SR,
-    options?: { debug?: boolean }
+    options: { debug?: boolean; authn: Authn; requestId: string }
   ) => Promise<SshHostKeyInfo>;
 
   submitPublicKey?: (

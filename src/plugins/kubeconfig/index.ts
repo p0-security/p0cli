@@ -14,12 +14,9 @@ import { request } from "../../commands/shared/request";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { assertNever, getAppName } from "../../util";
+import { getAppName } from "../../util";
 import { getAwsConfig } from "../aws/config";
-import { assumeRoleWithIdc } from "../aws/idc";
-import { AwsCredentials } from "../aws/types";
 import { parseArn } from "../aws/utils";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { K8sConfig, K8sPermissionSpec } from "./types";
 import { pick } from "lodash";
 import { sys } from "typescript";
@@ -123,45 +120,3 @@ export const profileName = (eksCluterName: string): string =>
 
 export const aliasedArn = (eksCluterArn: string): string =>
   `${KUBECONFIG_PREFIX}-${eksCluterArn}`;
-
-export const awsCloudAuth = async (
-  authn: Authn,
-  awsAccountId: string,
-  request: PermissionRequest<K8sPermissionSpec>,
-  loginType: "federated" | "idc",
-  debug?: boolean
-): Promise<AwsCredentials> => {
-  const { delegation } = request;
-  const name = delegation?.aws?.generated?.name;
-
-  if (!name) {
-    throw "Backend granted k8s access, but this is not an EKS cluster.";
-  }
-
-  switch (loginType) {
-    case "idc": {
-      const { idcId, idcRegion } = delegation?.aws?.permission ?? {};
-
-      if (!idcId || !idcRegion) {
-        throw "AWS is configured to use Identity Center, but IDC information wasn't received in the request.";
-      }
-
-      return await assumeRoleWithIdc({
-        accountId: awsAccountId,
-        permissionSet: name,
-        idc: { id: idcId, region: idcRegion },
-      });
-    }
-    case "federated":
-      return await assumeRoleWithOktaSaml(
-        authn,
-        {
-          accountId: awsAccountId,
-          role: name,
-        },
-        debug
-      );
-    default:
-      throw assertNever(loginType);
-  }
-};

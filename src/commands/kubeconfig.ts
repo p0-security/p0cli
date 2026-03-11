@@ -12,16 +12,16 @@ import { retryWithSleep } from "../common/retry";
 import { AnsiSgr } from "../drivers/ansi";
 import { authenticate } from "../drivers/auth";
 import { print2, spinUntil } from "../drivers/stdio";
+import { awsCloudAuth } from "../plugins/aws/auth";
 import { parseArn } from "../plugins/aws/utils";
 import {
   aliasedArn,
-  awsCloudAuth,
   getAndValidateK8sIntegration,
   profileName,
   requestAccessToCluster,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
-import { ciEquals, exec } from "../util";
+import { ciEquals, exec, osSafeCommand } from "../util";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./aws/files";
 import yargs from "yargs";
 
@@ -86,12 +86,12 @@ const kubeconfigAction = async (
 
   const authn = await authenticate();
 
-  const { clusterConfig, awsLoginType } = await getAndValidateK8sIntegration(
+  const { clusterConfig } = await getAndValidateK8sIntegration(
     authn,
     args.cluster,
     args.debug
   );
-  const { clusterId, awsAccountId, awsClusterArn } = clusterConfig;
+  const { clusterId, awsClusterArn } = clusterConfig;
 
   if (!(await ensureEksInstall())) {
     throw "Required dependencies are missing; please try again after installing them, or check that they are available on the PATH.";
@@ -100,13 +100,12 @@ const kubeconfigAction = async (
   // No spinUntil(); there is one inside requestAccessToCluster() if needed
   const request = await requestAccessToCluster(authn, args, clusterId, role);
 
-  const awsAuth = await awsCloudAuth(
-    authn,
-    awsAccountId,
-    request,
-    awsLoginType,
-    args.debug
-  );
+  const awsDelegation = request.delegation.aws;
+  if (!awsDelegation) {
+    throw "Backend granted k8s access, but this is not an EKS cluster.";
+  }
+
+  const awsAuth = await awsCloudAuth(authn, awsDelegation, args.debug);
 
   const profile = profileName(clusterId);
   const alias = aliasedArn(awsClusterArn);
@@ -143,7 +142,10 @@ const kubeconfigAction = async (
     const awsResult = await spinUntil(
       "Waiting for AWS resources to be provisioned and updating kubeconfig for EKS",
       retryWithSleep(
-        async () => await exec("aws", updateKubeconfigArgs, { check: true }),
+        async () => {
+          const { command, args } = osSafeCommand("aws", updateKubeconfigArgs);
+          return await exec(command, args, { check: true });
+        },
         {
           shouldRetry: (error: any) => {
             if (error?.stderr) {
@@ -174,11 +176,12 @@ const kubeconfigAction = async (
   // We'll set the context manually anyway, just in case. `aws update-kubeconfig` names the context
   // with the EKS cluster's ARN.
   try {
-    const kubectlResult = await exec(
-      "kubectl",
-      ["config", "use-context", alias],
-      { check: true }
-    );
+    const { command, args } = osSafeCommand("kubectl", [
+      "config",
+      "use-context",
+      alias,
+    ]);
+    const kubectlResult = await exec(command, args, { check: true });
     print2(kubectlResult.stdout);
   } catch (error: any) {
     print2("Failed to invoke `kubectl config use-context`");

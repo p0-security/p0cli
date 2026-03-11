@@ -264,6 +264,8 @@ export const prepareRequest = async (
     span.setAttribute("provider", provisionedRequest.permission.provider);
     span.setAttribute("requestId", requestId);
 
+    await sshProvider.ensureInstall({ debug: args.debug });
+
     await sshProvider.submitPublicKey?.(
       authn,
       provisionedRequest,
@@ -281,7 +283,11 @@ export const prepareRequest = async (
 
     const request = sshProvider.requestToSsh(cliRequest);
 
-    const sshHostKeys = await sshProvider.saveHostKeys?.(request, args);
+    const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
+      ...args,
+      authn,
+      requestId,
+    });
 
     return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
   });

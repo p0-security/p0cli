@@ -27,6 +27,7 @@ const VERSION_CHECK_INTERVAL_MILLIS = 86400e3; // 1 day
 
 type CliVersionResponse = {
   version: string;
+  message?: string;
 };
 
 /** Checks if there is a new version of the CLI
@@ -108,6 +109,9 @@ export const checkVersion = async (yargs: yargs.ArgumentsCamelCase) => {
     }
 
     if (semver.lt(current, latest)) {
+      if (versionResponse.message) {
+        print2(versionResponse.message);
+      }
       if (p0VersionInfo.build.standalone) {
         print2(
           `╔═══════════════════════════════════════════════╗
