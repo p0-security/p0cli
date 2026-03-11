@@ -55,7 +55,7 @@ nvm use 22
 We also provide the ability to install the P0 CLI as a standalone executable that does not require
 an existing installation of NodeJS. The installer is available on the GitHub [releases page](https://github.com/p0-security/p0cli/releases)
 
-The standalone CLI is currently only available on MacOS. Using the standalone CLI doesn't have any functionality that is not included
+The standalone CLI is available on macOS, Windows, and Debian/Linux. Using the standalone CLI doesn't have any functionality that is not included
 when installing via NPM, so for most users installing via NPM is likely to fulfill your needs.
 
 ### Configuration
@@ -99,10 +99,16 @@ To view help, use the `--help` option with any command.
 ### Available commands
 
 ```
-  p0 aws                    Execute AWS commands
-  p0 login <org>            Log in to p0 using a web browser
-  p0 ls [arguments..]       List request-command arguments
-  p0 request [arguments..]  Manually request permissions on a resource
+  p0 allow [arguments..]       Create standing access for a resource
+  p0 aws                       Execute AWS commands
+  p0 grant [arguments..]       Grant access to another identity
+  p0 kubeconfig                Configure kubectl for a k8s cluster
+  p0 login <org>               Log in to p0 using a web browser
+  p0 logout                    Log out and clear all authentication data
+  p0 ls [arguments..]          List request-command arguments
+  p0 rdp <destination>         Connect to a Windows virtual machine via RDP
+  p0 request [arguments..]     Manually request permissions on a resource
+  p0 scp <source> <destination>  SCP between local and remote hosts
   p0 ssh <destination>         SSH into a virtual machine
 ```
 
