@@ -29,6 +29,9 @@ const unprovisionedAccessPatterns = [
     // The output of `sudo -v` when the user is not allowed to run sudo
     pattern: /Sorry, user .+ may not run sudo on .+/,
   },
+  {
+    pattern: /\bConnection closed\b.*\b(?:by UNKNOWN port \d+|by remote host)?/,
+  },
 ] as const;
 
 export const selfHostedSshProvider: SshProvider<
