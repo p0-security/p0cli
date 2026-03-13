@@ -1,4 +1,6 @@
-win
+win/*.bat
+win/*.wxs
+win/*.cjs
 mac
 linux
 tsconfig.json
