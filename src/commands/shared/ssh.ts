@@ -35,6 +35,7 @@ import yargs from "yargs";
 
 export type BaseSshCommandArgs = {
   sudo?: boolean;
+  user?: string;
   reason?: string;
   parent?: string;
   provider?: SupportedSshProvider;
@@ -43,6 +44,7 @@ export type BaseSshCommandArgs = {
 };
 
 export type ScpCommandArgs = BaseSshCommandArgs & {
+  user: undefined;
   source: string;
   destination: string;
 };
@@ -162,6 +164,7 @@ export const provisionRequest = async (
             : []),
           ...(args.reason ? ["--reason", args.reason] : []),
           ...(args.parent ? ["--parent", args.parent] : []),
+          ...(args.user ? ["--user", args.user] : []),
         ],
         wait: true,
         debug: args.debug,

@@ -57,6 +57,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "The cloud provider where the instance is hosted",
           choices: ["aws", "azure", "gcloud", "self-hosted"],
         })
+        .option("user", {
+          type: "string",
+          describe: "The username to use on the remote instance.",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
