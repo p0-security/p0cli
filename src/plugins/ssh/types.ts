@@ -15,6 +15,7 @@ type SshItemConfig = {
 
 export type SshConfig = {
   "iam-write": Record<string, SshItemConfig>;
+  kmsKeyResourceName?: string;
 };
 
 export type CommonSshPermissionSpec = {
