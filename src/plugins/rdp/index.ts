@@ -15,9 +15,15 @@ import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { exitProcess } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
-import { AzureRdpRequest, RdpCommandArgs } from "../../types/rdp";
+import {
+  AzureRdpRequest,
+  ProxyRdpRequest,
+  RdpCommandArgs,
+  RdpRequest,
+} from "../../types/rdp";
 import { PermissionRequest } from "../../types/request";
 import { azureRdpProvider } from "../azure/rdp";
+import { proxyRdpProvider } from "../proxy/rdp";
 import { pick } from "lodash";
 import yargs from "yargs";
 
@@ -48,15 +54,19 @@ const provisionRequest = async (
   await validateRdpInstall(authn, args);
 
   const { destination } = args;
+  const provider = args.user ? "proxy" : (args.provider ?? "entra");
 
   const makeRequest = async () => {
-    return await request("request")<PermissionRequest<AzureRdpRequest>>(
+    return await request("request")<PermissionRequest<RdpRequest>>(
       {
         ...pick(args, "$0", "_"),
         arguments: [
           "rdp",
           "session",
           destination,
+          "--provider",
+          provider,
+          ...(args.user ? ["--user", args.user] : []),
           ...(args.reason ? ["--reason", args.reason] : []),
         ],
         wait: true,
@@ -81,7 +91,7 @@ const provisionRequest = async (
     : "Waiting for access to be provisioned";
   print2(message);
 
-  const result = await decodeProvisionStatus<AzureRdpRequest>(response.request);
+  const result = await decodeProvisionStatus<RdpRequest>(response.request);
 
   if (!result) exitProcess(1);
 
@@ -108,12 +118,21 @@ export const rdp = async (
   args: yargs.ArgumentsCamelCase<RdpCommandArgs>
 ) => {
   const { request } = await prepareRequest(authn, args);
+  const provider = args.user ? "proxy" : (args.provider ?? "entra");
 
   const { configure, debug } = args;
-  await azureRdpProvider.setup(request, { debug });
 
-  await azureRdpProvider.spawnConnection(request, {
-    configure,
-    debug,
-  });
+  if (provider === "proxy") {
+    const proxyRequest = request as PermissionRequest<ProxyRdpRequest>;
+    await proxyRdpProvider.setup(proxyRequest, { debug });
+    await proxyRdpProvider.spawnConnection(authn, proxyRequest, {
+      configure,
+      debug,
+      user: args.user,
+    });
+  } else {
+    const azureRequest = request as PermissionRequest<AzureRdpRequest>;
+    await azureRdpProvider.setup(azureRequest, { debug });
+    await azureRdpProvider.spawnConnection(azureRequest, { configure, debug });
+  }
 };

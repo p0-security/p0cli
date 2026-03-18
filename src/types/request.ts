@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { DbPermissionSpec } from "../plugins/db/types";
 import { K8sPermissionSpec } from "../plugins/kubeconfig/types";
-import { AzureRdpRequest } from "./rdp";
+import { RdpRequest } from "./rdp";
 import { PluginSshRequest } from "./ssh";
 
 export const DONE_STATUSES = ["DONE", "DONE_NOTIFIED"] as const;
@@ -37,10 +37,10 @@ export type PermissionSpec<
 };
 
 export type PluginRequest =
-  | AzureRdpRequest
   | DbPermissionSpec
   | K8sPermissionSpec
-  | PluginSshRequest;
+  | PluginSshRequest
+  | RdpRequest;
 
 export type PermissionRequest<P extends PluginRequest> = P & {
   error?: { message: string };
