@@ -40,6 +40,15 @@ export const rdpCommand = (yargs: yargs.Argv) =>
           describe: "Configure the RDP session before connecting",
           default: false,
         })
+        .option("user", {
+          type: "string",
+          describe: "User to log in as",
+        })
+        .option("provider", {
+          type: "string",
+          describe: "RDP authentication provider",
+          choices: ["entra", "proxy"] as const,
+        })
         .usage("$0 rdp <destination>")
         .epilogue(
           `Connect to a Windows virtual machine via RDP through Azure Bastion Host.
@@ -61,12 +70,16 @@ Example:
  * - Azure VM via Bastion Host with Entra ID authentication
  */
 const rdpAction = async (cmdArgs: yargs.ArgumentsCamelCase<RdpCommandArgs>) => {
-  // Entra ID authentication is only supported on Windows client machines.
-  // See: https://learn.microsoft.com/en-us/windows/client-management/client-tools/connect-to-remote-aadj-pc#connect-with-microsoft-entra-authentication
-  const os = getOperatingSystem();
-  if (os !== "win") {
-    print2("RDP session connections are only supported on Windows.");
-    exitProcess(1);
+  const provider = cmdArgs.user ? "proxy" : (cmdArgs.provider ?? "entra");
+
+  if (provider === "entra") {
+    // Entra ID authentication is only supported on Windows client machines.
+    // See: https://learn.microsoft.com/en-us/windows/client-management/client-tools/connect-to-remote-aadj-pc#connect-with-microsoft-entra-authentication
+    const os = getOperatingSystem();
+    if (os !== "win") {
+      print2("RDP session connections are only supported on Windows.");
+      exitProcess(1);
+    }
   }
 
   const authn = await authenticate(cmdArgs);

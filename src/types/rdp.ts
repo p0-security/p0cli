@@ -29,9 +29,28 @@ export type AzureRdpRequest = {
   };
 };
 
+export type RdpRequest = AzureRdpRequest | ProxyRdpRequest;
+
+export type RdpProvider = "entra" | "proxy";
+
+export type ProxyRdpRequest = {
+  principal: string;
+  generated: {
+    bastionUrl: string;
+    bastionApiKey: string;
+  };
+  permission: {
+    resource: {
+      instanceId: string;
+    };
+  };
+};
+
 export type RdpCommandArgs = {
   configure?: boolean;
   debug?: boolean;
   destination: string;
+  provider?: RdpProvider;
   reason?: string;
+  user?: string;
 };
