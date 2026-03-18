@@ -31,6 +31,8 @@ export const ACCESS_EXISTS_ERROR_MESSAGE =
 const APPROVED = { message: "Your request was approved", code: 0 };
 const DENIED = { message: "Your request was denied", code: 2 };
 const ERRORED = { message: "Your request encountered an error", code: 1 };
+const EXPIRED = { message: "Your access has expired", code: 1 };
+const REVOKED = { message: "Your access was revoked", code: 1 };
 
 const COMPLETED_REQUEST_STATUSES = {
   APPROVED,
@@ -39,6 +41,8 @@ const COMPLETED_REQUEST_STATUSES = {
   DONE_NOTIFIED: APPROVED,
   DENIED,
   ERRORED,
+  EXPIRED,
+  REVOKED,
 };
 
 const isCompletedStatus = (
@@ -206,7 +210,7 @@ export const request =
       return await (!args.wait ? invokeRequest() : executeStreamingRequest());
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
-        print2("Your request did not complete within 5 minutes.");
+        print2("Connection to P0 timed out.");
       }
       if (
         error instanceof Error &&
