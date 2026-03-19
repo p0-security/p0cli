@@ -20,7 +20,7 @@ jobs:
       APPLE_CODESIGN_CERT_NAME: "Developer ID Application: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_INSTALLER_CERT_NAME: "Developer ID Installer: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_DEVELOPER_TEAM: "FFR8KSH76M"
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ inputs.version || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment variables
@@ -283,6 +283,7 @@ jobs:
           name: p0-macOS-${{ env.VERSION }}
           path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
@@ -379,7 +380,7 @@ jobs:
     name: Build CLI (Debian package) on Linux
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ inputs.version || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -417,6 +418,7 @@ jobs:
           name: p0-debian-${{ env.VERSION }}
           path: build/sea/p0-debian-${{ env.VERSION }}.deb
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-debian-${{ env.VERSION }}.deb
