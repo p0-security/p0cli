@@ -1,12 +1,43 @@
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version with pre-release suffix, e.g. 0.26.1-alpha.0"
+        required: true
 
 name: Build Standalone CLI
 
 jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - name: Validate version format and set output
+        id: set-version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION: ${{ inputs.version || github.event.release.tag_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
+              echo "Error: workflow_dispatch version must use alpha or beta pre-release suffix, e.g. 0.26.1-alpha.0"
+              exit 1
+            fi
+          else
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: release version must be plain semver with no pre-release suffix, e.g. 0.26.1"
+              exit 1
+            fi
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build_macos:
     name: Build CLI on MacOS
+    needs: [validate]
     runs-on: macos-latest-xlarge
     env:
       APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
@@ -14,8 +45,21 @@ jobs:
       APPLE_CODESIGN_CERT_NAME: "Developer ID Application: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_INSTALLER_CERT_NAME: "Developer ID Installer: P0 Security, Inc. (FFR8KSH76M)"
       APPLE_DEVELOPER_TEAM: "FFR8KSH76M"
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
     steps:
+      - name: Validate version format
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
+              echo "Error: workflow_dispatch version must use alpha or beta pre-release suffix, e.g. 0.26.1-alpha.0"
+              exit 1
+            fi
+          else
+            if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: release version must be plain semver with no pre-release suffix, e.g. 0.26.1"
+              exit 1
+            fi
+          fi
       - uses: actions/checkout@v4
       - name: Setup environment variables
         run: |
@@ -277,6 +321,7 @@ jobs:
           name: p0-macOS-${{ env.VERSION }}
           path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
@@ -287,6 +332,7 @@ jobs:
           security delete-keychain build.keychain
   build_windows:
     name: Build CLI on Windows (${{ matrix.arch }})
+    needs: [validate]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -302,7 +348,7 @@ jobs:
       SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
       SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
       JAVA_VERSION: "21"
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Java (arm64 only)
@@ -363,6 +409,7 @@ jobs:
           name: p0-windows-${{ matrix.arch }}-${{ env.VERSION }}
           path: build\sea\p0-windows-${{ matrix.arch }}-${{ env.VERSION }}.msi
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-windows-${{ matrix.arch }}-${{ env.VERSION }}.msi
@@ -370,9 +417,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build_debian:
     name: Build CLI (Debian package) on Linux
+    needs: [validate]
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -410,6 +458,7 @@ jobs:
           name: p0-debian-${{ env.VERSION }}
           path: build/sea/p0-debian-${{ env.VERSION }}.deb
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-debian-${{ env.VERSION }}.deb
