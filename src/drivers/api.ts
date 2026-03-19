@@ -16,11 +16,15 @@ import { print2 } from "./stdio";
 import * as path from "node:path";
 import yargs from "yargs";
 
+const isNetworkError = (error: unknown) =>
+  error instanceof TypeError &&
+  (error.message === "fetch failed" || error.message === "terminated");
+
 // We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
 // for a total of 121s wait time over 8 retries (ignoring jitter)
 const RETRY_OPTIONS = {
   shouldRetry: (error: unknown) =>
-    error === "HTTP Error: 429 Too Many Requests",
+    error === "HTTP Error: 429 Too Many Requests" || isNetworkError(error),
   retries: 8,
   delayMs: 1_000,
   multiplier: 2.0,
@@ -279,10 +283,7 @@ export const fetchWithStreaming = async function* <T>(
       debug,
     });
   } catch (error) {
-    if (
-      error instanceof TypeError &&
-      (error.message === "fetch failed" || error.message === "terminated")
-    ) {
+    if (isNetworkError(error)) {
       if (debug) {
         print2("Network error: " + String(error));
       }
@@ -362,7 +363,7 @@ const baseFetch = async <T>(args: {
       debug: args.debug,
     });
   } catch (error) {
-    if (error instanceof TypeError && error.message === "fetch failed") {
+    if (isNetworkError(error)) {
       throw `Network error: Unable to reach the server at ${url}.`;
     } else {
       throw error;
