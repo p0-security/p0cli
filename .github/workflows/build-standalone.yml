@@ -18,9 +18,11 @@ jobs:
     steps:
       - name: Validate version format and set output
         id: set-version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          VERSION="${{ inputs.version || github.event.release.tag_name }}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
               echo "Error: workflow_dispatch version must use alpha or beta pre-release suffix, e.g. 0.26.1-alpha.0"
               exit 1
