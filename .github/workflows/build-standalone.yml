@@ -1,6 +1,12 @@
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string for the build artifact (e.g. 0.26.1-dev)"
+        required: true
+        default: "dev"
 
 name: Build Standalone CLI
 
@@ -302,7 +308,7 @@ jobs:
       SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
       SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
       JAVA_VERSION: "21"
-      VERSION: ${{ github.event.release.tag_name }}
+      VERSION: ${{ inputs.version || github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Java (arm64 only)
@@ -363,6 +369,7 @@ jobs:
           name: p0-windows-${{ matrix.arch }}-${{ env.VERSION }}
           path: build\sea\p0-windows-${{ matrix.arch }}-${{ env.VERSION }}.msi
       - name: Upload artifact to release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: build/sea/p0-windows-${{ matrix.arch }}-${{ env.VERSION }}.msi
