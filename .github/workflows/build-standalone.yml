@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Semver version with pre-release suffix, e.g. 0.26.1-alpha.0"
+        description: "Semver version with v prefix and pre-release suffix, e.g. v0.26.1-alpha.0"
         required: true
 
 name: Build Standalone CLI
@@ -16,24 +16,15 @@ jobs:
     outputs:
       version: ${{ steps.set-version.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
       - name: Validate version format and set output
         id: set-version
         env:
           EVENT_NAME: ${{ github.event_name }}
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
-              echo "Error: workflow_dispatch version must use alpha or beta pre-release suffix, e.g. 0.26.1-alpha.0"
-              exit 1
-            fi
-          else
-            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: release version must be plain semver with no pre-release suffix, e.g. 0.26.1"
-              exit 1
-            fi
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          PKG_VERSION=$(jq -r '.version' package.json)
+          echo "version=$(PKG_VERSION="$PKG_VERSION" bash scripts/validate-version.sh)" >> "$GITHUB_OUTPUT"
 
   build_macos:
     name: Build CLI on MacOS
@@ -47,19 +38,6 @@ jobs:
       APPLE_DEVELOPER_TEAM: "FFR8KSH76M"
       VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - name: Validate version format
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
-              echo "Error: workflow_dispatch version must use alpha or beta pre-release suffix, e.g. 0.26.1-alpha.0"
-              exit 1
-            fi
-          else
-            if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: release version must be plain semver with no pre-release suffix, e.g. 0.26.1"
-              exit 1
-            fi
-          fi
       - uses: actions/checkout@v4
       - name: Setup environment variables
         run: |
