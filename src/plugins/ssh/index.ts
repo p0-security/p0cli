@@ -49,7 +49,8 @@ const AUTHENTICATION_SUCCESS_PATTERN =
 
 const FILE_PERMISSION_DENIED_ERROR_PATTERN = /^scp:.*Permission denied/;
 
-const NO_SUCH_FILE_ERROR_PATTERN = /^scp:.*No such file or directory/;
+const NO_SUCH_FILE_ERROR_PATTERN =
+  /^scp: (?!debug\d).*No such file or directory/;
 
 const PORT_FORWARDING_FAILED_ERROR_PATTERN = /.*port forwarding failed.*/;
 
@@ -309,7 +310,9 @@ async function spawnSshNode(
 
       if (!options.isAccessPropagationPreTest) {
         options.audit?.("end");
-        print2(`SSH session terminated`);
+        if (options.command === "ssh") {
+          print2(`SSH session terminated`);
+        }
       }
 
       if (options.isAccessPropagationPreTest && isAccessPropagated()) {
