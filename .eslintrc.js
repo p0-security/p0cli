@@ -60,8 +60,7 @@ module.exports = {
     "vitest.config.mts",
     "public/**",
     "build/**",
-    "**/__mocks__/**",
-    "**/__tests__/**",
+
     "node_modules/**",
     "esbuild.js",
     "win",
@@ -69,7 +68,15 @@ module.exports = {
     "preprocess-sea.cjs",
     "linux",
   ],
-  overrides: [],
+  overrides: [
+    {
+      files: ["**/__tests__/**", "**/__mocks__/**"],
+      rules: {
+        // expect(mock.method).toHaveBeenCalled() is a false positive for this rule
+        "@typescript-eslint/unbound-method": "off",
+      },
+    },
+  ],
   parserOptions: {
     ecmaVersion: "latest",
     project: ["./tsconfig.json"],
