@@ -24,7 +24,11 @@ jobs:
           VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
           PKG_VERSION=$(jq -r '.version' package.json)
-          echo "version=$(PKG_VERSION="$PKG_VERSION" bash scripts/validate-version.sh)" >> "$GITHUB_OUTPUT"
+          # Separate assignment so a non-zero exit from the script fails the step.
+          # Inlining as echo "version=$(script)" would swallow the failure because
+          # echo itself exits 0 regardless.
+          VALIDATED_VERSION=$(PKG_VERSION="$PKG_VERSION" bash scripts/validate-version.sh)
+          echo "version=$VALIDATED_VERSION" >> "$GITHUB_OUTPUT"
 
   build_macos:
     name: Build CLI on MacOS
