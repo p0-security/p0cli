@@ -25,6 +25,7 @@ import { rdpCommand } from "./rdp";
 import { requestCommand } from "./request";
 import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
+import { sudoCommand } from "./sudo";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
 import { trace } from "@opentelemetry/api";
@@ -40,6 +41,7 @@ const commands = [
   requestCommand,
   allowCommand,
   sshCommand,
+  sudoCommand,
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
