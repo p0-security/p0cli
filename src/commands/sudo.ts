@@ -16,6 +16,9 @@ import { spawn } from "child_process";
 import { hostname } from "os";
 import yargs from "yargs";
 
+const PROPAGATION_RETRY_DELAY_MS = 2_000;
+const PROPAGATION_TIMEOUT_MS = 20_000;
+
 type SudoCommandArgs = {
   u: string;
   command?: string;
@@ -57,6 +60,33 @@ export const sudoCommand = (yargs: yargs.Argv) =>
     sudoAction
   );
 
+/** Polls `sudo -n -u <user> -v` until the sudoers entry propagates on this host,
+ *  or until the deadline is exceeded. Returns true if access propagated.
+ *
+ *  The -n flag makes sudo non-interactive: it exits with a non-zero code
+ *  instead of prompting for a password, so this never blocks on stdin. */
+const waitForSudoAccessPropagation = async (
+  user: string,
+  deadline: number
+): Promise<boolean> => {
+  for (;;) {
+    const exitCode = await new Promise<number>((resolve) => {
+      const probe = spawn("sudo", ["-n", "-u", user, "-v"], {
+        stdio: "ignore",
+      });
+      probe.on("exit", (code) => resolve(code ?? 1));
+      probe.on("error", () => resolve(1));
+    });
+
+    if (exitCode === 0) return true;
+
+    if (Date.now() >= deadline) return false;
+
+    print2("Waiting for sudo access to propagate...");
+    await new Promise((r) => setTimeout(r, PROPAGATION_RETRY_DELAY_MS));
+  }
+};
+
 const sudoAction = async (args: yargs.ArgumentsCamelCase<SudoCommandArgs>) => {
   await traceSpan(
     "sudo.command",
@@ -94,12 +124,21 @@ const sudoAction = async (args: yargs.ArgumentsCamelCase<SudoCommandArgs>) => {
         return;
       }
 
-      // Execute sudo -u <username> <command> [args...]
-      const child = spawn("sudo", ["-u", args.u, args.command, ...args.arguments], {
-        stdio: "inherit",
-      });
+      const deadline = Date.now() + PROPAGATION_TIMEOUT_MS;
+      const propagated = await waitForSudoAccessPropagation(args.u, deadline);
+      if (!propagated) {
+        print2("Timed out waiting for sudo access to propagate");
+        exitProcess(1);
+        return;
+      }
 
+      // Access is confirmed — run the real command
       const exitCode = await new Promise<number>((resolve) => {
+        const child = spawn(
+          "sudo",
+          ["-u", args.u, args.command!, ...args.arguments],
+          { stdio: "inherit" }
+        );
         child.on("exit", (code) => resolve(code ?? 1));
         child.on("error", (err) => {
           print2(`Failed to run sudo: ${err.message}`);
