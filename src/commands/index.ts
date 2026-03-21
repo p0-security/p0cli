@@ -27,6 +27,7 @@ import { scpCommand } from "./scp";
 import { sshCommand } from "./ssh";
 import { sshProxyCommand } from "./ssh-proxy";
 import { sshResolveCommand } from "./ssh-resolve";
+import { sudoCommand } from "./sudo";
 import { trace } from "@opentelemetry/api";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -40,6 +41,7 @@ const commands = [
   requestCommand,
   allowCommand,
   sshCommand,
+  sudoCommand,
   sshProxyCommand,
   sshResolveCommand,
   scpCommand,
