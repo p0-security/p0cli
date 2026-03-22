@@ -43,6 +43,10 @@ const createSession = async (
 
   if (debug) {
     print2(`Creating proxy RDP session for target: ${instanceId}`);
+    print2(`API endpoint: ${bastionUrl}/api/sessions`);
+    print2(
+      `API key: ${bastionApiKey.slice(0, 4)}...${bastionApiKey.slice(-4)}`
+    );
   }
 
   const response = await fetch(`${bastionUrl}/api/sessions`, {
@@ -98,15 +102,20 @@ const downloadRdpFile = async (
     mode: 0o600,
     prefix: "p0cli-",
     postfix: ".rdp",
+    discardDescriptor: true,
   });
 
   await fs.promises.writeFile(tmpPath, rdpContent, { encoding: "utf-8" });
 
+  // Resolve 8.3 short paths (e.g. MIGUEL~1) to long paths, as mstsc
+  // on Windows cannot open files referenced by short names.
+  const resolvedPath = await fs.promises.realpath(tmpPath);
+
   if (debug) {
-    print2(`RDP file saved to: ${tmpPath}`);
+    print2(`RDP file saved to: ${resolvedPath}`);
   }
 
-  return tmpPath;
+  return resolvedPath;
 };
 
 const openRdpFile = async (
