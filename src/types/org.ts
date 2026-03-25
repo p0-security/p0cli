@@ -84,8 +84,13 @@ type CloudflareOidcPkceProvider = BaseOidcPkceProvider & {
   clientSecret: string;
 };
 
+type DuoOidcPkceProvider = BaseOidcPkceProvider & {
+  providerType: "duo";
+};
+
 type OidcPkceProvider =
   | CloudflareOidcPkceProvider
+  | DuoOidcPkceProvider
   | OktaOidcPkceProvider
   | PingIdOidcPkceProvider;
 

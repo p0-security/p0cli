@@ -15,7 +15,7 @@ import type { OrgData } from "./org";
 /** Get provider type from org data */
 export const getProviderType = (
   org: OrgData
-): "cloudflare" | "okta" | "ping" | undefined => {
+): "cloudflare" | "duo" | "okta" | "ping" | undefined => {
   return org.auth.type === "sso" && "providerType" in org.auth.provider
     ? org.auth.provider.providerType
     : undefined;
