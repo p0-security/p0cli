@@ -18,6 +18,9 @@ vi.mock("../env");
 vi.mock("../../version", () => ({
   getUserAgent: () => "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
 }));
+vi.mock("../../util", () => ({
+  sleep: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("fetchWithStreaming", () => {
   const mockAuthn: Authn = {
@@ -364,8 +367,10 @@ describe("fetchWithStreaming", () => {
     }).rejects.toBe("Something went wrong");
   });
 
-  it("should throw network error for terminated", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("terminated"));
+  it("should retry and then throw network error for terminated", async () => {
+    const mockFetch = vi
+      .spyOn(global, "fetch")
+      .mockRejectedValue(new TypeError("terminated"));
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -377,6 +382,8 @@ describe("fetchWithStreaming", () => {
         // Should throw before yielding
       }
     }).rejects.toBe("Network error: Unable to reach the server.");
+    // 1 initial attempt + 8 retries
+    expect(mockFetch).toHaveBeenCalledTimes(9);
   });
 
   it("should rethrow other errors", async () => {
@@ -395,8 +402,10 @@ describe("fetchWithStreaming", () => {
     }).rejects.toBe(customError);
   });
 
-  it("should throw network error for fetch failed", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+  it("should retry and then throw network error for fetch failed", async () => {
+    const mockFetch = vi
+      .spyOn(global, "fetch")
+      .mockRejectedValue(new TypeError("fetch failed"));
 
     const generator = fetchWithStreaming(mockAuthn, {
       url: "/stream",
@@ -408,6 +417,8 @@ describe("fetchWithStreaming", () => {
         // Should throw before yielding
       }
     }).rejects.toBe("Network error: Unable to reach the server.");
+    // 1 initial attempt + 8 retries
+    expect(mockFetch).toHaveBeenCalledTimes(9);
   });
 
   it("should throw error when no reader available", async () => {

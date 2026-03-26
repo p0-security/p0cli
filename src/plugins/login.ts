@@ -12,6 +12,7 @@ import { getProviderType } from "../types/authUtils";
 import { TokenResponse } from "../types/oidc";
 import { OrgData } from "../types/org";
 import { azureLogin } from "./azure/login";
+import { duoLogin } from "./duo/login";
 import { emailPasswordLogin } from "./email/login";
 import { googleLogin } from "./google/login";
 import { oktaLogin } from "./okta/login";
@@ -37,6 +38,7 @@ export const pluginLoginMap: Record<
   google: googleLogin,
   okta: oktaLogin,
   ping: pingLogin,
+  duo: duoLogin,
   "google-oidc": googleLogin,
   "oidc-pkce": async (org) => {
     const providerType = getProviderType(org);
