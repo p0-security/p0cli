@@ -8,34 +8,70 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { asyncSpawn } from "../../common/subprocess";
+import { OIDC_HEADERS } from "../../common/auth/oidc";
+import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
-import { gcloudCommandArgs } from "../google/util";
+import { Identity } from "../../types/identity";
+
+const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
+const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
+const TOKEN_EXCHANGE_GRANT_TYPE =
+  "urn:ietf:params:oauth:grant-type:token-exchange";
+
+/**
+ * Exchanges an OIDC id_token for a federated GCP access token via Google STS.
+ * Uses Workload Identity Federation direct auth (no service account).
+ * The WIF pool must be configured to accept tokens from the OIDC provider directly.
+ */
+const exchangeOidcForGcpToken = async (
+  oidcToken: string,
+  wifPool: string
+): Promise<string> => {
+  const response = await fetch("https://sts.googleapis.com/v1/token", {
+    method: "POST",
+    headers: OIDC_HEADERS,
+    body: urlEncode({
+      audience: wifPool,
+      grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+      requested_token_type: ACCESS_TOKEN_TYPE,
+      subject_token: oidcToken,
+      subject_token_type: ID_TOKEN_TYPE,
+      scope: "https://www.googleapis.com/auth/cloud-platform",
+    }),
+  });
+
+  await validateResponse(response);
+  const data: { access_token: string } = await response.json();
+  return data.access_token;
+};
 
 /**
  * Signs the given data string using a Google Cloud KMS asymmetric signing key.
  *
- * Requires the gcloud CLI to be installed and authenticated via `gcloud auth login`.
+ * Authenticates via Workload Identity Federation: sends the user's OIDC
+ * id_token directly to Google STS to obtain a federated GCP access token,
+ * then uses that to call the KMS API — no gcloud CLI or service account required.
  *
  * @param data - The data to sign (the raw OpenSSH public key string).
  * @param kmsKeyResourceName - Full KMS key version resource name, e.g.
  *   `projects/P/locations/L/keyRings/R/cryptoKeys/K/cryptoKeyVersions/V`
+ * @param identity - The user's P0 identity containing OIDC credentials.
+ * @param wifPool - The WIF pool resource path, e.g.
+ *   `//iam.googleapis.com/projects/P/locations/global/workloadIdentityPools/POOL`
  * @returns Base64-encoded signature as returned by the KMS API.
  */
 export const signWithKms = async (
   data: string,
   kmsKeyResourceName: string,
+  identity: Identity,
+  wifPool: string,
   options?: { debug?: boolean }
 ): Promise<string> => {
   const debug = options?.debug ?? false;
 
-  // Force debug=false to avoid printing the access token
-  const { command: accessTokenCommand, args: accessTokenArgs } =
-    gcloudCommandArgs(["auth", "print-access-token"]);
-  const accessToken = await asyncSpawn(
-    { debug: false },
-    accessTokenCommand,
-    accessTokenArgs
+  const accessToken = await exchangeOidcForGcpToken(
+    identity.credential.id_token,
+    wifPool
   );
 
   if (debug) {
@@ -61,7 +97,7 @@ export const signWithKms = async (
       print2(`KMS HTTP error ${response.status}: ${await response.text()}`);
     }
     if (response.status === 401) {
-      throw `Authentication failed. Please login to Google Cloud CLI with 'gcloud auth login'`;
+      throw `Authentication failed. Please re-authenticate with '${identity.org.slug}' and try again.`;
     }
     throw `KMS signing failed.`;
   }

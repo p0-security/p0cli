@@ -68,7 +68,27 @@ export const selfHostedSshProvider: SshProvider<
 
     let signature: string | undefined;
     if (kmsKeyResourceName) {
-      signature = await signWithKms(publicKey, kmsKeyResourceName, { debug });
+      const projectId = kmsKeyResourceName.split("/").at(1);
+      if (!projectId) {
+        throw `Invalid KMS key resource name: ${kmsKeyResourceName}`;
+      }
+      type GcloudIamWriteItem = { defaultPool?: string; state: string };
+      type GcloudConfig = { "iam-write": Record<string, GcloudIamWriteItem> };
+      const gcloudConfigDoc = await fetchIntegrationConfig<{
+        config: GcloudConfig;
+      }>(authn, "gcloud", debug);
+      const wifPool =
+        gcloudConfigDoc?.config?.["iam-write"]?.[projectId]?.defaultPool;
+      if (!wifPool) {
+        throw `No WIF pool configured for GCP project ${projectId}. Ensure 'defaultPool' is set in the gcloud iam-write integration.`;
+      }
+      signature = await signWithKms(
+        publicKey,
+        kmsKeyResourceName,
+        authn.identity,
+        wifPool,
+        { debug }
+      );
     }
 
     await submitPublicKey(authn, { publicKey, requestId, signature }, debug);
