@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { OIDC_HEADERS } from "../../common/auth/oidc";
 import { urlEncode, validateResponse } from "../../common/fetch";
 import { print2 } from "../../drivers/stdio";
+import { getClientId, getProviderDomain } from "../../types/authUtils";
 import { Identity } from "../../types/identity";
 
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
@@ -19,9 +20,43 @@ const TOKEN_EXCHANGE_GRANT_TYPE =
   "urn:ietf:params:oauth:grant-type:token-exchange";
 
 /**
- * Exchanges an OIDC id_token for a federated GCP access token via Google STS.
- * Uses Workload Identity Federation direct auth (no service account).
- * The WIF pool must be configured to accept tokens from the OIDC provider directly.
+ * Exchanges the user's existing OIDC id_token for a new token whose audience
+ * is the WIF pool. Uses RFC 8693 token exchange against the configured OIDC
+ * provider so that the resulting token has the correct `aud` claim for GCP STS.
+ */
+const fetchOidcTokenForWif = async (
+  identity: Identity,
+  wifPool: string
+): Promise<string> => {
+  const { org, credential } = identity;
+  const providerDomain = getProviderDomain(org);
+  const clientId = getClientId(org);
+
+  if (!providerDomain || !clientId) {
+    throw "Invalid provider configuration for WIF token exchange";
+  }
+
+  const response = await fetch(`https://${providerDomain}/oauth2/v1/token`, {
+    method: "POST",
+    headers: OIDC_HEADERS,
+    body: urlEncode({
+      audience: wifPool,
+      client_id: clientId,
+      grant_type: TOKEN_EXCHANGE_GRANT_TYPE,
+      subject_token: credential.id_token,
+      subject_token_type: ID_TOKEN_TYPE,
+      requested_token_type: ID_TOKEN_TYPE,
+    }),
+  });
+
+  await validateResponse(response);
+  const data: { access_token: string } = await response.json();
+  return data.access_token;
+};
+
+/**
+ * Exchanges a WIF-scoped OIDC token for a federated GCP access token via
+ * Google STS. Uses Workload Identity Federation direct auth (no service account).
  */
 const exchangeOidcForGcpToken = async (
   oidcToken: string,
@@ -48,9 +83,10 @@ const exchangeOidcForGcpToken = async (
 /**
  * Signs the given data string using a Google Cloud KMS asymmetric signing key.
  *
- * Authenticates via Workload Identity Federation: sends the user's OIDC
- * id_token directly to Google STS to obtain a federated GCP access token,
- * then uses that to call the KMS API — no gcloud CLI or service account required.
+ * Authenticates via Workload Identity Federation: exchanges the user's OIDC
+ * id_token for a WIF-scoped token via the OIDC provider, then exchanges that
+ * with Google STS for a federated GCP access token — no gcloud CLI or service
+ * account required.
  *
  * @param data - The data to sign (the raw OpenSSH public key string).
  * @param kmsKeyResourceName - Full KMS key version resource name, e.g.
@@ -69,10 +105,8 @@ export const signWithKms = async (
 ): Promise<string> => {
   const debug = options?.debug ?? false;
 
-  const accessToken = await exchangeOidcForGcpToken(
-    identity.credential.id_token,
-    wifPool
-  );
+  const wifScopedToken = await fetchOidcTokenForWif(identity, wifPool);
+  const accessToken = await exchangeOidcForGcpToken(wifScopedToken, wifPool);
 
   if (debug) {
     print2(
