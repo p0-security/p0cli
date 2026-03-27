@@ -9,9 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
-import { submitPublicKey } from "../../drivers/api";
+import { fetchIntegrationConfig, submitPublicKey } from "../../drivers/api";
+import { SshConfig } from "../../plugins/ssh/types";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, getOperatingSystem } from "../../util";
+import { signWithKms } from "./kms";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
 
 const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
@@ -57,7 +59,39 @@ export const selfHostedSshProvider: SshProvider<
   },
 
   async submitPublicKey(authn, _request, requestId, publicKey, debug) {
-    await submitPublicKey(authn, { publicKey, requestId }, debug);
+    const configDoc = await fetchIntegrationConfig<{ config: SshConfig }>(
+      authn,
+      "ssh",
+      debug
+    );
+    const kmsKeyResourceName = configDoc?.config?.kmsKeyResourceName;
+
+    let signature: string | undefined;
+    if (kmsKeyResourceName) {
+      const projectId = kmsKeyResourceName.split("/").at(1);
+      if (!projectId) {
+        throw `Invalid KMS key resource name: ${kmsKeyResourceName}`;
+      }
+      type GcloudIamWriteItem = { defaultPool?: string; state: string };
+      type GcloudConfig = { "iam-write": Record<string, GcloudIamWriteItem> };
+      const gcloudConfigDoc = await fetchIntegrationConfig<{
+        config: GcloudConfig;
+      }>(authn, "gcloud", debug);
+      const wifPool =
+        gcloudConfigDoc?.config?.["iam-write"]?.[projectId]?.defaultPool;
+      if (!wifPool) {
+        throw `No WIF pool configured for GCP project ${projectId}. Ensure 'defaultPool' is set in the gcloud iam-write integration.`;
+      }
+      signature = await signWithKms(
+        publicKey,
+        kmsKeyResourceName,
+        authn.identity,
+        wifPool,
+        { debug }
+      );
+    }
+
+    await submitPublicKey(authn, { publicKey, requestId, signature }, debug);
   },
 
   proxyCommand: (request, port) => {
