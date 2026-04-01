@@ -14,4 +14,6 @@ on:
 jobs:
   semgrep:
     uses: p0-security/workflows-public/.github/workflows/semgrep-reusable.yml@main
-    secrets: inherit
+    secrets:
+      SEMGREP_RULES_APP_ID: ${{ secrets.SEMGREP_RULES_APP_ID }}
+      SEMGREP_RULES_APP_PRIVATE_KEY: ${{ secrets.SEMGREP_RULES_APP_PRIVATE_KEY }}
