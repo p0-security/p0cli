@@ -13,5 +13,5 @@ on:
 
 jobs:
   semgrep:
-    uses: p0-security/workflows/.github/workflows/semgrep-reusable.yml@main
+    uses: p0-security/workflows-public/.github/workflows/semgrep-reusable.yml@main
     secrets: inherit
