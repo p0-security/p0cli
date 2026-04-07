@@ -191,9 +191,7 @@ export const provisionRequest = async (
   if (options?.approvedOnly) {
     // Try first with sudo
     try {
-      response = await makeRequest({ forceSudo: true }).catch(
-        requestErrorHandler
-      );
+      response = await makeRequest({ forceSudo: true });
     } catch (error) {
       // If that fails, try without sudo
       if (args.debug) {
