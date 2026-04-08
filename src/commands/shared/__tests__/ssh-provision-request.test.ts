@@ -64,7 +64,7 @@ const mockAuthn = {
 const baseArgs = {
   $0: "p0",
   _: ["ssh"],
-} as yargs.ArgumentsCamelCase<BaseSshCommandArgs>;
+} satisfies yargs.ArgumentsCamelCase<BaseSshCommandArgs>;
 
 describe("provisionRequest", () => {
   beforeEach(() => {
