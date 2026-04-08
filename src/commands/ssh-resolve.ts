@@ -78,7 +78,7 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
  * a parent ssh process
  *
  */
-const sshResolveAction = async (
+export const sshResolveAction = async (
   args: yargs.ArgumentsCamelCase<SshResolveCommandArgs>
 ) => {
   // Clean up any stale SSH config files before proceeding
@@ -158,6 +158,10 @@ const sshResolveAction = async (
 
   const appPath = getAppPath();
 
+  // If the P0_ORG env var is set, include in the ProxyCommand. Used for ssh into multiple organizations from same shell.
+  const orgFlag = process.env.P0_ORG ? ` --org ${process.env.P0_ORG}` : "";
+  const debugFlag = args.debug ? " --debug" : "";
+
   // The config file name must be a valid file name (without forward slashes) so we can create it.
   // The config file will be deleted by the ssh-proxy command. Sanitization here and upon deletion must match.
   const configFile = sanitizeAsFileName(args.destination);
@@ -173,7 +177,7 @@ const sshResolveAction = async (
   IdentityFile ${identityFile}
   ${certificateInfo}
   PasswordAuthentication no
-  ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name} ${args.debug ? "--debug" : ""}
+  ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name}${orgFlag}${debugFlag}
   ${hostKeysInfo}
   ${hostKeyAlias}
 `;
