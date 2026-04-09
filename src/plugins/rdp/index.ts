@@ -10,7 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { decodeProvisionStatus } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
-import { fetchIntegrationConfig } from "../../drivers/api";
+import { createKeyPair } from "../../common/keys";
+import {
+  fetchIntegrationConfig,
+  submitProxyPublicKey,
+} from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { exitProcess } from "../../opentelemetry/otel-helpers";
@@ -22,6 +26,7 @@ import {
   RdpRequest,
 } from "../../types/rdp";
 import { PermissionRequest } from "../../types/request";
+import { getOperatingSystem } from "../../util";
 import { azureRdpProvider } from "../azure/rdp";
 import { proxyRdpProvider } from "../proxy/rdp";
 import { pick } from "lodash";
@@ -54,7 +59,6 @@ const provisionRequest = async (
   await validateRdpInstall(authn, args);
 
   const { destination } = args;
-  const provider = args.user ? "proxy" : (args.provider ?? "entra");
 
   const makeRequest = async () => {
     return await request("request")<PermissionRequest<RdpRequest>>(
@@ -64,9 +68,7 @@ const provisionRequest = async (
           "rdp",
           "session",
           destination,
-          "--provider",
-          provider,
-          ...(args.user ? ["--user", args.user] : []),
+          ...(args.provider ? ["--provider", args.provider] : []),
           ...(args.reason ? ["--reason", args.reason] : []),
         ],
         wait: true,
@@ -96,6 +98,7 @@ const provisionRequest = async (
   if (!result) exitProcess(1);
 
   return {
+    requestId: response.id,
     provisionedRequest: response.request,
   };
 };
@@ -109,28 +112,41 @@ const prepareRequest = async (
     throw `Server did not return a request id. ${getContactMessage()}`;
   }
 
-  const { provisionedRequest } = result;
-  return { request: provisionedRequest };
+  const { requestId, provisionedRequest } = result;
+  return { requestId, request: provisionedRequest };
 };
 
 export const rdp = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<RdpCommandArgs>
 ) => {
-  const { request } = await prepareRequest(authn, args);
-  const provider = args.user ? "proxy" : (args.provider ?? "entra");
+  const { requestId, request } = await prepareRequest(authn, args);
+  const provider = args.provider ?? request.permission.provider ?? "entra";
 
   const { configure, debug } = args;
 
   if (provider === "proxy") {
+    const { publicKey } = await createKeyPair();
+    if (debug) {
+      print2(`Submitting public key:\n${publicKey}`);
+    }
+    await submitProxyPublicKey(authn, { publicKey, requestId }, debug);
+
     const proxyRequest = request as PermissionRequest<ProxyRdpRequest>;
     await proxyRdpProvider.setup(proxyRequest, { debug });
     await proxyRdpProvider.spawnConnection(authn, proxyRequest, {
       configure,
       debug,
-      user: args.user,
     });
   } else {
+    // Entra ID authentication is only supported on Windows client machines.
+    // See: https://learn.microsoft.com/en-us/windows/client-management/client-tools/connect-to-remote-aadj-pc#connect-with-microsoft-entra-authentication
+    const os = getOperatingSystem();
+    if (os !== "win") {
+      print2("RDP session connections are only supported on Windows.");
+      exitProcess(1);
+    }
+
     const azureRequest = request as PermissionRequest<AzureRdpRequest>;
     await azureRdpProvider.setup(azureRequest, { debug });
     await azureRdpProvider.spawnConnection(azureRequest, { configure, debug });

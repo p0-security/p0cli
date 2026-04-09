@@ -42,6 +42,9 @@ const certSignRequestUrl = (tenant: string) =>
 const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
+const proxyPublicKeysUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/rdp/public-keys`;
+
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
@@ -126,6 +129,21 @@ export const submitPublicKey = async <T>(
 ) =>
   authFetch<T>(authn, {
     url: publicKeysUrl(authn.identity.org.slug),
+    method: "POST",
+    body: JSON.stringify({
+      requestId: args.requestId,
+      publicKey: args.publicKey,
+    }),
+    debug,
+  });
+
+export const submitProxyPublicKey = async <T>(
+  authn: Authn,
+  args: { publicKey: string; requestId: string },
+  debug?: boolean
+) =>
+  authFetch<T>(authn, {
+    url: proxyPublicKeysUrl(authn.identity.org.slug),
     method: "POST",
     body: JSON.stringify({
       requestId: args.requestId,
