@@ -64,7 +64,8 @@ export type SshProxyCommandArgs = {
   provider: "aws" | "azure" | "gcloud";
   requestJson: string;
   debug?: boolean;
-  identityFile: string;
+  org?: string;
+  identityFile: string; // private key path
 };
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
