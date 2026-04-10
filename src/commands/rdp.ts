@@ -9,11 +9,10 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../drivers/auth";
-import { print2 } from "../drivers/stdio";
 import { exitProcess } from "../opentelemetry/otel-helpers";
 import { rdp } from "../plugins/rdp";
 import { RdpCommandArgs } from "../types/rdp";
-import { getAppName, getOperatingSystem } from "../util";
+import { getAppName } from "../util";
 import yargs from "yargs";
 
 export const rdpCommand = (yargs: yargs.Argv) =>
@@ -39,10 +38,6 @@ export const rdpCommand = (yargs: yargs.Argv) =>
           type: "boolean",
           describe: "Configure the RDP session before connecting",
           default: false,
-        })
-        .option("user", {
-          type: "string",
-          describe: "User to log in as",
         })
         .option("provider", {
           type: "string",
@@ -70,18 +65,6 @@ Example:
  * - Azure VM via Bastion Host with Entra ID authentication
  */
 const rdpAction = async (cmdArgs: yargs.ArgumentsCamelCase<RdpCommandArgs>) => {
-  const provider = cmdArgs.user ? "proxy" : (cmdArgs.provider ?? "entra");
-
-  if (provider === "entra") {
-    // Entra ID authentication is only supported on Windows client machines.
-    // See: https://learn.microsoft.com/en-us/windows/client-management/client-tools/connect-to-remote-aadj-pc#connect-with-microsoft-entra-authentication
-    const os = getOperatingSystem();
-    if (os !== "win") {
-      print2("RDP session connections are only supported on Windows.");
-      exitProcess(1);
-    }
-  }
-
   const authn = await authenticate(cmdArgs);
   await rdp(authn, cmdArgs);
 

@@ -8,6 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { signProxyToken } from "../../common/jwt";
+import { createKeyPair } from "../../common/keys";
 import { print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import { ProxyRdpRequest } from "../../types/rdp";
@@ -21,7 +23,7 @@ type CreateSessionResponse = {
   session_id: string;
   proxy_host: string;
   proxy_port: number;
-  rdp_file_url: string;
+  rdp_file_content: string;
   state: string;
   created_at: string;
   token_expires_at: string;
@@ -29,30 +31,31 @@ type CreateSessionResponse = {
 
 const createSession = async (
   request: PermissionRequest<ProxyRdpRequest>,
-  options: { debug?: boolean; user?: string }
+  options: { debug?: boolean; privateKey: string }
 ): Promise<CreateSessionResponse> => {
-  const { debug, user } = options;
+  const { debug, privateKey } = options;
   const { instanceId } = request.permission.resource;
-  const { bastionUrl, bastionApiKey } = request.generated;
+  const { bastionUrl } = request.generated;
+
+  const token = signProxyToken({
+    principal: request.principal,
+    target: instanceId,
+    privateKey,
+  });
 
   const body = JSON.stringify({
-    target_id: instanceId,
-    username: user,
-    user_id: request.principal,
+    hostname: instanceId,
   });
 
   if (debug) {
     print2(`Creating proxy RDP session for target: ${instanceId}`);
     print2(`API endpoint: ${bastionUrl}/api/sessions`);
-    print2(
-      `API key: ${bastionApiKey.slice(0, 4)}...${bastionApiKey.slice(-4)}`
-    );
   }
 
   const response = await fetch(`${bastionUrl}/api/sessions`, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${bastionApiKey}`,
+      authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       "User-Agent": getUserAgent(),
     },
@@ -69,34 +72,11 @@ const createSession = async (
   return (await response.json()) as CreateSessionResponse;
 };
 
-const downloadRdpFile = async (
-  request: PermissionRequest<ProxyRdpRequest>,
-  session: CreateSessionResponse,
+const saveRdpFile = async (
+  rdpContent: string,
   options: { debug?: boolean }
 ): Promise<string> => {
   const { debug } = options;
-  const { bastionUrl, bastionApiKey } = request.generated;
-
-  if (debug) {
-    print2(`Downloading RDP file for session: ${session.session_id}`);
-  }
-
-  const response = await fetch(`${bastionUrl}${session.rdp_file_url}`, {
-    method: "GET",
-    headers: {
-      authorization: `Bearer ${bastionApiKey}`,
-      "User-Agent": getUserAgent(),
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Failed to download RDP file: ${response.status} ${response.statusText} - ${text}`
-    );
-  }
-
-  const rdpContent = await response.text();
 
   const { path: tmpPath } = await tmp.file({
     mode: 0o600,
@@ -162,23 +142,27 @@ export const proxyRdpProvider = {
     options: {
       configure?: boolean;
       debug?: boolean;
-      user?: string;
     }
   ) => {
     const { debug } = options;
+
+    const { privateKey } = await createKeyPair();
 
     if (debug) {
       print2("Creating proxy RDP connection...");
       print2(`Target instance: ${request.permission.resource.instanceId}`);
     }
 
-    const session = await createSession(request, options);
+    const session = await createSession(request, {
+      ...options,
+      privateKey,
+    });
 
     if (debug) {
       print2(`Session created: ${JSON.stringify(session)}`);
     }
 
-    const rdpFilePath = await downloadRdpFile(request, session, {
+    const rdpFilePath = await saveRdpFile(session.rdp_file_content, {
       debug,
     });
 

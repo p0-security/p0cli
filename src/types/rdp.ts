@@ -19,6 +19,7 @@ export type AzureRdpPermissionSpec = PermissionSpec<
 export type AzureRdpRequest = {
   principal: string;
   permission: {
+    provider: "entra";
     resource: {
       instanceId: string;
       subscriptionId: string;
@@ -37,9 +38,9 @@ export type ProxyRdpRequest = {
   principal: string;
   generated: {
     bastionUrl: string;
-    bastionApiKey: string;
   };
   permission: {
+    provider: "proxy";
     resource: {
       instanceId: string;
     };
@@ -52,5 +53,4 @@ export type RdpCommandArgs = {
   destination: string;
   provider?: RdpProvider;
   reason?: string;
-  user?: string;
 };
