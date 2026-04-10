@@ -107,6 +107,68 @@ describe("ls", () => {
     });
   });
 
+  describe("when --json flag is used", () => {
+    const makeItems = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        key: `instance-${i + 1}`,
+        value: `Resource ${i + 1}`,
+      }));
+
+    const parseJsonOutput = () => {
+      expect(mockPrint1).toHaveBeenCalledTimes(1);
+      return JSON.parse(mockPrint1.mock.calls[0]![0]);
+    };
+
+    it("should truncate items to the requested --size", async () => {
+      const items = makeItems(10);
+      mockItems(items);
+      await lsCommand(yargs())
+        .exitProcess(false)
+        .parse("ls ssh destination --json --size 3");
+
+      const parsed = parseJsonOutput();
+      expect(parsed.ok).toBe(true);
+      expect(parsed.term).toBe("");
+      expect(parsed.arg).toBe("destination");
+      expect(parsed.items).toEqual(items.slice(0, 3));
+      expect(mockPrint2).not.toHaveBeenCalled();
+    });
+
+    it("should cap items at the default size (15) when --size is omitted", async () => {
+      mockItems(makeItems(20));
+      await lsCommand(yargs())
+        .exitProcess(false)
+        .parse("ls ssh destination --json");
+
+      const parsed = parseJsonOutput();
+      expect(parsed.items).toHaveLength(15);
+    });
+
+    it("should request double the requested size from the backend", async () => {
+      mockItems(makeItems(10));
+      await lsCommand(yargs())
+        .exitProcess(false)
+        .parse("ls ssh destination --json --size 4");
+
+      expect(mockFetchCommand).toHaveBeenCalledTimes(1);
+      const allArguments = mockFetchCommand.mock.calls[0]![2];
+      const sizeIdx = allArguments.indexOf("--size");
+      expect(sizeIdx).toBeGreaterThanOrEqual(0);
+      expect(allArguments[sizeIdx + 1]).toBe("8");
+    });
+
+    it("should not pad items when fewer items than --size are returned", async () => {
+      const items = makeItems(2);
+      mockItems(items);
+      await lsCommand(yargs())
+        .exitProcess(false)
+        .parse("ls ssh destination --json --size 10");
+
+      const parsed = parseJsonOutput();
+      expect(parsed.items).toEqual(items);
+    });
+  });
+
   describe("when error", () => {
     const command = "ls foo";
 
