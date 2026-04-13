@@ -8,11 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { getAppName } from "../util";
+import { isNetworkError } from "./util";
 
-export const getExpiredCredentialsMessage = () =>
-  `Your credentials have expired. Please run \`${getAppName()} login <organization>\` to refresh your credentials.`;
-
-export const isNetworkError = (error: unknown) =>
-  error instanceof TypeError &&
-  (error.message === "fetch failed" || error.message === "terminated");
+// We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
+// for a total of 121s wait time over 8 retries (ignoring jitter)
+export const RETRY_OPTIONS = {
+  shouldRetry: (error: unknown) =>
+    error === "HTTP Error: 429 Too Many Requests" || isNetworkError(error),
+  retries: 8,
+  delayMs: 1_000,
+  multiplier: 2.0,
+  maxDelayMs: 30_000,
+};

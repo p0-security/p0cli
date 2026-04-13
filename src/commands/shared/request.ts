@@ -8,8 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
+import { retryWithSleep } from "../../common/retry";
+import { fetchCommand, fetchStreamingStatus } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
+import { RETRY_OPTIONS } from "../../drivers/constants";
 import { print2, spinUntil } from "../../drivers/stdio";
 import { markSpanError } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
@@ -158,38 +160,34 @@ export const request =
       }
     };
 
-    const invokeRequest = async () => {
-      const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
-        resolvedAuthn,
-        args,
-        [command, ...args.arguments]
+    const executeAndProcessApiRequest = async () => {
+      const fetchCommandPromise = retryWithSleep(
+        () =>
+          fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
+            command,
+            ...args.arguments,
+          ]),
+        RETRY_OPTIONS
       );
-      const response = await executeApiRequest(fetchCommandPromise);
-      const { data, shouldLogMessage } = processResponse(response);
+      return processResponse(await executeApiRequest(fetchCommandPromise));
+    };
+
+    const invokeRequest = async () => {
+      const { data, shouldLogMessage } = await executeAndProcessApiRequest();
       if (shouldLogMessage) print2(data.message);
       return data;
     };
 
     const executeStreamingRequest = async () => {
-      const fetchStreamingCommandGenerator = fetchStreamingCommand<
-        RequestResponse<T>
-      >(resolvedAuthn, args, [command, ...args.arguments], args.debug);
-      const getNextPermissionRequestChunk = async () => {
-        const generatedValue = await fetchStreamingCommandGenerator.next();
-        if (generatedValue.done) {
-          return undefined;
-        }
-        return generatedValue.value;
-      };
-      const firstChunk = await executeApiRequest(
-        getNextPermissionRequestChunk()
-      );
-      const { data, shouldLogMessage } = processResponse(firstChunk);
+      const { data, shouldLogMessage } = await executeAndProcessApiRequest();
       if (shouldLogMessage) {
         print2(data.message);
         print2("Will wait up to 5 minutes for this request to complete...");
       }
-      for await (const chunkData of fetchStreamingCommandGenerator) {
+      const fetchStreamingStatusGenerator = fetchStreamingStatus<
+        RequestResponse<T>
+      >(resolvedAuthn, data.id, args.debug);
+      for await (const chunkData of fetchStreamingStatusGenerator) {
         if (!chunkData) {
           throw new Error("Errored waiting for request to complete");
         }
