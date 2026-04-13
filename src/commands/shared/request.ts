@@ -20,6 +20,7 @@ import {
   PluginRequest,
   RequestResponse,
 } from "../../types/request";
+import { sleep } from "../../util";
 import { trace } from "@opentelemetry/api";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -29,6 +30,12 @@ export const PROVISIONING_ACCESS_MESSAGE =
 export const EXISTING_ACCESS_MESSAGE = "Existing access found.";
 export const ACCESS_EXISTS_ERROR_MESSAGE =
   "This principal already has this access";
+
+export const ACCESS_WAIT_TIMEOUT_ERROR_MESSAGE =
+  "Failed waiting for access to be resolved";
+
+// 10 minutes of max request timeout including retries
+const MAX_REQUEST_TIMEOUT = 10 * 60 * 1000;
 
 const APPROVED = { message: "Your request was approved", code: 0 };
 const DENIED = { message: "Your request was denied", code: 2 };
@@ -122,6 +129,7 @@ export const request =
     options?: {
       accessMessage?: string;
       message?: "all" | "approval-required" | "none" | "quiet";
+      timeOut?: number;
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
@@ -204,8 +212,16 @@ export const request =
       throw data;
     };
 
+    const timeoutOperation = async () => {
+      await sleep(options?.timeOut ?? MAX_REQUEST_TIMEOUT);
+      throw ACCESS_WAIT_TIMEOUT_ERROR_MESSAGE;
+    };
+
     try {
-      return await (!args.wait ? invokeRequest() : executeStreamingRequest());
+      return await Promise.race([
+        !args.wait ? invokeRequest() : executeStreamingRequest(),
+        timeoutOperation(),
+      ]);
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
         print2("Connection to P0 timed out.");
