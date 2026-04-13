@@ -124,7 +124,7 @@ export const fetchAdminLsCommand = async <T>(
 
 export const submitPublicKey = async <T>(
   authn: Authn,
-  args: { publicKey: string; requestId: string },
+  args: { publicKey: string; requestId: string; signature?: string },
   debug?: boolean
 ) =>
   authFetch<T>(authn, {
@@ -133,6 +133,7 @@ export const submitPublicKey = async <T>(
     body: JSON.stringify({
       requestId: args.requestId,
       publicKey: args.publicKey,
+      ...(args.signature ? { signature: args.signature } : {}),
     }),
     debug,
   });
