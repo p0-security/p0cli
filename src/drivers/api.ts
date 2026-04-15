@@ -12,11 +12,24 @@ import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { getUserAgent } from "../version";
 import { getAppUrl, getTenantConfig } from "./config";
-import { RETRY_OPTIONS } from "./constants";
 import { print2 } from "./stdio";
-import { isNetworkError } from "./util";
 import * as path from "node:path";
 import yargs from "yargs";
+
+const isNetworkError = (error: unknown) =>
+  error instanceof TypeError &&
+  (error.message === "fetch failed" || error.message === "terminated");
+
+// We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
+// for a total of 121s wait time over 8 retries (ignoring jitter)
+const RETRY_OPTIONS = {
+  shouldRetry: (error: unknown) =>
+    error === "HTTP Error: 429 Too Many Requests" || isNetworkError(error),
+  retries: 8,
+  delayMs: 1_000,
+  multiplier: 2.0,
+  maxDelayMs: 30_000,
+};
 
 const tenantOrgUrl = (tenant: string) => `${getAppUrl()}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
@@ -30,8 +43,6 @@ const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
-const requestStatusUrl = (tenant: string, requestId: string) =>
-  `${commandUrl(tenant)}/${requestId}/poll`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
@@ -56,16 +67,22 @@ export const fetchIntegrationConfig = async <T>(
     debug,
   });
 
-export const fetchStreamingStatus = async function* <T>(
+export const fetchStreamingCommand = async function* <T>(
   authn: Authn,
-  requestId: string,
+  args: yargs.ArgumentsCamelCase,
+  argv: string[],
   debug?: boolean
 ) {
   yield* fetchWithStreaming<T>(
     authn,
     {
-      url: requestStatusUrl(authn.identity.org.slug, requestId),
-      method: "GET",
+      url: commandUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        argv,
+        scriptName: path.basename(args.$0),
+        wait: true,
+      }),
     },
     debug
   );

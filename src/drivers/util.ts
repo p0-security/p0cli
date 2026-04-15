@@ -12,7 +12,3 @@ import { getAppName } from "../util";
 
 export const getExpiredCredentialsMessage = () =>
   `Your credentials have expired. Please run \`${getAppName()} login <organization>\` to refresh your credentials.`;
-
-export const isNetworkError = (error: unknown) =>
-  error instanceof TypeError &&
-  (error.message === "fetch failed" || error.message === "terminated");
