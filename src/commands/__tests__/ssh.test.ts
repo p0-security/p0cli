@@ -10,10 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { TEST_PUBLIC_KEY } from "../../common/__mocks__/keys";
 import {
-  fetchCommand,
   fetchIntegrationConfig,
   fetchSshHostKeys,
-  fetchStreamingStatus,
+  fetchStreamingCommand,
 } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { AwsSshGenerated, AwsSshPermission } from "../../plugins/aws/types";
@@ -37,9 +36,8 @@ vi.mock("../../common/keys");
 const mockSshOrScp = sshOrScp as Mock;
 const mockPrint1 = print1 as Mock;
 const mockPrint2 = print2 as Mock;
-const mockFetchCommand = fetchCommand as Mock;
 const mockIntegrationConfig = fetchIntegrationConfig as Mock;
-const mockFetchStreamingStatus = fetchStreamingStatus as Mock;
+const mockFetchStreamingCommand = fetchStreamingCommand as Mock;
 const mockFetchSshHostKeys = fetchSshHostKeys as Mock;
 
 const MOCK_PERMISSION: AwsSshPermission = {
@@ -92,15 +90,15 @@ describe("ssh", () => {
     isPersistent: boolean,
     sleep?: () => Promise<void>
   ) => {
-    mockFetchCommand.mockImplementationOnce(() => ({
-      ok: true,
-      message: "a message",
-      id: "abcefg",
-      isPreexisting: false,
-      isPersistent,
-      request: { status: "NEW" },
-    }));
-    mockFetchStreamingStatus.mockImplementationOnce(async function* () {
+    mockFetchStreamingCommand.mockImplementationOnce(async function* () {
+      yield {
+        ok: true,
+        message: "a message",
+        id: "abcefg",
+        isPreexisting: false,
+        isPersistent,
+        request: { status: "NEW" },
+      };
       await sleep?.();
       yield {
         ok: true,
@@ -127,8 +125,7 @@ describe("ssh", () => {
     });
 
     afterEach(() => {
-      mockFetchCommand.mockReset();
-      mockFetchStreamingStatus.mockReset();
+      mockFetchStreamingCommand.mockReset();
     });
     it("should call p0 request with reason arg", async () => {
       mockStreaming(isPersistent);
@@ -138,7 +135,7 @@ describe("ssh", () => {
       // await for the first response to yield
       await sleep(10);
       const hiddenFilenameRequestArgs = omit(
-        mockFetchCommand.mock.calls[0]?.[1],
+        mockFetchStreamingCommand.mock.calls[0]?.[1],
         "$0"
       );
       expect(hiddenFilenameRequestArgs).toMatchSnapshot("args");
