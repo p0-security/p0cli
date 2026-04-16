@@ -596,16 +596,14 @@ export const sshOrScp = async (args: {
     );
 
     if (debug) {
-      const reproCommands = sshProvider.reproCommands(request, setupData);
-      if (reproCommands) {
-        const repro = [
-          ...reproCommands,
-          `${command} ${transformForShell(commandArgs).join(" ")}`,
-        ].join("\n");
-        print2(
-          `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
-        );
-      }
+      const reproCommands = sshProvider.reproCommands(request, setupData) ?? [];
+      const repro = [
+        ...reproCommands,
+        `${command} ${transformForShell(commandArgs).join(" ")}`,
+      ].join("\n");
+      print2(
+        `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
+      );
     }
 
     const endTime = Date.now() + sshProvider.propagationTimeoutMs;
@@ -718,6 +716,10 @@ export const sshProxy = async (args: {
   }
 
   const proxyArgs = proxyCommand.slice(1);
+
+  if (debug) {
+    print2(`Executing proxy command: ${command} ${proxyArgs.join(" ")}`);
+  }
 
   const endTime = Date.now() + sshProvider.propagationTimeoutMs;
 
