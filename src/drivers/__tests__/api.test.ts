@@ -54,6 +54,7 @@ describe("fetchWithStreaming", () => {
         }
         return { done: true, value: undefined };
       }),
+      cancel: vi.fn().mockResolvedValue(undefined),
     };
 
     return {
