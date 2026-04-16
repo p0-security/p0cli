@@ -207,7 +207,10 @@ export const request =
           sys.exit(code);
           return undefined;
         }
-        return chunkData;
+        return {
+          ...data,
+          ...chunkData,
+        };
       }
       throw data;
     };

@@ -256,6 +256,8 @@ export const fetchWithStreaming = async function* <T>(
         } else {
           throw err;
         }
+      } finally {
+        await reader.cancel();
       }
     }
   };
