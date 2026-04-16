@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
+import { fetchCommand, fetchStreamingStatus } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { failure } from "../../testing/yargs";
 import { RequestResponse } from "../../types/request";
@@ -20,7 +20,7 @@ import yargs from "yargs";
 vi.mock("../../drivers/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../drivers/api")>()),
   fetchCommand: vi.fn(),
-  fetchStreamingCommand: vi.fn(), // Add this
+  fetchStreamingStatus: vi.fn(), // Add this
   streamingApiFetch: vi.fn(),
 }));
 vi.mock("../../drivers/auth");
@@ -31,7 +31,7 @@ vi.mock("../../drivers/stdio", async (importOriginal) => ({
 }));
 
 const mockFetchCommand = fetchCommand as Mock;
-const mockFetchStreamingCommand = fetchStreamingCommand as Mock;
+const mockFetchStreamingStatus = fetchStreamingStatus as Mock;
 const mockPrint1 = print1 as Mock;
 const mockPrint2 = print2 as Mock;
 
@@ -75,16 +75,15 @@ describe("request", () => {
        * This test checks that the request command waits for access to be granted
        * before resolving the promise.
        */
-      mockFetchStreamingCommand.mockImplementation(async function* () {
-        yield {
-          ok: true,
-          message: "a message",
-          id: "abcefg",
-          isPreexisting: false,
-          isPersistent: false,
-          request: { status: "NEW" },
-        };
-        await sleep(200);
+      mockFetchCommand.mockImplementation(() => ({
+        ok: true,
+        message: "a message",
+        id: "abcefg",
+        isPreexisting: false,
+        isPersistent: false,
+        request: { status: "NEW" },
+      }));
+      mockFetchStreamingStatus.mockImplementation(async function* () {
         yield {
           ok: true,
           message: "Request approved",
@@ -131,16 +130,16 @@ Unknown argument: foo`,
     });
 
     it("should handle stream errors", async () => {
-      mockFetchStreamingCommand.mockImplementation(async function* () {
-        yield {
-          ok: true,
-          message: "a message",
-          id: "abcefg",
-          isPreexisting: false,
-          isPersistent: false,
-          request: { status: "NEW" },
-        };
-        await sleep(200);
+      mockFetchCommand.mockImplementation(() => ({
+        ok: true,
+        message: "a message",
+        id: "abcefg",
+        isPreexisting: false,
+        isPersistent: false,
+        request: { status: "NEW" },
+      }));
+      mockFetchStreamingStatus.mockImplementation(async function* () {
+        await sleep(100);
         throw new TypeError("terminated");
       });
       const command = "request gcloud role viewer --wait";
