@@ -146,6 +146,7 @@ export const oidcLoginSteps = (
       url: deviceAuthorizationUrl,
     };
   };
+
   const buildOidcTokenRequest = (authorize: AuthorizeResponse) => {
     validateProviderDomain(org);
 

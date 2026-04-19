@@ -35,6 +35,9 @@ const requestAuth = async () => {
     client_id: tenantConfig.google.clientId,
     code_challenge: pkce.code_challenge,
     code_challenge_method: "S256",
+    // If the user has multiple Google logins on the device, they'll need to select
+    // which account to use. Force this with the "select_account" prompt.
+    prompt: "select_account",
     redirect_uri: GOOGLE_OIDC_REDIRECT_URL,
     response_type: "code",
     scope: "openid email",
