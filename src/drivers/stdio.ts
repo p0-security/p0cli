@@ -18,6 +18,21 @@ You should have received a copy of the GNU General Public License along with @p0
 import { sleep } from "../util";
 import { Ansi, AnsiSgr } from "./ansi";
 import { stderr } from "process";
+import yargs from "yargs";
+
+/** Log with debugging
+ *
+ * Debug logs are written to stderr
+ */
+export function debug(
+  argv: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
+  message: string,
+  ...rest: any
+) {
+  if (!argv.debug) return;
+  // eslint-disable-next-line no-console
+  console.error(message, ...rest);
+}
 
 /** Used to output machine-readable text to stdout
  *
