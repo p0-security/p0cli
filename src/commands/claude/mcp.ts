@@ -40,13 +40,14 @@ type GetMcpServerResp = {
 
 type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
   debug?: boolean;
+  callbackPort: number | undefined;
   scope: string | undefined;
   server: string;
 }>;
 
 const CLIENT_PATH = postfixPath("claude/mcp-client.json");
 
-const REDIRECT_PORT = "8080";
+const REDIRECT_PORT = 8080;
 
 export const mcpCommand = (yargs: yargs.Argv<{ debug?: boolean }>) =>
   yargs.command(
@@ -58,6 +59,11 @@ export const mcpCommand = (yargs: yargs.Argv<{ debug?: boolean }>) =>
           type: "string",
           describe: "MCP server key",
           demand: true,
+        })
+        .option("callbackPort", {
+          describe: "Authentication callback port",
+          type: "number",
+          default: REDIRECT_PORT,
         })
         .option("scope", {
           alias: "s",
@@ -94,7 +100,7 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
     body: JSON.stringify({
       platform: "claude-code",
       version,
-      redirectUri: `http://localhost:${REDIRECT_PORT}`,
+      redirectUri: `http://localhost:${argv.callbackPort ?? REDIRECT_PORT}`,
     } satisfies CreateMcpClientReq),
     debug: argv.debug,
   });
