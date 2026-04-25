@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import yargs from "yargs";
 
 type CreateMcpClientReq = {
+  hostname: string;
   platform: string;
   redirectUri: string;
   version: string;
@@ -93,11 +94,13 @@ const handleAddMcpServer = async (argv: AddMcpServerArgs) => {
 
 const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
   const version = (await promisify(exec)("claude --version")).stdout;
+  const hostname = (await promisify(exec)("scutil --get LocalHostName")).stdout;
 
   const clientData = await authFetch<CreateMcpClientResp>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/mcp/clients`,
     method: "POST",
     body: JSON.stringify({
+      hostname,
       platform: "claude-code",
       version,
       redirectUri: `http://localhost:${argv.callbackPort ?? REDIRECT_PORT}`,
@@ -121,6 +124,12 @@ const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
 
     if (cachedClientData) {
       const client = JSON.parse(cachedClientData) as CreateMcpClientResp;
+      debug(
+        argv,
+        "Using cached client at",
+        CLIENT_PATH,
+        "(remove this file to use a new MCP client)"
+      );
       return client;
     }
   } catch (error: unknown) {
