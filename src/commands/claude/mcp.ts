@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { authFetch, tenantUrl } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { postfixPath } from "../../drivers/auth/path";
-import { debug } from "../../drivers/stdio";
+import { debug, print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
 import assert from "node:assert";
 import { exec, spawn } from "node:child_process";
@@ -19,6 +19,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import yargs from "yargs";
+
+type ListMcpServersResp = {
+  servers: { id: string; url: string }[];
+};
 
 type CreateMcpClientReq = {
   hostname: string;
@@ -39,6 +43,10 @@ type GetMcpServerResp = {
   };
 };
 
+type ListMcpServerArgs = yargs.ArgumentsCamelCase<{
+  debug?: boolean;
+}>;
+
 type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
   debug?: boolean;
   callbackPort: number | undefined;
@@ -51,33 +59,53 @@ const CLIENT_PATH = postfixPath("claude/mcp-client.json");
 const REDIRECT_PORT = 8080;
 
 export const mcpCommand = (yargs: yargs.Argv<{ debug?: boolean }>) =>
-  yargs.command(
-    "add <server>",
-    "Add an MCP server",
-    (y) =>
-      y
-        .positional("server", {
-          type: "string",
-          describe: "MCP server key",
-          demand: true,
-        })
-        .option("callbackPort", {
-          describe: "Authentication callback port",
-          type: "number",
-          default: REDIRECT_PORT,
-        })
-        .option("scope", {
-          alias: "s",
-          describe:
-            'Configuration scope (local, user, or project) (default: "local")',
-          type: "string",
-          choices: ["local", "user", "project"],
-        }),
-    async (argv) => {
-      assert(argv.server);
-      await handleAddMcpServer({ ...argv, server: argv.server });
-    }
-  );
+  yargs
+    .command(
+      "add <server>",
+      "Add an MCP server",
+      (y) =>
+        y
+          .positional("server", {
+            type: "string",
+            describe: "MCP server key",
+            demand: true,
+          })
+          .option("callbackPort", {
+            describe: "Authentication callback port",
+            type: "number",
+            default: REDIRECT_PORT,
+          })
+          .option("scope", {
+            alias: "s",
+            describe:
+              'Configuration scope (local, user, or project) (default: "local")',
+            type: "string",
+            choices: ["local", "user", "project"],
+          }),
+      async (argv) => {
+        assert(argv.server);
+        await handleAddMcpServer({ ...argv, server: argv.server });
+      }
+    )
+    .command(
+      "list",
+      "List available MCP servers",
+      (y) => y,
+      async (argv) => {
+        await handleListMcpServers(argv);
+      }
+    );
+
+const handleListMcpServers = async (argv: ListMcpServerArgs) => {
+  const authn = await authenticate();
+
+  const result = await authFetch<ListMcpServersResp>(authn, {
+    url: `${tenantUrl(authn.identity.org.slug)}/mcp/servers`,
+    method: "GET",
+    debug: argv.debug,
+  });
+  print2(result);
+};
 
 const handleAddMcpServer = async (argv: AddMcpServerArgs) => {
   const authn = await authenticate();
@@ -141,7 +169,7 @@ const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
 
 const getServer = async (authn: Authn, argv: AddMcpServerArgs) =>
   await authFetch<GetMcpServerResp>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/mcp/servers/${argv.server}`,
+    url: `${tenantUrl(authn.identity.org.slug)}/mcp/servers/${encodeURIComponent(argv.server)}`,
     method: "GET",
   });
 
@@ -152,6 +180,7 @@ const provisionServer = async (
 ) => {
   const claudeFile = (await promisify(exec)("which claude")).stdout.trim();
   assert(client.secret, "No client secret");
+  debug(argv, "Server", server);
   const args = [
     "mcp",
     "add-json",
