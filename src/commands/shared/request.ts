@@ -8,8 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchCommand, fetchStreamingCommand } from "../../drivers/api";
+import { retryWithSleep } from "../../common/retry";
+import { fetchCommand, fetchStreamingStatus } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
+import { RETRY_OPTIONS } from "../../drivers/constants";
 import { print2, spinUntil } from "../../drivers/stdio";
 import { markSpanError } from "../../opentelemetry/otel-helpers";
 import { Authn } from "../../types/identity";
@@ -18,6 +20,7 @@ import {
   PluginRequest,
   RequestResponse,
 } from "../../types/request";
+import { sleep } from "../../util";
 import { trace } from "@opentelemetry/api";
 import { sys } from "typescript";
 import yargs from "yargs";
@@ -28,9 +31,17 @@ export const EXISTING_ACCESS_MESSAGE = "Existing access found.";
 export const ACCESS_EXISTS_ERROR_MESSAGE =
   "This principal already has this access";
 
+export const ACCESS_WAIT_TIMEOUT_ERROR_MESSAGE =
+  "Failed waiting for access to be resolved";
+
+// 10 minutes of max request timeout including retries
+const MAX_REQUEST_TIMEOUT = 10 * 60 * 1000;
+
 const APPROVED = { message: "Your request was approved", code: 0 };
 const DENIED = { message: "Your request was denied", code: 2 };
 const ERRORED = { message: "Your request encountered an error", code: 1 };
+const EXPIRED = { message: "Your access has expired", code: 1 };
+const REVOKED = { message: "Your access was revoked", code: 1 };
 
 const COMPLETED_REQUEST_STATUSES = {
   APPROVED,
@@ -39,6 +50,8 @@ const COMPLETED_REQUEST_STATUSES = {
   DONE_NOTIFIED: APPROVED,
   DENIED,
   ERRORED,
+  EXPIRED,
+  REVOKED,
 };
 
 const isCompletedStatus = (
@@ -116,6 +129,7 @@ export const request =
     options?: {
       accessMessage?: string;
       message?: "all" | "approval-required" | "none" | "quiet";
+      timeOut?: number;
     }
   ): Promise<RequestResponse<T> | undefined> => {
     const resolvedAuthn = authn ?? (await authenticate());
@@ -154,38 +168,34 @@ export const request =
       }
     };
 
-    const invokeRequest = async () => {
-      const fetchCommandPromise = fetchCommand<RequestResponse<T>>(
-        resolvedAuthn,
-        args,
-        [command, ...args.arguments]
+    const executeAndProcessApiRequest = async () => {
+      const fetchCommandPromise = retryWithSleep(
+        () =>
+          fetchCommand<RequestResponse<T>>(resolvedAuthn, args, [
+            command,
+            ...args.arguments,
+          ]),
+        RETRY_OPTIONS
       );
-      const response = await executeApiRequest(fetchCommandPromise);
-      const { data, shouldLogMessage } = processResponse(response);
+      return processResponse(await executeApiRequest(fetchCommandPromise));
+    };
+
+    const invokeRequest = async () => {
+      const { data, shouldLogMessage } = await executeAndProcessApiRequest();
       if (shouldLogMessage) print2(data.message);
       return data;
     };
 
     const executeStreamingRequest = async () => {
-      const fetchStreamingCommandGenerator = fetchStreamingCommand<
-        RequestResponse<T>
-      >(resolvedAuthn, args, [command, ...args.arguments], args.debug);
-      const getNextPermissionRequestChunk = async () => {
-        const generatedValue = await fetchStreamingCommandGenerator.next();
-        if (generatedValue.done) {
-          return undefined;
-        }
-        return generatedValue.value;
-      };
-      const firstChunk = await executeApiRequest(
-        getNextPermissionRequestChunk()
-      );
-      const { data, shouldLogMessage } = processResponse(firstChunk);
+      const { data, shouldLogMessage } = await executeAndProcessApiRequest();
       if (shouldLogMessage) {
         print2(data.message);
         print2("Will wait up to 5 minutes for this request to complete...");
       }
-      for await (const chunkData of fetchStreamingCommandGenerator) {
+      const fetchStreamingStatusGenerator = fetchStreamingStatus<
+        RequestResponse<T>
+      >(resolvedAuthn, data.id, args.debug);
+      for await (const chunkData of fetchStreamingStatusGenerator) {
         if (!chunkData) {
           throw new Error("Errored waiting for request to complete");
         }
@@ -197,16 +207,27 @@ export const request =
           sys.exit(code);
           return undefined;
         }
-        return chunkData;
+        return {
+          ...data,
+          ...chunkData,
+        };
       }
       throw data;
     };
 
+    const timeoutOperation = async () => {
+      await sleep(options?.timeOut ?? MAX_REQUEST_TIMEOUT);
+      throw ACCESS_WAIT_TIMEOUT_ERROR_MESSAGE;
+    };
+
     try {
-      return await (!args.wait ? invokeRequest() : executeStreamingRequest());
+      return await Promise.race([
+        !args.wait ? invokeRequest() : executeStreamingRequest(),
+        timeoutOperation(),
+      ]);
     } catch (error: any) {
       if (error instanceof Error && error.name === "TimeoutError") {
-        print2("Your request did not complete within 5 minutes.");
+        print2("Connection to P0 timed out.");
       }
       if (
         error instanceof Error &&

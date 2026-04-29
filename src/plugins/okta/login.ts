@@ -28,6 +28,7 @@ import {
 } from "../oidc/login";
 import * as cheerio from "cheerio";
 import { omit } from "lodash";
+import assert from "node:assert";
 
 const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 const ID_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:id_token";
@@ -138,9 +139,14 @@ export const oktaLogin = async (org: OrgData) =>
       const providerType = getProviderType(org);
       const providerDomain = getProviderDomain(org);
 
-      if (providerType !== "okta" || !providerDomain) {
-        throw `Invalid provider configuration (expected okta OIDC provider)`;
-      }
+      assert(
+        providerType === "okta",
+        "Invalid provider configuration (expected okta OIDC provider)"
+      );
+      assert(
+        providerDomain,
+        "Invalid provider configuration (missing Okta domain)"
+      );
       return {
         deviceAuthorizationUrl: `https://${providerDomain}/oauth2/v1/device/authorize`,
         tokenUrl: `https://${providerDomain}/oauth2/v1/token`,

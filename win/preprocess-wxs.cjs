@@ -11,13 +11,19 @@ if (!version) {
   process.exit(1);
 }
 
-if (!Array.isArray(version.split(".")) || version.split(".").length != 3) {
-  console.error('Error: "version" field in package.json must have 3 segments (major.minor.patch).');
+// Strip pre-release suffix for the numeric part (e.g. "0.26.1-alpha.3" -> "0.26.1").
+// WiX ProductVersion only accepts numeric major.minor.patch.build format.
+const [numericVersion, preRelease] = version.split("-");
+
+if (!Array.isArray(numericVersion.split(".")) || numericVersion.split(".").length != 3) {
+  console.error('Error: "version" field in package.json must have 3 numeric segments (major.minor.patch).');
   process.exit(1);
 }
 
-// MSI versions typically have 4 segments, but we use 3 from package.json and append ".0"
-const msiVersion = `${version}.0`;
+// Use the trailing number from the pre-release suffix as the MSI build segment, if present.
+// e.g. "alpha.3" -> 3, "dev" -> 0, no suffix -> 0
+const buildNumber = preRelease ? (preRelease.match(/\d+$/) ?? [0])[0] : 0;
+const msiVersion = `${numericVersion}.${buildNumber}`;
 
 // This is a fixed UUID namespace for the product ID generation
 // The product ID is deterministically generated from the namespace and the MSI version name

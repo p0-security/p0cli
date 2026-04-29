@@ -12,13 +12,14 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 export type AuthorizeRequest = {
   client_id: string;
-  code_challenge: string;
   code_challenge_method: "plain" | "S256";
+  code_challenge: string;
+  login_hint?: string;
+  prompt?: string;
   redirect_uri: string;
   response_type: "code";
   scope: string;
   state?: string;
-  login_hint?: string;
 };
 
 export type AuthorizeResponse = {

@@ -12,20 +12,11 @@ import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
 import { getUserAgent } from "../version";
 import { getAppUrl, getTenantConfig } from "./config";
+import { RETRY_OPTIONS } from "./constants";
 import { print2 } from "./stdio";
+import { isNetworkError } from "./util";
 import * as path from "node:path";
 import yargs from "yargs";
-
-// We retry with these delays: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s
-// for a total of 121s wait time over 8 retries (ignoring jitter)
-const RETRY_OPTIONS = {
-  shouldRetry: (error: unknown) =>
-    error === "HTTP Error: 429 Too Many Requests",
-  retries: 8,
-  delayMs: 1_000,
-  multiplier: 2.0,
-  maxDelayMs: 30_000,
-};
 
 const tenantOrgUrl = (tenant: string) => `${getAppUrl()}/orgs/${tenant}`;
 const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
@@ -39,6 +30,8 @@ const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
+const requestStatusUrl = (tenant: string, requestId: string) =>
+  `${commandUrl(tenant)}/${requestId}/poll`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
@@ -63,22 +56,16 @@ export const fetchIntegrationConfig = async <T>(
     debug,
   });
 
-export const fetchStreamingCommand = async function* <T>(
+export const fetchStreamingStatus = async function* <T>(
   authn: Authn,
-  args: yargs.ArgumentsCamelCase,
-  argv: string[],
+  requestId: string,
   debug?: boolean
 ) {
   yield* fetchWithStreaming<T>(
     authn,
     {
-      url: commandUrl(authn.identity.org.slug),
-      method: "POST",
-      body: JSON.stringify({
-        argv,
-        scriptName: path.basename(args.$0),
-        wait: true,
-      }),
+      url: requestStatusUrl(authn.identity.org.slug, requestId),
+      method: "GET",
     },
     debug
   );
@@ -269,6 +256,8 @@ export const fetchWithStreaming = async function* <T>(
         } else {
           throw err;
         }
+      } finally {
+        await reader.cancel();
       }
     }
   };
@@ -279,10 +268,7 @@ export const fetchWithStreaming = async function* <T>(
       debug,
     });
   } catch (error) {
-    if (
-      error instanceof TypeError &&
-      (error.message === "fetch failed" || error.message === "terminated")
-    ) {
+    if (isNetworkError(error)) {
       if (debug) {
         print2("Network error: " + String(error));
       }
@@ -362,7 +348,7 @@ const baseFetch = async <T>(args: {
       debug: args.debug,
     });
   } catch (error) {
-    if (error instanceof TypeError && error.message === "fetch failed") {
+    if (isNetworkError(error)) {
       throw `Network error: Unable to reach the server at ${url}.`;
     } else {
       throw error;

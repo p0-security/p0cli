@@ -64,7 +64,8 @@ export type SshProxyCommandArgs = {
   provider: "aws" | "azure" | "gcloud";
   requestJson: string;
   debug?: boolean;
-  identityFile: string;
+  org?: string;
+  identityFile: string; // private key path
 };
 
 export type CommandArgs = ScpCommandArgs | SshCommandArgs;
@@ -191,9 +192,7 @@ export const provisionRequest = async (
   if (options?.approvedOnly) {
     // Try first with sudo
     try {
-      response = await makeRequest({ forceSudo: true }).catch(
-        requestErrorHandler
-      );
+      response = await makeRequest({ forceSudo: true });
     } catch (error) {
       // If that fails, try without sudo
       if (args.debug) {

@@ -55,6 +55,10 @@ export const sshProxyCommand = (yargs: yargs.Argv) =>
           describe: "JSON string of the SSH request",
           demandOption: true,
         })
+        .option("org", {
+          type: "string",
+          describe: "The organization to which the user wants to use",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
@@ -64,9 +68,21 @@ export const sshProxyCommand = (yargs: yargs.Argv) =>
     sshProxyAction
   );
 
+// Setting org var to be accessed by src/drivers/auth/path.ts. Built to avoid drilling down args.org. ssh-proxy needs P0_ORG to find the correct auth file, set in proxyCommand from ssh-resolve.
+export const setOrg = (args: yargs.ArgumentsCamelCase<SshProxyCommandArgs>) => {
+  if (args.org) {
+    process.env.P0_ORG = args.org;
+    if (args.debug) {
+      print2(`Using org from args: ${args.org}`);
+    }
+  }
+};
+
 const sshProxyAction = async (
   args: yargs.ArgumentsCamelCase<SshProxyCommandArgs>
 ) => {
+  setOrg(args);
+
   // Clean up any stale SSH config files before proceeding
   await cleanupStaleSshConfigs(args.debug);
 

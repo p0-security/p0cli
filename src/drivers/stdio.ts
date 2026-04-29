@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License along with @p0
  */
 import { sleep } from "../util";
 import { Ansi, AnsiSgr } from "./ansi";
+import { stderr } from "process";
 
 /** Used to output machine-readable text to stdout
  *
@@ -58,20 +59,26 @@ const Spin = {
 export const spinUntil = async <T>(message: string, promise: Promise<T>) => {
   let isDone = false;
   let ix = 0;
+  const isErrTty = stderr.isTTY;
+  if (!isErrTty) {
+    print2(message);
+  }
   // 'catch' here just prevents UncaughtExceptionError; errors are sent to caller
   // on function return
   void promise.finally(() => (isDone = true)).catch(() => {});
   while (!isDone) {
     await sleep(Spin.delayMs);
     if (isDone) break;
-    clear2();
-    process.stderr.write(
-      AnsiSgr.Green +
-        Spin.items[ix % Spin.items.length] +
-        " " +
-        message +
-        AnsiSgr.Reset
-    );
+    if (isErrTty) {
+      clear2();
+      process.stderr.write(
+        AnsiSgr.Green +
+          Spin.items[ix % Spin.items.length] +
+          " " +
+          message +
+          AnsiSgr.Reset
+      );
+    }
     ix++;
   }
   clear2();

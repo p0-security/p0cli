@@ -116,8 +116,10 @@ const ls = async (
   const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
+    const truncated = slice(data.items, 0, args.size);
+
     if (args.json) {
-      print1(JSON.stringify(data, null, 2));
+      print1(JSON.stringify({ ...data, items: truncated }, null, 2));
       return;
     }
 
@@ -141,7 +143,6 @@ const ls = async (
       ? "" // do not show who they are accessible to because we are displaying all items
       : `\nResources labeled with * are already accessible to ${accessibleTo}:`;
     print2(`Showing${truncationPart} ${label}${postfixPart}.${accessiblePart}`);
-    const truncated = slice(data.items, 0, args.size);
     const sortedItems = orderBy(truncated, "isPreexisting", "desc");
     const isSameValue = sortedItems.every((i) => !i.group && i.key === i.value);
     const maxLength = max(sortedItems.map((i) => i.key.length)) || 0;
