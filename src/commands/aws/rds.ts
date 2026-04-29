@@ -15,7 +15,7 @@ import { parseArn } from "../../plugins/aws/utils";
 import { DbPermissionSpec } from "../../plugins/db/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { exec, throwAssertNever } from "../../util";
+import { exec, osSafeCommand, throwAssertNever } from "../../util";
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./files";
@@ -39,10 +39,12 @@ type DbConfig = {
   "iam-write": Record<string, DatabaseConfig>;
 };
 
-type DbResourceKey = "mysql" | "pg2";
+const DbResourceKeys = ["mysql", "postgres"] as const;
+
+type DbResourceKey = (typeof DbResourceKeys)[number];
 
 type RdsArgs = yargs.ArgumentsCamelCase<{
-  arch: "mysql" | "pg";
+  arch: DbResourceKey;
   database?: string;
   debug?: boolean;
   instance?: string;
@@ -66,7 +68,7 @@ export const rds = (
           y
             .option("arch", {
               type: "string",
-              choices: ["mysql", "pg"] as const,
+              choices: DbResourceKeys,
               demandOption: true,
               describe: "Database architecture; use 'mysql' for MariaDB",
             })
@@ -92,15 +94,8 @@ export const rds = (
       )
   );
 
-const argvToResource = (argv: RdsArgs): DbResourceKey =>
-  argv.arch === "mysql"
-    ? "mysql"
-    : argv.arch === "pg"
-      ? "pg2"
-      : throwAssertNever(argv.arch);
-
 const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
-  const integration = argvToResource(argv);
+  const integration = argv.arch;
 
   const response = await request("request")<
     PermissionRequest<DbPermissionSpec>
@@ -143,7 +138,7 @@ const fetchConfig = async (
   const { instanceId } = access.permission;
   const install = await fetchIntegrationConfig<{ config: DbConfig }>(
     authn,
-    argvToResource(argv),
+    argv.arch,
     argv.debug
   );
   const config = install.config["iam-write"]?.[instanceId];
@@ -168,7 +163,7 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     dbConfig.port ??
     (argv.arch === "mysql"
       ? 3306
-      : argv.arch === "pg"
+      : argv.arch === "postgres"
         ? 5432
         : throwAssertNever(argv.arch));
 
@@ -205,9 +200,11 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
     profileName,
   ];
 
-  const result = await exec("aws", generateTokenArgs, { check: true });
+  const { command, args } = osSafeCommand("aws", generateTokenArgs);
 
-  const pgInstructions = `export PGPASSWORD="${result.stdout}"
+  const result = await exec(command, args, { check: true });
+
+  const pgInstructions = `export PGPASSWORD="${result.stdout.trim()}"
   
   psql "host=$\{RDS_HOST} port=${port} sslmode=verify-full sslrootcert=$\{RDS_SSL_CA} ${database ? `dbname=${database} ` : ""}user=${userName}"`;
 
@@ -226,7 +223,7 @@ On CloudShell, you can execute:
 
   export RDS_SSL_CA='/certs/global-bundle.pem'
   export RDS_HOST='${dbConfig.hostname}'
-  ${argv.arch === "mysql" ? mysqlInstructions : argv.arch === "pg" ? pgInstructions : throwAssertNever(argv.arch)}
+  ${argv.arch === "mysql" ? mysqlInstructions : argv.arch === "postgres" ? pgInstructions : throwAssertNever(argv.arch)}
 
 `);
 
