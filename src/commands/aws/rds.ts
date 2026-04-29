@@ -39,7 +39,9 @@ type DbConfig = {
   "iam-write": Record<string, DatabaseConfig>;
 };
 
-type DbResourceKey = "mysql" | "postgres";
+const DbResourceKeys = ["mysql", "postgres"] as const;
+
+type DbResourceKey = (typeof DbResourceKeys)[number];
 
 type RdsArgs = yargs.ArgumentsCamelCase<{
   arch: DbResourceKey;
@@ -66,7 +68,7 @@ export const rds = (
           y
             .option("arch", {
               type: "string",
-              choices: ["mysql", "postgres"] as const,
+              choices: DbResourceKeys,
               demandOption: true,
               describe: "Database architecture; use 'mysql' for MariaDB",
             })
