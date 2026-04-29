@@ -19,5 +19,5 @@ export type DbPermissionSpec = {
   };
   generated: object;
   permission: { instanceId: string };
-  type: "mysql" | "pg2";
+  type: "mysql" | "postgres";
 };
