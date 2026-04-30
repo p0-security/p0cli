@@ -215,8 +215,10 @@ export const request =
       throw data;
     };
 
+    const timeoutSleep = sleep(options?.timeOut ?? MAX_REQUEST_TIMEOUT);
+
     const timeoutOperation = async () => {
-      await sleep(options?.timeOut ?? MAX_REQUEST_TIMEOUT);
+      await timeoutSleep;
       throw ACCESS_WAIT_TIMEOUT_ERROR_MESSAGE;
     };
 
@@ -236,6 +238,8 @@ export const request =
         print2("Disconnected from server. Retry after 1 minutes.");
       }
       throw error;
+    } finally {
+      timeoutSleep.cancel();
     }
   };
 
