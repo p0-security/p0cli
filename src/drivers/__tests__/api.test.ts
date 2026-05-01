@@ -34,6 +34,7 @@ describe("fetchWithStreaming", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(mockAuthn.getToken).mockResolvedValue("mock-token");
     vi.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
   });
   afterEach(() => {
