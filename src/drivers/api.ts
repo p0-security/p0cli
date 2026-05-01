@@ -31,7 +31,7 @@ const sshAuditUrl = (tenant: string) =>
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 const requestStatusUrl = (tenant: string, requestId: string) =>
-  `${commandUrl(tenant)}/${requestId}/poll`;
+  `${commandUrl(tenant)}${requestId}/poll`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
