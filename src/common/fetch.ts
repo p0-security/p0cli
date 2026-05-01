@@ -18,13 +18,21 @@ export const urlEncode = (data: Record<string, string>) =>
 export const validateResponse = async (response: Response) => {
   if (response.ok) return response;
 
-  throw new Error(fetchErrorMessage(
-    response.url.split("?")[0], 
-    response.status, 
-    response.statusText, 
-    await response.text()))
+  throw new Error(
+    fetchErrorFormatter(
+      response.url.split("?")[0],
+      response.status,
+      response.statusText,
+      await response.text()
+    )
+  );
 };
 
-export const fetchErrorMessage = (url:string|undefined,status:number, statusText:string, body:string) => {
-  return `Error in fetch request to ${url}:\n${status} ${statusText}\n\n${body}`
-}
+export const fetchErrorFormatter = (
+  url: string | undefined,
+  status: number,
+  statusText: string,
+  body: string
+) => {
+  return `Error in fetch request to ${url}:\n${status} ${statusText}\n\n${body}`;
+};
