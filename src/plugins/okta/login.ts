@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { OIDC_HEADERS } from "../../common/auth/oidc";
-import { urlEncode, validateResponse } from "../../common/fetch";
+import { fetchErrorMessage, urlEncode, validateResponse } from "../../common/fetch";
 import { deleteIdentity } from "../../drivers/auth";
 import { print2 } from "../../drivers/stdio";
 import {
@@ -97,9 +97,11 @@ const fetchSsoWebToken = async (
           throw "Your Okta session has expired. Please log out of Okta in your browser, and re-execute your p0 command to reauthenticate.";
         }
       }
+      // Handle all other 400s
+      throw new Error(fetchErrorMessage(response.url.split("?")[0], response.status, response.statusText, JSON.stringify(data)))
     }
 
-    // Throw a friendly error message if response is invalid
+    // Handle all other non-ok responses
     await validateResponse(response);
   }
 
