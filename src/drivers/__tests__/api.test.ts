@@ -68,7 +68,7 @@ describe("fetchWithStreaming", () => {
   };
   it("should validate request polling url", async () => {
     expect(requestStatusUrl("test", "temp1")).toMatchInlineSnapshot(
-      `"http://localhost:8088/o/test/command/temp1/poll"`
+      `"${defaultConfig.appUrl}/o/test/command/temp1/poll"`
     );
   });
   it("should yield data from streaming response", async () => {
