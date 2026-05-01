@@ -8,8 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import * as config from "../../drivers/config";
+import { defaultConfig } from "../../drivers/env";
 import { Authn } from "../../types/identity";
-import { fetchWithStreaming } from "../api";
+import { fetchWithStreaming, requestStatusUrl } from "../api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
@@ -32,6 +34,8 @@ describe("fetchWithStreaming", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(mockAuthn.getToken).mockResolvedValue("mock-token");
+    vi.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
   });
   afterEach(() => {
     // Clear all mocks after each test
@@ -63,7 +67,11 @@ describe("fetchWithStreaming", () => {
       },
     };
   };
-
+  it("should validate request polling url", async () => {
+    expect(requestStatusUrl("test", "temp1")).toMatchInlineSnapshot(
+      `"${defaultConfig.appUrl}/o/test/command/temp1/poll"`
+    );
+  });
   it("should yield data from streaming response", async () => {
     const mockFetch = vi.spyOn(global, "fetch").mockResolvedValue(
       createMockStreamingResponse([
