@@ -189,12 +189,32 @@ const getServer = async (authn: Authn, argv: AddMcpServerArgs) =>
     method: "GET",
   });
 
+const getClaudeFile = async () => {
+  const os = getOperatingSystem();
+  switch (os) {
+    case "mac":
+      return (await promisify(exec)("which claude")).stdout.trim();
+    case "win": {
+      const lines = (await promisify(exec)("where.exe claude")).stdout
+        .split("\r\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      return lines.find((l) => l.endsWith(".cmd")) ?? lines[0] ?? "";
+    }
+    case "linux":
+    case "unknown":
+      throw `Unsupported operating system: ${os}`;
+    default:
+      throw assertNever(os);
+  }
+};
+
 const provisionServer = async (
   argv: AddMcpServerArgs,
   { client }: CreateMcpClientResp,
   { server }: GetMcpServerResp
 ) => {
-  const claudeFile = (await promisify(exec)("which claude")).stdout.trim();
+  const claudeFile = await getClaudeFile();
   assert(client.secret, "No client secret");
   debug(argv, "Server", server);
   const args = [
