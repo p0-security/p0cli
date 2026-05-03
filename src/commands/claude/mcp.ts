@@ -13,6 +13,7 @@ import { authenticate } from "../../drivers/auth";
 import { postfixPath } from "../../drivers/auth/path";
 import { debug, print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
+import { assertNever, getOperatingSystem } from "../../util";
 import assert from "node:assert";
 import { exec, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -120,9 +121,24 @@ const handleAddMcpServer = async (argv: AddMcpServerArgs) => {
   await provisionServer(argv, client, server);
 };
 
+const getHostname = async () => {
+  const os = getOperatingSystem();
+  switch (os) {
+    case "mac":
+      return (await promisify(exec)("scutil --get LocalHostName")).stdout;
+    case "win":
+      return (await promisify(exec)("hostname")).stdout;
+    case "linux":
+    case "unknown":
+      throw `Unsupported operating system: ${os}`;
+    default:
+      throw assertNever(os);
+  }
+};
+
 const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
   const version = (await promisify(exec)("claude --version")).stdout;
-  const hostname = (await promisify(exec)("scutil --get LocalHostName")).stdout;
+  const hostname = await getHostname();
 
   const clientData = await authFetch<CreateMcpClientResp>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/mcp/clients`,
