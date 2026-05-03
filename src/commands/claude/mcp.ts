@@ -221,7 +221,7 @@ const provisionServer = async (
     "mcp",
     "add-json",
     server.id,
-    JSON.stringify({
+    `'${JSON.stringify({
       type: "http",
       url: server.url,
       oauth: {
@@ -229,7 +229,7 @@ const provisionServer = async (
         clientSecret: client.secret,
         callbackPort: Number(client.redirectUri.split(":").at(-1)!),
       },
-    }),
+    })}'`,
     ...(argv.scope ? ["--scope", argv.scope] : []),
     "--client-secret",
   ];
