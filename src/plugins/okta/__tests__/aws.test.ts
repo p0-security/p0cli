@@ -146,10 +146,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
 
   it("should detect the GovCloud partition from the SAML and pass it through", async () => {
     vi.mocked(parseXml).mockReturnValue(
-      createMockSamlWithRoles(
-        ["p0-grants/P0GrantsRole12"],
-        "aws-us-gov"
-      )
+      createMockSamlWithRoles(["p0-grants/P0GrantsRole12"], "aws-us-gov")
     );
 
     const result = await assumeRoleWithOktaSaml(
@@ -167,5 +164,4 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       })
     );
   });
-
 });

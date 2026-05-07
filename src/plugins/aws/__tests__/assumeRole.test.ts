@@ -90,5 +90,4 @@ describe("assumeRoleWithSaml()", () => {
       "arn:aws-us-gov:iam::145302212528:saml-provider/P0GovStg"
     );
   });
-
 });

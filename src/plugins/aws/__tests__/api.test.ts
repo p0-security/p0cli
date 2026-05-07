@@ -17,9 +17,7 @@ describe("arnPrefix()", () => {
   });
 
   it("uses the commercial partition explicitly", () => {
-    expect(arnPrefix("123456789012", "aws")).toBe(
-      "arn:aws:iam::123456789012"
-    );
+    expect(arnPrefix("123456789012", "aws")).toBe("arn:aws:iam::123456789012");
   });
 
   it("emits a GovCloud ARN prefix", () => {
@@ -41,8 +39,6 @@ describe("stsEndpoint()", () => {
   });
 
   it("falls back to the commercial endpoint for unknown partitions", () => {
-    expect(stsEndpoint("aws-iso")).toBe(
-      "https://sts.us-east-1.amazonaws.com"
-    );
+    expect(stsEndpoint("aws-iso")).toBe("https://sts.us-east-1.amazonaws.com");
   });
 });
