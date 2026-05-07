@@ -10,4 +10,19 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 export const AWS_API_VERSION = "2011-06-15";
 
-export const arnPrefix = (account: string) => `arn:aws:iam::${account}`;
+export const arnPrefix = (account: string, partition: string = "aws") =>
+  `arn:${partition}:iam::${account}`;
+
+/** Returns a regional STS endpoint for the given AWS partition.
+ *
+ * Regional endpoints issue v2 tokens valid in all regions of the partition.
+ * Falls back to commercial us-east-1 for unknown partitions. */
+export const stsEndpoint = (partition: string): string => {
+  switch (partition) {
+    case "aws-us-gov":
+      return "https://sts.us-gov-west-1.amazonaws.com";
+    case "aws":
+    default:
+      return "https://sts.us-east-1.amazonaws.com";
+  }
+};

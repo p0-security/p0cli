@@ -52,7 +52,10 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
     },
   };
 
-  const createMockSamlWithRoles = (roles: string[]) => ({
+  const createMockSamlWithRoles = (
+    roles: string[],
+    partition: string = "aws"
+  ) => ({
     "saml2p:Response": {
       "saml2:Assertion": {
         "saml2:AttributeStatement": {
@@ -63,7 +66,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
               },
               "saml2:AttributeValue": roles.map(
                 (r) =>
-                  `arn:aws:iam::${MOCK_ACCOUNT_ID}:saml-provider/test,arn:aws:iam::${MOCK_ACCOUNT_ID}:role/${r}`
+                  `arn:${partition}:iam::${MOCK_ACCOUNT_ID}:saml-provider/test,arn:${partition}:iam::${MOCK_ACCOUNT_ID}:role/${r}`
               ),
             },
           ],
@@ -124,4 +127,45 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
     expect(fetchSamlAssertionForAws).toHaveBeenCalledTimes(2);
     expect(parseXml).toHaveBeenCalledTimes(2);
   });
+
+  it("should pass the commercial partition to assumeRoleWithSaml", async () => {
+    vi.mocked(parseXml).mockReturnValue(
+      createMockSamlWithRoles(["p0-grants/P0GrantsRole1"], "aws")
+    );
+
+    await assumeRoleWithOktaSaml(
+      mockAuthn,
+      { role: "p0-grants/P0GrantsRole1" },
+      false
+    );
+
+    expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+      expect.objectContaining({ partition: "aws" })
+    );
+  });
+
+  it("should detect the GovCloud partition from the SAML and pass it through", async () => {
+    vi.mocked(parseXml).mockReturnValue(
+      createMockSamlWithRoles(
+        ["p0-grants/P0GrantsRole12"],
+        "aws-us-gov"
+      )
+    );
+
+    const result = await assumeRoleWithOktaSaml(
+      mockAuthn,
+      { role: "p0-grants/P0GrantsRole12" },
+      false
+    );
+
+    expect(result).toBeDefined();
+    expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        account: MOCK_ACCOUNT_ID,
+        partition: "aws-us-gov",
+        role: "p0-grants/P0GrantsRole12",
+      })
+    );
+  });
+
 });
