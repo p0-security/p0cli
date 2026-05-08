@@ -34,7 +34,7 @@ describe("stsEndpoint()", () => {
 
   it("returns a GovCloud STS endpoint for aws-us-gov", () => {
     expect(stsEndpoint("aws-us-gov")).toBe(
-      "https://sts.us-gov-west-1.amazonaws.com"
+      "https://sts.us-gov-east-1.amazonaws.com"
     );
   });
 
