@@ -26,9 +26,9 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const RETRY_MULTIPLIER = 2.0;
 const MAX_RETRY_DELAY_MS = 30000;
 
-// Matches IAM role ARNs in any AWS partition (commercial, GovCloud, China, etc.)
+// Matches IAM role ARNs in known AWS partitions (commercial or GovCloud).
 // Capture group 1: partition; capture group 2: account ID.
-const ROLE_ARN_PATTERN = /^arn:(aws[\w-]*):iam::([^:]+):role\//;
+const ROLE_ARN_PATTERN = /^arn:(aws|aws-us-gov):iam::([^:]+):role\//;
 
 /** Extracts all roles from a SAML assertion */
 const rolesFromSaml = (account: string, saml: string) => {

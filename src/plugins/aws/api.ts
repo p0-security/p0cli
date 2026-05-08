@@ -20,7 +20,7 @@ export const arnPrefix = (account: string, partition: string = "aws") =>
 export const stsEndpoint = (partition: string): string => {
   switch (partition) {
     case "aws-us-gov":
-      return "https://sts.us-gov-west-1.amazonaws.com";
+      return "https://sts.us-gov-east-1.amazonaws.com";
     case "aws":
     default:
       return "https://sts.us-east-1.amazonaws.com";
