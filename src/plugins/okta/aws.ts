@@ -26,6 +26,10 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const RETRY_MULTIPLIER = 2.0;
 const MAX_RETRY_DELAY_MS = 30000;
 
+// Matches IAM role ARNs in known AWS partitions (commercial or GovCloud).
+// Capture group 1: partition; capture group 2: account ID.
+const ROLE_ARN_PATTERN = /^arn:(aws|aws-us-gov):iam::([^:]+):role\//;
+
 /** Extracts all roles from a SAML assertion */
 const rolesFromSaml = (account: string, saml: string) => {
   const samlText = Buffer.from(saml, "base64").toString("ascii");
@@ -43,10 +47,16 @@ const rolesFromSaml = (account: string, saml: string) => {
   const arns = (
     flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
   )?.map((r) => r.split(",")[1]!);
-  const roles = arns
-    .filter((r) => r.startsWith(`arn:aws:iam::${account}:role/`))
-    .map((r) => r.split("/").slice(1).join("/"));
-  return { arns, roles };
+  const matched = arns
+    .map((arn) => ({ arn, match: ROLE_ARN_PATTERN.exec(arn) }))
+    .filter(
+      (x): x is { arn: string; match: RegExpExecArray } =>
+        x.match !== null && x.match[2] === account
+    );
+  // Partition must flow to STS so we hit the right endpoint and emit ARNs in the matching partition.
+  const partition = matched[0]?.match[1] ?? "aws";
+  const roles = matched.map(({ arn }) => arn.split("/").slice(1).join("/"));
+  return { arns, roles, partition };
 };
 
 const isFederatedLogin = (
@@ -97,12 +107,13 @@ export const assumeRoleWithOktaSaml = async (
             args.accountId,
             debug
           );
-          const { roles } = rolesFromSaml(account, samlResponse);
+          const { roles, partition } = rolesFromSaml(account, samlResponse);
           if (!roles.includes(args.role)) {
             throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
           }
           return await assumeRoleWithSaml({
             account,
+            partition,
             role: args.role,
             saml: {
               providerName: config.login.provider.identityProvider,
