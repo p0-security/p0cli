@@ -82,7 +82,7 @@ describe("assumeRoleWithSaml()", () => {
     });
 
     const { url, params } = captureCall();
-    expect(url).toBe("https://sts.us-gov-west-1.amazonaws.com");
+    expect(url).toBe("https://sts.us-gov-east-1.amazonaws.com");
     expect(params.RoleArn).toBe(
       "arn:aws-us-gov:iam::145302212528:role/p0-grants/P0GrantsRole12"
     );
