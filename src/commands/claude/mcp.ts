@@ -129,6 +129,7 @@ const getHostname = async () => {
     case "win":
       return (await promisify(exec)("hostname")).stdout;
     case "linux":
+      return (await promisify(exec)("hostname")).stdout;
     case "unknown":
       throw `Unsupported operating system: ${os}`;
     default:
@@ -192,6 +193,7 @@ const getServer = async (authn: Authn, argv: AddMcpServerArgs) =>
 const getClaudeFile = async () => {
   const os = getOperatingSystem();
   switch (os) {
+    case "linux":
     case "mac":
       return (await promisify(exec)("which claude")).stdout.trim();
     case "win": {
@@ -201,7 +203,6 @@ const getClaudeFile = async () => {
         .filter(Boolean);
       return lines.find((l) => l.endsWith(".cmd")) ?? lines[0] ?? "";
     }
-    case "linux":
     case "unknown":
       throw `Unsupported operating system: ${os}`;
     default:
