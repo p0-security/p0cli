@@ -11,15 +11,22 @@ You should have received a copy of the GNU General Public License along with @p0
 import { P0_PATH } from "../../util";
 import * as path from "path";
 
-export const getIdentityFilePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `identity-${process.env.P0_ORG}.json`)
-    : path.join(P0_PATH, "identity.json");
+export const postfixPath = (fname: string) => {
+  if (!process.env.P0_ORG) {
+    return path.join(P0_PATH, fname);
+  }
 
-export const getIdentityCachePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `cache-${process.env.P0_ORG}`)
-    : path.join(P0_PATH, "cache");
+  const parsedPath = path.parse(fname);
+  return path.join(
+    P0_PATH,
+    parsedPath.dir,
+    `${parsedPath.name}-${process.env.P0_ORG}${parsedPath.ext}`
+  );
+};
+
+export const getIdentityFilePath = () => postfixPath("identity.json");
+
+export const getIdentityCachePath = () => postfixPath("cache");
 
 export const getConfigFilePath = () =>
   process.env.P0_ORG
