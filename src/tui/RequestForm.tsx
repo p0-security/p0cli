@@ -442,10 +442,16 @@ const BlockSummary: React.FC<BlockRowProps> = ({ block, value }) => {
     }
     return <Text>{str}</Text>;
   }
-  // static-select / dynamic-select
-  const choice = value as WebInputChoice | undefined;
-  if (!choice) {
+  // static-select / dynamic-select: state holds the value string (matching
+  // the WebModalState contract the backend expects); look up the friendly
+  // label from the block's options.
+  if (value === undefined || value === null || value === "") {
     return <Text dimColor>{block.placeholder || "(none)"}</Text>;
+  }
+  const valueStr = String(value);
+  const choice = block.options.find((o) => o.value === valueStr);
+  if (!choice) {
+    return <Text>{valueStr}</Text>;
   }
   return (
     <Text>
@@ -533,9 +539,9 @@ const StaticSelectEditor: React.FC<
 > = ({ block, value, onCommit, onCancelEdit }) => {
   const options = block.options;
   const initialIdx = (() => {
-    const current = value as WebInputChoice | undefined;
-    if (!current) return 0;
-    const i = options.findIndex((o) => o.value === current.value);
+    if (value === undefined || value === null) return 0;
+    const valueStr = String(value);
+    const i = options.findIndex((o) => o.value === valueStr);
     return i >= 0 ? i : 0;
   })();
   const [idx, setIdx] = useState(initialIdx);
@@ -557,7 +563,7 @@ const StaticSelectEditor: React.FC<
     }
     if (key.return) {
       const choice = options[idx];
-      if (choice) onCommit(choice);
+      if (choice) onCommit(choice.value);
     }
   });
 
@@ -587,12 +593,12 @@ const SUGGESTION_DEBOUNCE_MS = 200;
 
 const DynamicSelectEditor: React.FC<
   BlockRowProps & { block: WebDynamicSelectBlock }
-> = ({ authn, block, value, values, debug, onCommit, onCancelEdit }) => {
-  const initial = value as WebInputChoice | undefined;
+> = ({ authn, block, values, debug, onCommit, onCancelEdit }) => {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<WebInputChoice[]>(
-    block.options.length > 0 ? block.options : initial ? [initial] : []
-  );
+  // Form state holds the value string; seed the dropdown with whatever
+  // options the form already shipped down (the new fetch will replace them
+  // shortly via the debounced effect).
+  const [results, setResults] = useState<WebInputChoice[]>(block.options);
   const [loading, setLoading] = useState(false);
   const [idx, setIdx] = useState(0);
   const debouncedQuery = useDebouncedValue(query, SUGGESTION_DEBOUNCE_MS);
@@ -636,7 +642,7 @@ const DynamicSelectEditor: React.FC<
     }
     if (key.return) {
       const choice = results[idx];
-      if (choice) onCommit(choice);
+      if (choice) onCommit(choice.value);
     }
   });
 
