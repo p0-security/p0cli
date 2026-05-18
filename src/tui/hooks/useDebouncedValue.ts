@@ -8,21 +8,15 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { runInteractive } from "../interactive";
-import { request, requestArgs } from "./shared/request";
-import yargs from "yargs";
+import { useEffect, useState } from "react";
 
-export const requestCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[]; debug?: boolean }>(
-    "request [arguments..]",
-    "Manually request permissions on a resource",
-    requestArgs,
-    async (args) => {
-      // Bare `p0 request` (no arguments) drops into the interactive form.
-      if (!args.arguments || args.arguments.length === 0) {
-        await runInteractive({ entry: "request", debug: args.debug });
-        return;
-      }
-      await request("request")(args);
-    }
-  );
+export const useDebouncedValue = <T>(value: T, delayMs: number): T => {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(handle);
+  }, [value, delayMs]);
+
+  return debounced;
+};

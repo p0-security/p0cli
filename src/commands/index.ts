@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { getHelpMessage } from "../drivers/config";
 import { print1, print2 } from "../drivers/stdio";
+import { runInteractive } from "../interactive";
 import { checkVersion } from "../middlewares/version";
 import { exitProcess, markSpanError } from "../opentelemetry/otel-helpers";
 import { p0VersionInfo, stringifyVersionInfo } from "../version";
@@ -73,6 +74,31 @@ const buildArgv = async () => {
   return argv;
 };
 
+const withInteractiveEntry = (argv: yargs.Argv) =>
+  argv
+    .option("interactive", {
+      alias: "i",
+      type: "boolean",
+      default: false,
+      describe: "Open the interactive main menu",
+    })
+    .command(
+      "$0",
+      "Open the interactive main menu (when -i / --interactive is set)",
+      {},
+      async (args) => {
+        if (args.interactive) {
+          await runInteractive({
+            entry: "menu",
+            debug: Boolean(args.debug),
+          });
+          return;
+        }
+        argv.showHelp();
+        exitProcess(1);
+      }
+    );
+
 // Skip the version check for these non-interactive commands
 const skipVersionCheckFor = ["ssh-proxy", "ssh-resolve"];
 
@@ -91,11 +117,9 @@ async function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
 }
 
 export const getCli = async () =>
-  commands
-    .reduce((m, c) => c(m), await buildArgv())
+  withInteractiveEntry(commands.reduce((m, c) => c(m), await buildArgv()))
     .middleware(conditionalCheckVersion)
     .strict()
-    .demandCommand(1)
     .fail((message, error, yargs) => {
       // Mark active span as error if it exists
       // Wrapped in try/catch - telemetry must never break the CLI

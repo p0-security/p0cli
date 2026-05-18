@@ -10,6 +10,15 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { regenerateWithSleep, retryWithSleep } from "../common/retry";
 import { Authn } from "../types/identity";
+import {
+  GetRequestModalRequestBody,
+  GetRequestModalResponseBody,
+  GetSuggestionsRequestBody,
+  GetSuggestionsResponseBody,
+  SubmitRequestRequestBody,
+  SubmitRequestResponseBody,
+  WebModalState,
+} from "../types/web-request";
 import { getUserAgent } from "../version";
 import { getAppUrl, getTenantConfig } from "./config";
 import { RETRY_OPTIONS } from "./constants";
@@ -35,6 +44,27 @@ export const requestStatusUrl = (tenant: string, requestId: string) =>
   `${commandUrl(tenant)}${requestId}/poll`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
+
+const webRequestsUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/web-requests`;
+
+const permissionRequestsUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/permission-requests`;
+
+export type MyGrant = {
+  requestId: string;
+  type: string;
+  access: string;
+  status: string;
+  reason?: string;
+  requestor: string;
+  principal: string;
+  requestedTimestamp: number;
+  grantTimestamp?: number;
+  expiryTimestamp?: number;
+  permission: Record<string, unknown>;
+  delegation: Record<string, unknown>;
+};
 
 export const fetchOrgData = async <T>(orgId: string) =>
   baseFetch<T>({ url: tenantOrgUrl(orgId), method: "GET" });
@@ -71,6 +101,87 @@ export const fetchStreamingStatus = async function* <T>(
     debug
   );
 };
+
+/**
+ * Fetches the form schema for the interactive request modal, given the
+ * current state of user-filled values. The backend re-evaluates which blocks
+ * to render every time a field with `dispatch: true` changes.
+ */
+export const fetchRequestForm = async (
+  authn: Authn,
+  values: WebModalState,
+  debug?: boolean
+) => {
+  const body: GetRequestModalRequestBody = { values };
+  return authFetch<GetRequestModalResponseBody>(authn, {
+    url: `${webRequestsUrl(authn.identity.org.slug)}/request-modal`,
+    method: "POST",
+    body: JSON.stringify(body),
+    debug,
+  });
+};
+
+/**
+ * Fetches suggestion options for a dynamic-select block, given a search
+ * query. Backed by the same lister registry the web modal uses.
+ */
+export const fetchSuggestions = async (
+  authn: Authn,
+  args: { listerId: string; query: string; values: WebModalState },
+  debug?: boolean
+) => {
+  const body: GetSuggestionsRequestBody = args;
+  return authFetch<GetSuggestionsResponseBody>(authn, {
+    url: `${webRequestsUrl(authn.identity.org.slug)}/suggestions`,
+    method: "POST",
+    body: JSON.stringify(body),
+    debug,
+  });
+};
+
+/**
+ * Submits the filled-out form. Returns one detail-page URL per created
+ * request. Request IDs (the last path segment of each URL) are compatible
+ * with `requestStatusUrl` for streaming status polls.
+ */
+export const submitWebRequest = async (
+  authn: Authn,
+  values: WebModalState,
+  debug?: boolean
+) => {
+  const body: SubmitRequestRequestBody = { values };
+  return authFetch<SubmitRequestResponseBody>(authn, {
+    url: `${webRequestsUrl(authn.identity.org.slug)}/submit`,
+    method: "POST",
+    body: JSON.stringify(body),
+    debug,
+  });
+};
+
+/**
+ * Lists active grants where the calling user is the principal (the one
+ * holding the access). Returned by the interactive CLI's "view granted"
+ * screen and the relinquish flow.
+ */
+export const fetchMyGrants = async (authn: Authn, debug?: boolean) =>
+  authFetch<MyGrant[]>(authn, {
+    url: `${permissionRequestsUrl(authn.identity.org.slug)}/my-grants`,
+    method: "GET",
+    debug,
+  });
+
+/** Voluntarily revokes a grant the caller currently holds. */
+export const relinquishGrant = async (
+  authn: Authn,
+  requestId: string,
+  debug?: boolean
+) =>
+  authFetch<{ message: string }>(authn, {
+    url: `${permissionRequestsUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}/relinquish`,
+    method: "POST",
+    body: JSON.stringify({}),
+    debug,
+  });
 
 export const fetchCommand = async <T>(
   authn: Authn,
