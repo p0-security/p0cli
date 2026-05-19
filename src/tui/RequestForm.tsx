@@ -15,6 +15,7 @@ import {
 } from "../drivers/api.js";
 import { Authn } from "../types/identity.js";
 import {
+  RESOURCE_SELECTOR_BLOCK_ID,
   WebAction,
   WebBlock,
   WebDynamicSelectBlock,
@@ -25,7 +26,7 @@ import {
   WebToggleBlock,
 } from "../types/web-request.js";
 import { useDebouncedValue } from "./hooks/useDebouncedValue.js";
-import { Box, Spacer, Text, useInput } from "ink";
+import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import React, {
@@ -39,14 +40,12 @@ import React, {
 type RequestFormProps = {
   authn: Authn;
   debug?: boolean;
-  /** Called with the request IDs returned by the server, after the user
-   * dismisses the post-submit confirmation screen. */
+  /** Called with the request IDs returned by the server immediately after a
+   *  successful submit; the parent transitions to the polling view. */
   onSubmitted: (requestIds: string[]) => void;
   /** Called when the user cancels before submit. */
   onCancel: () => void;
 };
-
-type SubmittedResult = { ids: string[]; urls: string[] };
 
 type FormState =
   | {
@@ -62,6 +61,9 @@ type Mode =
   | { kind: "edit"; blockId: string }
   | { kind: "navigate" }
   | { kind: "submitting" };
+
+/** Width of the label column. Labels longer than this will wrap. */
+const LABEL_WIDTH = 26;
 
 const NAV_HINT =
   "↑/↓ navigate  •  Enter to edit  •  Tab next  •  Esc cancel  •  Ctrl+C quit";
@@ -79,7 +81,6 @@ export const RequestForm: React.FC<RequestFormProps> = ({
   const [state, setState] = useState<FormState>({ kind: "loading" });
   const [mode, setMode] = useState<Mode>({ kind: "navigate" });
   const [focusIndex, setFocusIndex] = useState(0);
-  const [submitted, setSubmitted] = useState<SubmittedResult | null>(null);
 
   // Latest in-flight form fetch id; lets us discard stale responses.
   const fetchSeqRef = useRef(0);
@@ -99,6 +100,32 @@ export const RequestForm: React.FC<RequestFormProps> = ({
           setState({ kind: "error", error: res.error });
           return;
         }
+
+        // Auto-pick the first resource if none is set yet. This skips the
+        // explicit "Resource" step in the form: the resource block is then
+        // hidden from the focusable field list.
+        const resourceBlock = res.blocks.find(
+          (b) =>
+            b.id === RESOURCE_SELECTOR_BLOCK_ID && b.type === "static-select"
+        ) as WebStaticSelectBlock | undefined;
+        if (
+          !nextValues[RESOURCE_SELECTOR_BLOCK_ID] &&
+          resourceBlock?.options?.length
+        ) {
+          const firstResource = resourceBlock.options[0];
+          if (firstResource) {
+            const withResource = {
+              ...nextValues,
+              [RESOURCE_SELECTOR_BLOCK_ID]: firstResource.value,
+            };
+            setValues(withResource);
+            // Re-fetch with the resource set; bypasses rendering the
+            // intermediate form that contains just the Resource block.
+            void refreshFormRef.current(withResource);
+            return;
+          }
+        }
+
         // Adopt server-provided initial/preselect values for any block we have
         // no user-set value for yet.
         const merged: WebModalState = { ...nextValues };
@@ -132,6 +159,11 @@ export const RequestForm: React.FC<RequestFormProps> = ({
     [authn, debug]
   );
 
+  // Stable ref so refreshForm can call itself recursively (for the auto-pick
+  // resource re-fetch) without recreating the callback on every render.
+  const refreshFormRef = useRef(refreshForm);
+  refreshFormRef.current = refreshForm;
+
   // Initial load. Intentionally fire-and-forget on mount only — refreshForm
   // changes on every authn/debug change, which would re-fetch the form.
   const didInitialLoad = useRef(false);
@@ -148,6 +180,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({
     ): b is Exclude<WebBlock, { type: "alert" }> => b.type !== "alert";
     const blockItems: FocusItem[] = state.blocks
       .filter((b) => !b.hidden)
+      .filter((b) => b.id !== RESOURCE_SELECTOR_BLOCK_ID)
       .filter(isFormBlock)
       .map((b) => ({ kind: "block", block: b }));
     const actionItems: FocusItem[] = state.actions.map((a) => ({
@@ -184,7 +217,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({
         return;
       }
       const ids = res.urls.map((u) => u.split("/").pop() ?? "").filter(Boolean);
-      setSubmitted({ ids, urls: res.urls });
+      onSubmitted(ids);
     } catch (err) {
       setState({
         kind: "error",
@@ -192,15 +225,9 @@ export const RequestForm: React.FC<RequestFormProps> = ({
       });
       setMode({ kind: "navigate" });
     }
-  }, [authn, debug, values]);
+  }, [authn, debug, onSubmitted, values]);
 
   useInput((input, key) => {
-    if (submitted) {
-      if (key.return || key.escape || input === "q") {
-        onSubmitted(submitted.ids);
-      }
-      return;
-    }
     if (mode.kind !== "navigate") return;
     if (key.upArrow) {
       setFocusIndex((i) =>
@@ -231,26 +258,6 @@ export const RequestForm: React.FC<RequestFormProps> = ({
       }
     }
   });
-
-  if (submitted) {
-    return (
-      <Box flexDirection="column" paddingX={1}>
-        <Text color="green" bold>
-          ✓ Request submitted
-        </Text>
-        <Box flexDirection="column" marginTop={1}>
-          {submitted.urls.map((u) => (
-            <Text key={u} dimColor>
-              {u}
-            </Text>
-          ))}
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>Press Enter or Esc to exit.</Text>
-        </Box>
-      </Box>
-    );
-  }
 
   if (state.kind === "loading") {
     return (
@@ -377,15 +384,19 @@ const ActionRow: React.FC<{ action: WebAction; focused: boolean }> = ({
   action,
   focused,
 }) => {
-  const color = focused
-    ? action.type === "submit"
-      ? "green"
-      : "yellow"
-    : undefined;
+  const isSubmit = action.type === "submit";
   return (
     <Box marginTop={1}>
-      <Text color={color} bold={focused}>
-        {focused ? "❯ " : "  "}[{action.label}]
+      <Box width={2}>
+        <Text color="cyan" bold>
+          {focused ? "❯" : " "}
+        </Text>
+      </Box>
+      <Text
+        color={focused ? (isSubmit ? "green" : "yellow") : undefined}
+        bold={focused}
+      >
+        [ {action.label} ]
       </Text>
     </Box>
   );
@@ -405,24 +416,64 @@ type BlockRowProps = {
 
 const BlockRow: React.FC<BlockRowProps> = (props) => {
   const { block, focused, editing } = props;
-  const pointer = focused ? "❯ " : "  ";
-  const labelColor = focused ? "cyan" : undefined;
-  const required = "required" in block && block.required ? " *" : "";
+  const requiresInlineEditor =
+    editing && (block.type === "input" || block.type === "toggle");
+  const requiresExpandedEditor =
+    editing &&
+    (block.type === "static-select" || block.type === "dynamic-select");
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginBottom={0}>
+      {/* The label/value row: ❯  LABEL *           value/editor */}
       <Box>
-        <Text color={labelColor} bold={focused}>
-          {pointer}
-          {block.label}
-          {required}
-        </Text>
+        <Box width={2}>
+          <Text color="cyan" bold>
+            {focused ? "❯" : " "}
+          </Text>
+        </Box>
+        <Box width={LABEL_WIDTH}>
+          <BlockLabel block={block} focused={focused} />
+        </Box>
+        <Box flexGrow={1}>
+          {requiresInlineEditor ? (
+            <BlockInlineEditor {...props} />
+          ) : requiresExpandedEditor ? (
+            <Text dimColor italic>
+              ─ editing ─
+            </Text>
+          ) : (
+            <BlockSummary {...props} />
+          )}
+        </Box>
       </Box>
-      <Box marginLeft={2} flexDirection="column">
-        {editing ? <BlockEditor {...props} /> : <BlockSummary {...props} />}
-        {block.hint && !editing ? <Text dimColor>{block.hint}</Text> : null}
-      </Box>
+      {/* Expanded editor area for selects sits underneath the row. */}
+      {requiresExpandedEditor ? (
+        <Box marginLeft={2 + 2} marginTop={0}>
+          <BlockExpandedEditor {...props} />
+        </Box>
+      ) : null}
+      {block.hint && !editing ? (
+        <Box marginLeft={2 + LABEL_WIDTH}>
+          <Text dimColor>{block.hint}</Text>
+        </Box>
+      ) : null}
     </Box>
+  );
+};
+
+const BlockLabel: React.FC<{
+  block: Exclude<WebBlock, { type: "alert" }>;
+  focused: boolean;
+}> = ({ block, focused }) => {
+  const required = "required" in block && block.required;
+  const labelText = (block.label ?? "").toUpperCase();
+  return (
+    <Text>
+      <Text color={focused ? "cyan" : "gray"} bold={focused}>
+        {labelText}
+      </Text>
+      {required ? <Text color="yellow"> *</Text> : null}
+    </Text>
   );
 };
 
@@ -431,22 +482,29 @@ const BlockSummary: React.FC<BlockRowProps> = ({ block, value }) => {
     const set = value === true;
     return (
       <Text>
-        {set ? "[x]" : "[ ]"} {block.placeholder || block.label}
+        <Text color={set ? "green" : undefined}>{set ? "[x]" : "[ ]"}</Text>
+        {" " + (block.placeholder || block.label || "")}
       </Text>
     );
   }
   if (block.type === "input") {
     const str = typeof value === "string" ? value : "";
     if (!str) {
-      return <Text dimColor>{block.placeholder || "(empty)"}</Text>;
+      return (
+        <Text dimColor italic>
+          {block.placeholder || "(empty)"}
+        </Text>
+      );
     }
     return <Text>{str}</Text>;
   }
-  // static-select / dynamic-select: state holds the value string (matching
-  // the WebModalState contract the backend expects); look up the friendly
-  // label from the block's options.
+  // static-select / dynamic-select
   if (value === undefined || value === null || value === "") {
-    return <Text dimColor>{block.placeholder || "(none)"}</Text>;
+    return (
+      <Text dimColor italic>
+        {block.placeholder || "(none)"}
+      </Text>
+    );
   }
   const valueStr = String(value);
   const choice = block.options.find((o) => o.value === valueStr);
@@ -463,18 +521,20 @@ const BlockSummary: React.FC<BlockRowProps> = ({ block, value }) => {
   );
 };
 
-const BlockEditor: React.FC<BlockRowProps> = (props) => {
+const BlockInlineEditor: React.FC<BlockRowProps> = (props) => {
   const { block } = props;
-  switch (block.type) {
-    case "input":
-      return <TextEditor {...props} block={block} />;
-    case "toggle":
-      return <ToggleEditor {...props} block={block} />;
-    case "static-select":
-      return <StaticSelectEditor {...props} block={block} />;
-    case "dynamic-select":
-      return <DynamicSelectEditor {...props} block={block} />;
-  }
+  if (block.type === "input") return <TextEditor {...props} block={block} />;
+  if (block.type === "toggle") return <ToggleEditor {...props} block={block} />;
+  return null;
+};
+
+const BlockExpandedEditor: React.FC<BlockRowProps> = (props) => {
+  const { block } = props;
+  if (block.type === "static-select")
+    return <StaticSelectEditor {...props} block={block} />;
+  if (block.type === "dynamic-select")
+    return <DynamicSelectEditor {...props} block={block} />;
+  return null;
 };
 
 const TextEditor: React.FC<BlockRowProps & { block: WebInputBlock }> = ({
@@ -492,7 +552,7 @@ const TextEditor: React.FC<BlockRowProps & { block: WebInputBlock }> = ({
 
   return (
     <Box>
-      <Text>› </Text>
+      <Text color="cyan">{"> "}</Text>
       <TextInput
         value={draft}
         onChange={setDraft}
@@ -528,7 +588,8 @@ const ToggleEditor: React.FC<BlockRowProps & { block: WebToggleBlock }> = ({
 
   return (
     <Text>
-      {on ? "[x]" : "[ ]"} {block.placeholder || block.label}{" "}
+      <Text color={on ? "green" : undefined}>{on ? "[x]" : "[ ]"}</Text>
+      {" " + (block.placeholder || block.label || "")}{" "}
       <Text dimColor>(space toggles, Enter commits)</Text>
     </Text>
   );
@@ -577,8 +638,8 @@ const StaticSelectEditor: React.FC<
         const focused = i === idx;
         return (
           <Text key={opt.value} color={focused ? "cyan" : undefined}>
-            {focused ? "› " : "  "}
-            {opt.label}
+            <Text color="cyan">{focused ? "›" : " "}</Text>
+            {" " + opt.label}
             {opt.maturity && opt.maturity !== "ga" ? (
               <Text dimColor> ({opt.maturity})</Text>
             ) : null}
@@ -649,7 +710,7 @@ const DynamicSelectEditor: React.FC<
   return (
     <Box flexDirection="column">
       <Box>
-        <Text>? </Text>
+        <Text color="cyan">? </Text>
         <TextInput
           value={query}
           onChange={setQuery}
@@ -662,7 +723,7 @@ const DynamicSelectEditor: React.FC<
           </Text>
         ) : null}
       </Box>
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={0}>
         {results.length === 0 && !loading ? (
           <Text dimColor>(no matches)</Text>
         ) : (
@@ -670,8 +731,8 @@ const DynamicSelectEditor: React.FC<
             const focused = i === idx;
             return (
               <Text key={opt.value + i} color={focused ? "cyan" : undefined}>
-                {focused ? "› " : "  "}
-                {opt.label}
+                <Text color="cyan">{focused ? "›" : " "}</Text>
+                {" " + opt.label}
                 {opt.maturity && opt.maturity !== "ga" ? (
                   <Text dimColor> ({opt.maturity})</Text>
                 ) : null}
@@ -685,7 +746,6 @@ const DynamicSelectEditor: React.FC<
           </Text>
         ) : null}
       </Box>
-      <Spacer />
     </Box>
   );
 };

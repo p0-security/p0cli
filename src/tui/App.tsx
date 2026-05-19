@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { Authn } from "../types/identity.js";
 import { GrantsView } from "./GrantsView.js";
+import { PollingView } from "./PollingView.js";
 import { RequestForm } from "./RequestForm.js";
 import { TuiEntryFlow } from "./index.js";
 import { Box, Text, useApp, useInput } from "ink";
@@ -23,9 +24,9 @@ type AppProps = {
 };
 
 type Screen =
-  | { kind: "granted" }
   | { kind: "menu" }
-  | { kind: "relinquish" }
+  | { kind: "my-access" }
+  | { kind: "polling"; requestIds: string[] }
   | { kind: "request" };
 
 const initialScreen = (entry: TuiEntryFlow): Screen =>
@@ -43,6 +44,19 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
     [exit, onExit]
   );
 
+  // When the user came in via the main menu, returning there is the natural
+  // dismiss target; for a direct `p0 request` we exit instead.
+  const backFromSubScreen = useCallback(
+    (info?: { submittedRequestIds?: string[] }) => {
+      if (entry === "menu") {
+        setScreen({ kind: "menu" });
+      } else {
+        handleExit(0, info);
+      }
+    },
+    [entry, handleExit]
+  );
+
   useInput((input, key) => {
     if (key.ctrl && input === "c") handleExit(130);
   });
@@ -55,30 +69,27 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
         <RequestForm
           authn={authn}
           debug={debug}
-          onCancel={() => {
-            // From bare `p0 request` we exit; from the menu we go back.
-            if (entry === "request") handleExit(0);
-            else setScreen({ kind: "menu" });
-          }}
-          onSubmitted={(ids) => handleExit(0, { submittedRequestIds: ids })}
+          onCancel={() => backFromSubScreen()}
+          onSubmitted={(ids) => setScreen({ kind: "polling", requestIds: ids })}
         />
       );
-    case "granted":
+    case "polling":
+      return (
+        <PollingView
+          authn={authn}
+          requestIds={screen.requestIds}
+          debug={debug}
+          onDismiss={() =>
+            backFromSubScreen({ submittedRequestIds: screen.requestIds })
+          }
+        />
+      );
+    case "my-access":
       return (
         <GrantsView
           authn={authn}
-          enableRelinquish={false}
           debug={debug}
-          onBack={() => setScreen({ kind: "menu" })}
-        />
-      );
-    case "relinquish":
-      return (
-        <GrantsView
-          authn={authn}
-          enableRelinquish={true}
-          debug={debug}
-          onBack={() => setScreen({ kind: "menu" })}
+          onBack={() => backFromSubScreen()}
         />
       );
   }
@@ -91,8 +102,7 @@ type MainMenuProps = {
 
 const MENU_ITEMS: Array<{ label: string; screen: Screen | "quit" }> = [
   { label: "Request access", screen: { kind: "request" } },
-  { label: "View granted access", screen: { kind: "granted" } },
-  { label: "Relinquish access", screen: { kind: "relinquish" } },
+  { label: "My access (view / relinquish)", screen: { kind: "my-access" } },
   { label: "Quit", screen: "quit" },
 ];
 

@@ -170,6 +170,18 @@ export const fetchMyGrants = async (authn: Authn, debug?: boolean) =>
     debug,
   });
 
+/** Fetches a single permission request snapshot the caller owns. */
+export const fetchMyGrant = async (
+  authn: Authn,
+  requestId: string,
+  debug?: boolean
+) =>
+  authFetch<MyGrant>(authn, {
+    url: `${permissionRequestsUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}/mine`,
+    method: "GET",
+    debug,
+  });
+
 /** Voluntarily revokes a grant the caller currently holds. */
 export const relinquishGrant = async (
   authn: Authn,
