@@ -101,16 +101,17 @@ export const RequestForm: React.FC<RequestFormProps> = ({
           return;
         }
 
-        // Auto-pick the first resource if none is set yet. This skips the
-        // explicit "Resource" step in the form: the resource block is then
-        // hidden from the focusable field list.
+        // Auto-pick the resource if and only if there's exactly one option.
+        // The block is also hidden from the focusable list in that case
+        // (see `focusableItems` below). When there are multiple integrations
+        // the user must pick one explicitly.
         const resourceBlock = res.blocks.find(
           (b) =>
             b.id === RESOURCE_SELECTOR_BLOCK_ID && b.type === "static-select"
         ) as WebStaticSelectBlock | undefined;
         if (
           !nextValues[RESOURCE_SELECTOR_BLOCK_ID] &&
-          resourceBlock?.options?.length
+          resourceBlock?.options?.length === 1
         ) {
           const firstResource = resourceBlock.options[0];
           if (firstResource) {
@@ -178,9 +179,15 @@ export const RequestForm: React.FC<RequestFormProps> = ({
     const isFormBlock = (
       b: WebBlock
     ): b is Exclude<WebBlock, { type: "alert" }> => b.type !== "alert";
+    // Hide the resource block only when it's a single-option auto-pick — when
+    // there are multiple integrations the user needs to pick one.
+    const isHiddenResource = (b: WebBlock) =>
+      b.id === RESOURCE_SELECTOR_BLOCK_ID &&
+      b.type === "static-select" &&
+      b.options.length === 1;
     const blockItems: FocusItem[] = state.blocks
       .filter((b) => !b.hidden)
-      .filter((b) => b.id !== RESOURCE_SELECTOR_BLOCK_ID)
+      .filter((b) => !isHiddenResource(b))
       .filter(isFormBlock)
       .map((b) => ({ kind: "block", block: b }));
     const actionItems: FocusItem[] = state.actions.map((a) => ({
@@ -461,12 +468,21 @@ const BlockRow: React.FC<BlockRowProps> = (props) => {
   );
 };
 
+// Overrides for backend block labels that don't match how the CLI surfaces
+// them to users. The web modal labels the integration picker "Resource"; in
+// the terminal that's confusing because the options are integrations (AWS,
+// GCP, Postgres, ...), so we render it as "Integration" instead.
+const DISPLAY_LABEL_OVERRIDES: Record<string, string> = {
+  [RESOURCE_SELECTOR_BLOCK_ID]: "Integration",
+};
+
 const BlockLabel: React.FC<{
   block: Exclude<WebBlock, { type: "alert" }>;
   focused: boolean;
 }> = ({ block, focused }) => {
   const required = "required" in block && block.required;
-  const labelText = (block.label ?? "").toUpperCase();
+  const rawLabel = DISPLAY_LABEL_OVERRIDES[block.id] ?? block.label ?? "";
+  const labelText = rawLabel.toUpperCase();
   return (
     <Text>
       <Text color={focused ? "cyan" : "gray"} bold={focused}>
