@@ -9,7 +9,6 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "./drivers/auth";
-import { print2 } from "./drivers/stdio";
 
 /**
  * Authenticates, launches the Ink-based TUI, and translates its result into a
@@ -29,14 +28,6 @@ export const runInteractive = async (options: {
     entry: options.entry,
     debug: options.debug,
   });
-  if (
-    result.submittedRequestIds !== undefined &&
-    result.submittedRequestIds.length > 0
-  ) {
-    print2(
-      `Submitted ${result.submittedRequestIds.length} request(s): ${result.submittedRequestIds.join(", ")}`
-    );
-  }
   if (result.exitCode !== 0) {
     process.exit(result.exitCode);
   }

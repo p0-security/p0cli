@@ -69,7 +69,10 @@ const NAV_HINT =
   "↑/↓ navigate  •  Enter to edit  •  Tab next  •  Esc cancel  •  Ctrl+C quit";
 const EDIT_HINT_TEXT =
   "Type to edit  •  Enter to commit  •  Esc to cancel edit";
-const EDIT_HINT_SELECT = "↑/↓ choose  •  Enter to select  •  Esc to cancel";
+const EDIT_HINT_SELECT_SINGLE =
+  "↑/↓ choose  •  Enter to select  •  Esc to cancel";
+const EDIT_HINT_SELECT_MULTI =
+  "↑/↓ choose  •  Space to toggle  •  Enter to commit  •  Esc to cancel";
 
 export const RequestForm: React.FC<RequestFormProps> = ({
   authn,
@@ -81,6 +84,9 @@ export const RequestForm: React.FC<RequestFormProps> = ({
   const [state, setState] = useState<FormState>({ kind: "loading" });
   const [mode, setMode] = useState<Mode>({ kind: "navigate" });
   const [focusIndex, setFocusIndex] = useState(0);
+  // Submit-time error surfaced as a banner above the form so the user can
+  // fix the input and retry without losing what they typed.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Latest in-flight form fetch id; lets us discard stale responses.
   const fetchSeqRef = useRef(0);
@@ -209,27 +215,32 @@ export const RequestForm: React.FC<RequestFormProps> = ({
       const next = { ...values, [blockId]: value };
       setValues(next);
       setMode({ kind: "navigate" });
+      // Auto-advance focus past the field the user just set. Bounds-check
+      // handled by the effect above when the field set shifts post-dispatch.
+      setFocusIndex((i) =>
+        focusableItems.length === 0
+          ? 0
+          : Math.min(i + 1, focusableItems.length - 1)
+      );
       if (shouldDispatch) void refreshForm(next);
     },
-    [refreshForm, values]
+    [focusableItems.length, refreshForm, values]
   );
 
   const submit = useCallback(async () => {
     setMode({ kind: "submitting" });
+    setSubmitError(null);
     try {
       const res = await submitWebRequest(authn, values, debug);
       if (!res.ok) {
-        setState({ kind: "error", error: res.error });
+        setSubmitError(res.error);
         setMode({ kind: "navigate" });
         return;
       }
       const ids = res.urls.map((u) => u.split("/").pop() ?? "").filter(Boolean);
       onSubmitted(ids);
     } catch (err) {
-      setState({
-        kind: "error",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      setSubmitError(err instanceof Error ? err.message : String(err));
       setMode({ kind: "navigate" });
     }
   }, [authn, debug, onSubmitted, values]);
@@ -296,6 +307,11 @@ export const RequestForm: React.FC<RequestFormProps> = ({
           </Text>
         ) : null}
       </Box>
+      {submitError ? (
+        <Box marginTop={1}>
+          <Text color="red">✗ Submit failed: {submitError}</Text>
+        </Box>
+      ) : null}
       <Box flexDirection="column" marginTop={1}>
         {focusableItems.map((item, i) => {
           const focused = i === focusIndex && mode.kind === "navigate";
@@ -363,7 +379,7 @@ const editHintForBlock = (blocks: WebBlock[], blockId: string): string => {
   const b = blocks.find((bb) => bb.id === blockId);
   if (!b) return EDIT_HINT_TEXT;
   if (b.type === "static-select" || b.type === "dynamic-select") {
-    return EDIT_HINT_SELECT;
+    return b.multivalued ? EDIT_HINT_SELECT_MULTI : EDIT_HINT_SELECT_SINGLE;
   }
   return EDIT_HINT_TEXT;
 };
@@ -515,6 +531,22 @@ const BlockSummary: React.FC<BlockRowProps> = ({ block, value }) => {
     return <Text>{str}</Text>;
   }
   // static-select / dynamic-select
+  if (block.multivalued) {
+    const arr = Array.isArray(value) ? (value as unknown[]) : [];
+    if (arr.length === 0) {
+      return (
+        <Text dimColor italic>
+          {block.placeholder || "(none)"}
+        </Text>
+      );
+    }
+    const labels = arr.map((v) => {
+      const str = String(v);
+      const choice = block.options.find((o) => o.value === str);
+      return choice ? choice.label : str;
+    });
+    return <Text>{labels.join(", ")}</Text>;
+  }
   if (value === undefined || value === null || value === "") {
     return (
       <Text dimColor italic>
@@ -611,23 +643,50 @@ const ToggleEditor: React.FC<BlockRowProps & { block: WebToggleBlock }> = ({
   );
 };
 
-const StaticSelectEditor: React.FC<
-  BlockRowProps & { block: WebStaticSelectBlock }
-> = ({ block, value, onCommit, onCancelEdit }) => {
-  const options = block.options;
+const SUGGESTION_DEBOUNCE_MS = 200;
+const DYNAMIC_RESULTS_DISPLAY_LIMIT = 8;
+
+const initialMultiValues = (value: unknown): Set<string> => {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(value.map((v) => String(v)));
+};
+
+/**
+ * Shared keyboard navigation + selection state for option lists. Both static
+ * and dynamic select editors use this. Resets the focused index whenever the
+ * options reference changes (e.g., after a dynamic fetch returns new results)
+ * while preserving the multi-select set.
+ */
+const useSelectMenu = (args: {
+  options: WebInputChoice[];
+  isMulti: boolean;
+  initialValue: unknown;
+  onCommit: (value: string[] | string) => void;
+  onCancel: () => void;
+}): { idx: number; selected: Set<string> } => {
+  const { options, isMulti, initialValue, onCommit, onCancel } = args;
+
   const initialIdx = (() => {
-    if (value === undefined || value === null) return 0;
-    const valueStr = String(value);
-    const i = options.findIndex((o) => o.value === valueStr);
+    if (isMulti || initialValue === undefined || initialValue === null) {
+      return 0;
+    }
+    const i = options.findIndex((o) => o.value === String(initialValue));
     return i >= 0 ? i : 0;
   })();
   const [idx, setIdx] = useState(initialIdx);
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    initialMultiValues(initialValue)
+  );
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancelEdit();
-      return;
-    }
+  // Reset focus to top whenever the option set changes (typical for dynamic
+  // search results). Static options are stable, so this is effectively a
+  // no-op for static editors.
+  useEffect(() => {
+    setIdx(0);
+  }, [options]);
+
+  useInput((input, key) => {
+    if (key.escape) return onCancel();
     if (key.upArrow) {
       setIdx((i) =>
         options.length === 0 ? 0 : (i + options.length - 1) % options.length
@@ -638,46 +697,108 @@ const StaticSelectEditor: React.FC<
       setIdx((i) => (options.length === 0 ? 0 : (i + 1) % options.length));
       return;
     }
-    if (key.return) {
+    if (isMulti && input === " ") {
       const choice = options[idx];
-      if (choice) onCommit(choice.value);
+      if (!choice) return;
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(choice.value)) next.delete(choice.value);
+        else next.add(choice.value);
+        return next;
+      });
+      return;
+    }
+    if (key.return) {
+      if (isMulti) {
+        onCommit(Array.from(selected));
+      } else {
+        const choice = options[idx];
+        if (choice) onCommit(choice.value);
+      }
     }
   });
 
-  if (options.length === 0) {
-    return <Text dimColor>(no options available)</Text>;
-  }
+  return { idx, selected };
+};
 
+const OptionList: React.FC<{
+  options: WebInputChoice[];
+  idx: number;
+  isMulti: boolean;
+  selected: Set<string>;
+  /** When provided, truncates the visible list and shows a "+ N more" footer. */
+  maxDisplay?: number;
+  emptyMessage?: string;
+}> = ({ options, idx, isMulti, selected, maxDisplay, emptyMessage }) => {
+  if (options.length === 0) {
+    return <Text dimColor>{emptyMessage ?? "(no options available)"}</Text>;
+  }
+  const display =
+    maxDisplay !== undefined ? options.slice(0, maxDisplay) : options;
+  const overflow =
+    maxDisplay !== undefined && options.length > maxDisplay
+      ? options.length - maxDisplay
+      : 0;
   return (
     <Box flexDirection="column">
-      {options.map((opt, i) => {
+      {display.map((opt, i) => {
         const focused = i === idx;
+        const isSelected = isMulti && selected.has(opt.value);
+        const prefix = isMulti
+          ? isSelected
+            ? "[x] "
+            : "[ ] "
+          : focused
+            ? "› "
+            : "  ";
         return (
-          <Text key={opt.value} color={focused ? "cyan" : undefined}>
-            <Text color="cyan">{focused ? "›" : " "}</Text>
-            {" " + opt.label}
+          <Text key={`${opt.value}-${i}`} color={focused ? "cyan" : undefined}>
+            <Text color={isSelected ? "green" : "cyan"}>{prefix}</Text>
+            {opt.label}
             {opt.maturity && opt.maturity !== "ga" ? (
               <Text dimColor> ({opt.maturity})</Text>
             ) : null}
           </Text>
         );
       })}
+      {overflow > 0 ? (
+        <Text dimColor>(+ {overflow} more — narrow your search)</Text>
+      ) : null}
     </Box>
   );
 };
 
-const SUGGESTION_DEBOUNCE_MS = 200;
+const StaticSelectEditor: React.FC<
+  BlockRowProps & { block: WebStaticSelectBlock }
+> = ({ block, value, onCommit, onCancelEdit }) => {
+  const isMulti = block.multivalued === true;
+  const { idx, selected } = useSelectMenu({
+    options: block.options,
+    isMulti,
+    initialValue: value,
+    onCommit,
+    onCancel: onCancelEdit,
+  });
+  return (
+    <OptionList
+      options={block.options}
+      idx={idx}
+      isMulti={isMulti}
+      selected={selected}
+    />
+  );
+};
 
 const DynamicSelectEditor: React.FC<
   BlockRowProps & { block: WebDynamicSelectBlock }
-> = ({ authn, block, values, debug, onCommit, onCancelEdit }) => {
+> = ({ authn, block, value, values, debug, onCommit, onCancelEdit }) => {
+  const isMulti = block.multivalued === true;
   const [query, setQuery] = useState("");
   // Form state holds the value string; seed the dropdown with whatever
   // options the form already shipped down (the new fetch will replace them
   // shortly via the debounced effect).
   const [results, setResults] = useState<WebInputChoice[]>(block.options);
   const [loading, setLoading] = useState(false);
-  const [idx, setIdx] = useState(0);
   const debouncedQuery = useDebouncedValue(query, SUGGESTION_DEBOUNCE_MS);
   const fetchSeqRef = useRef(0);
 
@@ -692,35 +813,19 @@ const DynamicSelectEditor: React.FC<
           debug
         );
         if (seq !== fetchSeqRef.current) return;
-        if (res.ok) {
-          setResults(res.suggestions);
-          setIdx(0);
-        }
+        if (res.ok) setResults(res.suggestions);
       } finally {
         if (seq === fetchSeqRef.current) setLoading(false);
       }
     })();
   }, [authn, block.id, debouncedQuery, debug, values]);
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancelEdit();
-      return;
-    }
-    if (key.upArrow) {
-      setIdx((i) =>
-        results.length === 0 ? 0 : (i + results.length - 1) % results.length
-      );
-      return;
-    }
-    if (key.downArrow) {
-      setIdx((i) => (results.length === 0 ? 0 : (i + 1) % results.length));
-      return;
-    }
-    if (key.return) {
-      const choice = results[idx];
-      if (choice) onCommit(choice.value);
-    }
+  const { idx, selected } = useSelectMenu({
+    options: results,
+    isMulti,
+    initialValue: value,
+    onCommit,
+    onCancel: onCancelEdit,
   });
 
   return (
@@ -740,27 +845,14 @@ const DynamicSelectEditor: React.FC<
         ) : null}
       </Box>
       <Box flexDirection="column" marginTop={0}>
-        {results.length === 0 && !loading ? (
-          <Text dimColor>(no matches)</Text>
-        ) : (
-          results.slice(0, 8).map((opt, i) => {
-            const focused = i === idx;
-            return (
-              <Text key={opt.value + i} color={focused ? "cyan" : undefined}>
-                <Text color="cyan">{focused ? "›" : " "}</Text>
-                {" " + opt.label}
-                {opt.maturity && opt.maturity !== "ga" ? (
-                  <Text dimColor> ({opt.maturity})</Text>
-                ) : null}
-              </Text>
-            );
-          })
-        )}
-        {results.length > 8 ? (
-          <Text dimColor>
-            (+ {results.length - 8} more — narrow your search)
-          </Text>
-        ) : null}
+        <OptionList
+          options={results}
+          idx={idx}
+          isMulti={isMulti}
+          selected={selected}
+          maxDisplay={DYNAMIC_RESULTS_DISPLAY_LIMIT}
+          emptyMessage={loading ? " " : "(no matches)"}
+        />
       </Box>
     </Box>
   );

@@ -48,8 +48,8 @@ export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 const webRequestsUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/web-requests`;
 
-const permissionRequestsUrl = (tenant: string) =>
-  `${tenantUrl(tenant)}/permission-requests`;
+const mineUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/permission-requests/mine`;
 
 export type MyGrant = {
   requestId: string;
@@ -57,13 +57,21 @@ export type MyGrant = {
   access: string;
   status: string;
   reason?: string;
+  duration?: string;
   requestor: string;
   principal: string;
   requestedTimestamp: number;
   grantTimestamp?: number;
   expiryTimestamp?: number;
+  lastUpdatedTimestamp?: number;
   permission: Record<string, unknown>;
   delegation: Record<string, unknown>;
+  approvalDetails?: {
+    approvalSource?: string;
+    approvedTimestamp?: number;
+    name?: string;
+    email?: string;
+  };
 };
 
 export const fetchOrgData = async <T>(orgId: string) =>
@@ -159,25 +167,24 @@ export const submitWebRequest = async (
 };
 
 /**
- * Lists active grants where the calling user is the principal (the one
- * holding the access). Returned by the interactive CLI's "view granted"
- * screen and the relinquish flow.
+ * Lists open permission requests the calling user participates in — either
+ * as principal (they hold the access) or as requestor (they submitted it).
  */
 export const fetchMyGrants = async (authn: Authn, debug?: boolean) =>
   authFetch<MyGrant[]>(authn, {
-    url: `${permissionRequestsUrl(authn.identity.org.slug)}/my-grants`,
+    url: mineUrl(authn.identity.org.slug),
     method: "GET",
     debug,
   });
 
-/** Fetches a single permission request snapshot the caller owns. */
+/** Fetches a single permission request snapshot the caller participates in. */
 export const fetchMyGrant = async (
   authn: Authn,
   requestId: string,
   debug?: boolean
 ) =>
   authFetch<MyGrant>(authn, {
-    url: `${permissionRequestsUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}/mine`,
+    url: `${mineUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}`,
     method: "GET",
     debug,
   });
@@ -189,7 +196,7 @@ export const relinquishGrant = async (
   debug?: boolean
 ) =>
   authFetch<{ message: string }>(authn, {
-    url: `${permissionRequestsUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}/relinquish`,
+    url: `${mineUrl(authn.identity.org.slug)}/${encodeURIComponent(requestId)}/relinquish`,
     method: "POST",
     body: JSON.stringify({}),
     debug,

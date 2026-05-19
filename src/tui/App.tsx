@@ -20,7 +20,7 @@ type AppProps = {
   authn: Authn;
   entry: TuiEntryFlow;
   debug?: boolean;
-  onExit: (exitCode: number, info?: { submittedRequestIds?: string[] }) => void;
+  onExit: (exitCode: number) => void;
 };
 
 type Screen =
@@ -37,25 +37,22 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
   const [screen, setScreen] = useState<Screen>(initialScreen(entry));
 
   const handleExit = useCallback(
-    (code: number, info?: { submittedRequestIds?: string[] }) => {
+    (code: number) => {
       exit();
-      onExit(code, info);
+      onExit(code);
     },
     [exit, onExit]
   );
 
   // When the user came in via the main menu, returning there is the natural
   // dismiss target; for a direct `p0 request` we exit instead.
-  const backFromSubScreen = useCallback(
-    (info?: { submittedRequestIds?: string[] }) => {
-      if (entry === "menu") {
-        setScreen({ kind: "menu" });
-      } else {
-        handleExit(0, info);
-      }
-    },
-    [entry, handleExit]
-  );
+  const backFromSubScreen = useCallback(() => {
+    if (entry === "menu") {
+      setScreen({ kind: "menu" });
+    } else {
+      handleExit(0);
+    }
+  }, [entry, handleExit]);
 
   useInput((input, key) => {
     if (key.ctrl && input === "c") handleExit(130);
@@ -69,7 +66,7 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
         <RequestForm
           authn={authn}
           debug={debug}
-          onCancel={() => backFromSubScreen()}
+          onCancel={backFromSubScreen}
           onSubmitted={(ids) => setScreen({ kind: "polling", requestIds: ids })}
         />
       );
@@ -79,18 +76,12 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
           authn={authn}
           requestIds={screen.requestIds}
           debug={debug}
-          onDismiss={() =>
-            backFromSubScreen({ submittedRequestIds: screen.requestIds })
-          }
+          onDismiss={backFromSubScreen}
         />
       );
     case "my-access":
       return (
-        <GrantsView
-          authn={authn}
-          debug={debug}
-          onBack={() => backFromSubScreen()}
-        />
+        <GrantsView authn={authn} debug={debug} onBack={backFromSubScreen} />
       );
   }
 };

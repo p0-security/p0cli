@@ -21,13 +21,20 @@ export type RunTuiArgs = {
 
 export type RunTuiResult = {
   exitCode: number;
-  submittedRequestIds?: string[];
 };
+
+/** XTerm "use alternate screen buffer" sequence — pushes the current screen
+ *  onto a stack and clears the display so the TUI doesn't trample the user's
+ *  shell history. Restored on exit. */
+const ENTER_ALT_SCREEN = "\x1b[?1049h\x1b[H";
+const EXIT_ALT_SCREEN = "\x1b[?1049l";
+const HIDE_CURSOR = "\x1b[?25l";
+const SHOW_CURSOR = "\x1b[?25h";
 
 /**
  * Mounts the Ink app with the given starting flow and resolves once the user
- * exits (submit, cancel, or ctrl-c). Returns a process-style exit code and
- * any request IDs the user successfully submitted during the session.
+ * exits (submit, cancel, or ctrl-c). The TUI runs in the alternate screen
+ * buffer so the user's prior terminal contents are preserved.
  */
 export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
   // Imported lazily so callers that never enter interactive mode don't pay
@@ -35,18 +42,33 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
   const { render } = await import("ink");
   const { App } = await import("./App.js");
 
+  let restored = false;
+  const restoreTerminal = () => {
+    if (restored) return;
+    restored = true;
+    process.stdout.write(SHOW_CURSOR + EXIT_ALT_SCREEN);
+  };
+
+  // Defensive cleanup for the path where the process dies before the normal
+  // unmount runs (uncaught throw, external SIGTERM). Ink enables stdin raw
+  // mode, so Ctrl+C arrives as a keystroke and is handled by App's useInput
+  // — it does NOT generate SIGINT. SIGTERM from outside will cause Node's
+  // default action of exit, which fires the "exit" event below.
+  process.on("exit", restoreTerminal);
+
+  process.stdout.write(ENTER_ALT_SCREEN + HIDE_CURSOR);
+
   return await new Promise<RunTuiResult>((resolve) => {
     const instance = render(
       React.createElement(App, {
         authn: args.authn,
         entry: args.entry,
         debug: args.debug,
-        onExit: (
-          exitCode: number,
-          info?: { submittedRequestIds?: string[] }
-        ) => {
+        onExit: (exitCode: number) => {
           instance.unmount();
-          resolve({ exitCode, submittedRequestIds: info?.submittedRequestIds });
+          restoreTerminal();
+          process.removeListener("exit", restoreTerminal);
+          resolve({ exitCode });
         },
       }),
       { exitOnCtrlC: false }
