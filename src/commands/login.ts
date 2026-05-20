@@ -67,7 +67,7 @@ export const login = async (
 ) => {
   // Ignore error, as no credentials may yet be present
   const identity = await loadCredentials().catch(() => undefined);
-
+  //console.log(identity?.credential.access_token);
   const tokenTimeRemaining = identity ? remainingTokenTime(identity) : 0;
 
   let loggedIn = tokenTimeRemaining > MIN_REMAINING_TOKEN_TIME_SECONDS;

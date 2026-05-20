@@ -16,6 +16,7 @@ import { p0VersionInfo, stringifyVersionInfo } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { grantCommand } from "./grant";
+import { installCommand } from "./install";
 import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
 import { logoutCommand } from "./logout";
@@ -39,6 +40,7 @@ const commands = [
   lsCommand,
   requestCommand,
   allowCommand,
+  installCommand,
   sshCommand,
   sshProxyCommand,
   sshResolveCommand,
@@ -90,6 +92,7 @@ export const getCli = async () =>
   commands
     .reduce((m, c) => c(m), await buildArgv())
     .middleware(conditionalCheckVersion)
+    .completion("completion", "Generate shell completion script")
     .strict()
     .demandCommand(1)
     .fail((message, error, yargs) => {

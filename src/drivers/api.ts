@@ -45,6 +45,13 @@ export const fetchAccountInfo = async <T>(authn: Authn, debug?: boolean) =>
     debug,
   });
 
+export const fetchTokenRequest = async <T>(authn: Authn, data: T) =>
+  authFetch<T>(authn, {
+    url: `${tenantUrl(authn.identity.org.slug)}/oauth-install/slack/token-requests`,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 export const fetchIntegrationConfig = async <T>(
   authn: Authn,
   integration: string,
@@ -367,6 +374,7 @@ const authFetch = async <T>(
   }
 ) => {
   const token = await authn.getToken();
+  //console.log(token);
   const headers = {
     authorization: `Bearer ${token}`,
   };
