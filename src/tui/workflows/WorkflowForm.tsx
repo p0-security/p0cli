@@ -8,22 +8,29 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { Authn } from "../../types/identity.js";
+import { useDebouncedValue } from "../hooks/useDebouncedValue.js";
 import { WORKFLOWS, findWorkflow } from "./catalog.js";
+import { Suggestion, fetchWorkflowSuggestions } from "./lister.js";
 import { buildPreview } from "./preview.js";
 import { WorkflowField, WorkflowSpec, WorkflowValues } from "./types.js";
 import { Box, Text, useInput } from "ink";
+import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type Props = {
+  authn: Authn;
+  debug?: boolean;
   onSubmit: (spec: WorkflowSpec, values: WorkflowValues) => void;
   onCancel: () => void;
 };
 
 type Mode =
-  | { kind: "edit-select"; fieldKey: string; index: number }
-  | { kind: "edit-text"; fieldKey: string }
-  | { kind: "edit-toggle"; fieldKey: string }
+  | { fieldKey: string; index: number; kind: "edit-select" }
+  | { fieldKey: string; kind: "edit-dynamic" }
+  | { fieldKey: string; kind: "edit-text" }
+  | { fieldKey: string; kind: "edit-toggle" }
   | { kind: "edit-workflow" }
   | { kind: "navigate" };
 
@@ -35,7 +42,12 @@ const NAV_HINT = "↑/↓ navigate · Enter to edit · s to submit · q/Esc canc
  * the selected workflow. Submit calls back with the spec + collected
  * values; the parent runs the workflow.
  */
-export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
+export const WorkflowForm: React.FC<Props> = ({
+  authn,
+  debug,
+  onSubmit,
+  onCancel,
+}) => {
   const [workflowId, setWorkflowId] = useState<string>(WORKFLOWS[0]!.id);
   const [valuesByWorkflow, setValuesByWorkflow] = useState<
     Record<string, WorkflowValues>
@@ -47,7 +59,6 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
   const spec = useMemo(() => findWorkflow(workflowId)!, [workflowId]);
   const values = valuesByWorkflow[workflowId] ?? {};
 
-  // Logical row count = workflow picker (row 0) + spec.fields.length
   const rowCount = 1 + spec.fields.length;
 
   const setFieldValue = (key: string, value: WorkflowValues[string]) => {
@@ -97,6 +108,10 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
         setMode({ kind: "edit-select", fieldKey: field.key, index: idx });
         return;
       }
+      if (field.kind === "dynamic-select") {
+        setMode({ kind: "edit-dynamic", fieldKey: field.key });
+        return;
+      }
       // text / passthrough — both use TextInput.
       setMode({ kind: "edit-text", fieldKey: field.key });
     } else if (input === "s") {
@@ -109,7 +124,7 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
     }
   });
 
-  // Edit-workflow handling: simple list arrow nav.
+  // Edit-workflow handling.
   const [workflowIdx, setWorkflowIdx] = useState<number>(() =>
     Math.max(
       0,
@@ -138,7 +153,7 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
     { isActive: mode.kind === "edit-workflow" }
   );
 
-  // Toggle edit: y/n/space then back to navigate.
+  // Toggle edit.
   useInput(
     (input, key) => {
       if (mode.kind !== "edit-toggle") return;
@@ -160,9 +175,9 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
     { isActive: mode.kind === "edit-toggle" }
   );
 
-  // Select edit: arrow + Enter.
+  // Static-select edit.
   const [selectIdx, setSelectIdx] = useState<number>(0);
-  React.useEffect(() => {
+  useEffect(() => {
     if (mode.kind === "edit-select") setSelectIdx(mode.index);
   }, [mode]);
   useInput(
@@ -207,10 +222,7 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
         {spec.fields.map((field, i) => {
           const rowFocused = focus === i + 1 && mode.kind === "navigate";
           const editingText =
-            (mode.kind === "edit-text" && mode.fieldKey === field.key) ||
-            (mode.kind === "edit-text" &&
-              field.kind === "passthrough" &&
-              mode.fieldKey === field.key);
+            mode.kind === "edit-text" && mode.fieldKey === field.key;
           return (
             <FormRow
               key={field.key}
@@ -228,7 +240,6 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
                   setMode({ kind: "navigate" });
                 }}
                 onTextChange={(raw) => setFieldValue(field.key, raw)}
-                onTextCancel={() => setMode({ kind: "navigate" })}
               />
             </FormRow>
           );
@@ -281,6 +292,43 @@ export const WorkflowForm: React.FC<Props> = ({ onSubmit, onCancel }) => {
                   ↑/↓ choose · Enter to select · Esc to cancel
                 </Text>
               </Box>
+            );
+          })()
+        : null}
+
+      {mode.kind === "edit-dynamic"
+        ? (() => {
+            const field = spec.fields.find(
+              (f): f is Extract<WorkflowField, { kind: "dynamic-select" }> =>
+                f.kind === "dynamic-select" && f.key === mode.fieldKey
+            );
+            if (!field) return null;
+            const dependsOn = (field.lister.dependsOn ?? [])
+              .map((d) => ({
+                flag: d.flag,
+                value:
+                  typeof values[d.field] === "string"
+                    ? (values[d.field] as string)
+                    : "",
+              }))
+              .filter((d) => d.value.length > 0);
+            return (
+              <DynamicSelectEditor
+                authn={authn}
+                debug={debug}
+                field={field}
+                dependsOn={dependsOn}
+                initialQuery={
+                  typeof values[field.key] === "string"
+                    ? (values[field.key] as string)
+                    : ""
+                }
+                onSubmit={(picked) => {
+                  setFieldValue(field.key, picked);
+                  setMode({ kind: "navigate" });
+                }}
+                onCancel={() => setMode({ kind: "navigate" })}
+              />
             );
           })()
         : null}
@@ -351,7 +399,6 @@ const FieldValue: React.FC<{
   editingText: boolean;
   onTextSubmit: (raw: string) => void;
   onTextChange: (raw: string) => void;
-  onTextCancel: () => void;
 }> = ({ field, value, editingText, onTextSubmit, onTextChange }) => {
   if (field.kind === "toggle") {
     return (
@@ -364,6 +411,11 @@ const FieldValue: React.FC<{
     const opt = field.options.find((o) => o.value === value);
     if (opt) return <Text>{opt.label}</Text>;
     return <Text dimColor>(not set)</Text>;
+  }
+  if (field.kind === "dynamic-select") {
+    const raw = typeof value === "string" ? value : "";
+    if (raw === "") return <Text dimColor>(press Enter to search)</Text>;
+    return <Text>{raw}</Text>;
   }
   // text / passthrough
   if (editingText) {
@@ -394,4 +446,147 @@ const FieldValue: React.FC<{
     return <Text>{"•".repeat(Math.min(raw.length, 8))}</Text>;
   }
   return <Text>{raw}</Text>;
+};
+
+/**
+ * Search-as-you-type editor for `dynamic-select` fields. Fetches
+ * suggestions from the same backend endpoint `p0 ls` uses, debounced
+ * so each keystroke doesn't hit the network. Picked value is the
+ * suggestion's `value` (the canonical identifier the backend handlers
+ * expect — e.g. an instance ID), not the display `key`.
+ */
+const DynamicSelectEditor: React.FC<{
+  authn: Authn;
+  debug?: boolean;
+  field: Extract<WorkflowField, { kind: "dynamic-select" }>;
+  /** Pre-resolved companion `--flag value` options. */
+  dependsOn: { flag: string; value: string }[];
+  initialQuery: string;
+  onSubmit: (picked: string) => void;
+  onCancel: () => void;
+}> = ({ authn, debug, field, dependsOn, initialQuery, onSubmit, onCancel }) => {
+  const [query, setQuery] = useState<string>(initialQuery);
+  const debouncedQuery = useDebouncedValue(query, 200);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<number>(0);
+
+  // Serialize dependsOn for the effect deps. Avoids re-running on
+  // every render when the parent re-creates the array.
+  const dependsOnKey = useMemo(() => JSON.stringify(dependsOn), [dependsOn]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+    fetchWorkflowSuggestions(authn, field.lister.argv, debouncedQuery, {
+      debug,
+      dependsOn,
+    })
+      .then((items) => {
+        if (cancelled) return;
+        setSuggestions(items);
+        setHighlight(0);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFetchError(err instanceof Error ? err.message : String(err));
+        setSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // dependsOnKey is the serialized form of dependsOn — we don't list
+    // the array itself in deps to avoid re-running on every render.
+  }, [authn, debug, debouncedQuery, field.lister.argv, dependsOnKey]);
+
+  useInput((_input, key) => {
+    if (key.escape) {
+      onCancel();
+      return;
+    }
+    if (key.upArrow) {
+      setHighlight((i) => Math.max(0, i - 1));
+      return;
+    }
+    if (key.downArrow) {
+      setHighlight((i) => Math.min(suggestions.length - 1, i + 1));
+      return;
+    }
+    if (key.return) {
+      const picked = suggestions[highlight];
+      if (picked) {
+        onSubmit(picked.value);
+        return;
+      }
+      if (field.allowFreeText && query.trim().length > 0) {
+        onSubmit(query.trim());
+      }
+    }
+  });
+
+  return (
+    <Box flexDirection="column" marginTop={1} paddingX={1}>
+      <Text color="gray" bold>
+        Search {field.label}
+      </Text>
+      <Box>
+        <Text>{"> "}</Text>
+        <TextInput
+          value={query}
+          onChange={setQuery}
+          placeholder={field.placeholder ?? "type to search…"}
+        />
+        {loading ? (
+          <Text dimColor>
+            {" "}
+            <Spinner type="dots" />
+          </Text>
+        ) : null}
+      </Box>
+      {fetchError ? (
+        <Box marginTop={1}>
+          <Text color="red">Error: {fetchError}</Text>
+        </Box>
+      ) : null}
+      <Box flexDirection="column" marginTop={1}>
+        {suggestions.length === 0 && !loading ? (
+          <Text dimColor>
+            {fetchError
+              ? ""
+              : field.allowFreeText
+                ? "No matches; press Enter to use the typed value."
+                : "No matches."}
+          </Text>
+        ) : (
+          suggestions.map((s, i) => (
+            <Box key={`${s.value}-${i}`}>
+              <Box width={2}>
+                <Text color={i === highlight ? "cyan" : undefined} bold>
+                  {i === highlight ? "❯" : " "}
+                </Text>
+              </Box>
+              <Text
+                color={i === highlight ? "cyan" : undefined}
+                bold={i === highlight}
+              >
+                {s.key}
+              </Text>
+              {s.group ? <Text dimColor> · {s.group}</Text> : null}
+              {s.key !== s.value ? <Text dimColor> · {s.value}</Text> : null}
+            </Box>
+          ))
+        )}
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>
+          Type to filter · ↑/↓ choose · Enter to select · Esc to cancel
+        </Text>
+      </Box>
+    </Box>
+  );
 };

@@ -16,10 +16,19 @@ import { WorkflowSpec } from "./types.js";
  * thin — they describe what to ask the user; the executor module
  * dispatches to the real handler.
  *
- * Listing endpoints could power dynamic-select fields here (e.g. SSH
- * destinations from the SSH lister), but v0 uses text inputs across
- * the board for simplicity. The fields are designed so swapping a
- * `kind: "text"` to a `kind: "select"` later is non-breaking.
+ * Several fields are backed by the same `p0 ls` listing infrastructure
+ * the non-interactive CLI uses. The lister argv tail (e.g.
+ * `["ssh", "session", "destination"]`) matches the patterns exercised
+ * by the backend's `lister-speed.stage.e2e.test.ts` and the existing
+ * `p0 ls ...` command tree, so dropdowns show exactly what the
+ * explicit CLI would reach. `allowFreeText: true` is set on listers
+ * where the index can lag reality (e.g. a brand-new instance) — the
+ * user can always fall back to typing.
+ *
+ * Fields with `lister.dependsOn` consume another field's value as a
+ * `--<flag>` option on the lister call (e.g. the k8s role lister
+ * needs `--cluster <id>`). The user must fill those parent fields
+ * first; otherwise the dropdown shows the lister's unfiltered view.
  */
 export const WORKFLOWS: WorkflowSpec[] = [
   {
@@ -29,13 +38,15 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["shell", "remote", "ec2", "vm"],
     fields: [
       {
-        kind: "text",
+        kind: "dynamic-select",
         key: "destination",
         label: "Destination",
-        help: "Instance name or ID",
+        help: "Search SSH targets by name or instance ID",
         required: true,
         positional: true,
-        placeholder: "i-0abc… or instance-alias",
+        placeholder: "type to search instances…",
+        lister: { argv: ["ssh", "session", "destination"] },
+        allowFreeText: true,
       },
       {
         kind: "text",
@@ -58,6 +69,10 @@ export const WORKFLOWS: WorkflowSpec[] = [
         ],
       },
       {
+        // SSH parent (account / project / subscription) doesn't have
+        // a single canonical lister — the right one depends on
+        // provider, which we don't switch on dynamically yet. Keep
+        // free text; lister support can be added per-provider later.
         kind: "text",
         key: "parent",
         label: "Parent",
@@ -90,6 +105,10 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["copy", "transfer", "file"],
     fields: [
       {
+        // SCP paths are `[host:]path`; the host segment could come
+        // from the SSH lister but mixing a search-pick host with a
+        // free-typed path isn't a great UX. Keep as text input — the
+        // user typically already knows the host they want.
         kind: "text",
         key: "source",
         label: "Source",
@@ -142,6 +161,9 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["remote-desktop", "windows", "azure"],
     fields: [
       {
+        // RDP currently supports Azure only; if/when the backend
+        // exposes an `rdp session destination` lister, switch this
+        // to dynamic-select.
         kind: "text",
         key: "destination",
         label: "Destination",
@@ -164,6 +186,10 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["k8s", "kubernetes", "kubectl", "eks"],
     fields: [
       {
+        // EKS clusters configured in P0. There's no observed
+        // `k8s cluster name` lister yet — left as text for now;
+        // dropping in a dynamic-select is a one-line catalog edit
+        // once a lister is confirmed.
         kind: "text",
         key: "cluster",
         label: "Cluster",
@@ -172,18 +198,33 @@ export const WORKFLOWS: WorkflowSpec[] = [
         placeholder: "my-cluster-id",
       },
       {
-        kind: "text",
+        kind: "dynamic-select",
         key: "role",
         label: "Role",
-        help: 'e.g. "ClusterRole/cluster-admin"',
+        help: 'e.g. "ClusterRole / cluster-admin" — depends on cluster',
         required: true,
-        placeholder: "ClusterRole/cluster-admin",
+        placeholder: "type to search roles…",
+        // Mirrors the backend e2e test:
+        //   `k8s resource role <q> --cluster <id>`
+        lister: {
+          argv: ["k8s", "resource", "role"],
+          dependsOn: [{ flag: "cluster", field: "cluster" }],
+        },
+        allowFreeText: true,
       },
       {
-        kind: "text",
+        kind: "dynamic-select",
         key: "resource",
         label: "Resource",
         help: 'e.g. "Pod / *" — omit for cluster-wide',
+        placeholder: "type to search resources…",
+        // Mirrors the backend e2e test:
+        //   `k8s resource locator <q> --cluster <id>`
+        lister: {
+          argv: ["k8s", "resource", "locator"],
+          dependsOn: [{ flag: "cluster", field: "cluster" }],
+        },
+        allowFreeText: true,
       },
       { kind: "text", key: "reason", label: "Reason" },
       {
@@ -211,11 +252,21 @@ export const WORKFLOWS: WorkflowSpec[] = [
         ],
       },
       {
-        kind: "text",
+        // The RDS role list isn't covered by the lister-speed test
+        // suite, but `aws role name` is a well-known pattern; the
+        // backend either supports it or returns an empty list, and
+        // allowFreeText lets the user proceed either way.
+        kind: "dynamic-select",
         key: "role",
         label: "Role",
         help: "Database role to access",
         required: true,
+        placeholder: "type to search roles…",
+        lister: {
+          argv: ["aws", "role", "name"],
+          dependsOn: [{ flag: "account", field: "account" }],
+        },
+        allowFreeText: true,
       },
       {
         kind: "text",
@@ -235,12 +286,18 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["iam", "credentials", "saml"],
     fields: [
       {
-        kind: "text",
+        kind: "dynamic-select",
         key: "role",
         label: "Role",
         help: "IAM role name to assume",
         required: true,
         positional: true,
+        placeholder: "type to search roles…",
+        lister: {
+          argv: ["aws", "role", "name"],
+          dependsOn: [{ flag: "account", field: "account" }],
+        },
+        allowFreeText: true,
       },
       { kind: "text", key: "account", label: "AWS account ID or alias" },
       { kind: "text", key: "reason", label: "Reason" },
@@ -253,11 +310,17 @@ export const WORKFLOWS: WorkflowSpec[] = [
     searchTokens: ["idc", "sso", "permission-set", "credentials"],
     fields: [
       {
-        kind: "text",
+        kind: "dynamic-select",
         key: "permission-set",
         label: "Permission set",
         required: true,
         positional: true,
+        placeholder: "type to search permission sets…",
+        lister: {
+          argv: ["aws", "permission-set", "name"],
+          dependsOn: [{ flag: "account", field: "account" }],
+        },
+        allowFreeText: true,
       },
       { kind: "text", key: "account", label: "AWS account ID or alias" },
       { kind: "text", key: "reason", label: "Reason" },

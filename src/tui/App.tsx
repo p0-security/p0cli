@@ -163,6 +163,8 @@ const Content: React.FC<{
       }
       return (
         <WorkflowForm
+          authn={session.authn}
+          debug={debug}
           onSubmit={(spec, values) =>
             onIntent({ kind: "workflow", workflowId: spec.id, values })
           }

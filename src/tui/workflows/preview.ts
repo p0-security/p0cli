@@ -61,9 +61,10 @@ export const buildPreview = (
       positionalRendered.push(...Array(trailingEmpty).fill("<...>"));
       trailingEmpty = 0;
     }
-    positionalRendered.push(
-      field.sensitive ? SENSITIVE_PLACEHOLDER : quoteArg(str)
-    );
+    const sensitive =
+      (field.kind === "select" || field.kind === "text") &&
+      field.sensitive === true;
+    positionalRendered.push(sensitive ? SENSITIVE_PLACEHOLDER : quoteArg(str));
   }
   tokens.push(...positionalRendered);
 
@@ -77,12 +78,11 @@ export const buildPreview = (
       continue;
     }
     if (typeof value !== "string" || value.length === 0) continue;
+    const sensitive =
+      (field.kind === "select" || field.kind === "text") &&
+      field.sensitive === true;
     tokens.push(`--${field.key}`);
-    tokens.push(
-      "sensitive" in field && field.sensitive
-        ? SENSITIVE_PLACEHOLDER
-        : quoteArg(value)
-    );
+    tokens.push(sensitive ? SENSITIVE_PLACEHOLDER : quoteArg(value));
   }
 
   // Passthrough `-- ...` args (currently only SSH/SCP).

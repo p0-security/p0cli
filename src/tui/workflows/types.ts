@@ -16,6 +16,44 @@ You should have received a copy of the GNU General Public License along with @p0
  */
 export type WorkflowField =
   | {
+      /**
+       * Server-backed search-and-select, powered by the same `p0 ls`
+       * listing endpoint the request form's dynamic dropdowns use.
+       * The user types a query; results stream in from the backend;
+       * the picked `value` is what we pass to the executor.
+       */
+      kind: "dynamic-select";
+      key: string;
+      label: string;
+      help?: string;
+      required?: boolean;
+      placeholder?: string;
+      positional?: boolean;
+      /**
+       * Description of how to populate the suggestion list. `argv` is
+       * the tail passed to `p0 ls` (e.g. `["ssh", "session",
+       * "destination"]`); the user's current query is appended. Some
+       * listers require companion options derived from other form
+       * fields (e.g. the k8s role lister needs `--cluster <id>`);
+       * those go in `dependsOn`.
+       */
+      lister: {
+        argv: string[];
+        /**
+         * Form fields whose values become `--<flag> <value>` options on
+         * the lister call. If a referenced field is empty the option
+         * is omitted (the backend usually treats that as "no filter").
+         */
+        dependsOn?: { flag: string; field: string }[];
+      };
+      /**
+       * If true, the user can also accept a free-typed value that's
+       * not in the suggestion list (useful when the lister might miss
+       * recently-added resources). Default false.
+       */
+      allowFreeText?: boolean;
+    }
+  | {
       /** Free-form whitespace-separated args appended after `--`. */
       kind: "passthrough";
       key: string;
