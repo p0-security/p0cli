@@ -21,14 +21,12 @@ import {
 import {
   DeleteObjectCommand,
   GetObjectCommand,
-  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const PUT_EXPIRES_SECONDS = 5 * 60;
 const GET_EXPIRES_SECONDS = 5 * 60;
 const DELETE_EXPIRES_SECONDS = 60 * 60;
 
@@ -62,13 +60,13 @@ export const provisionTransferRequest = async (
     throw "Backend granted file-transfer access, but did not provide AWS delegation";
   }
 
-  const { bucketName, objectKey, region } =
+  const { bucketName, bucketRegion, objectKey } =
     response.request.permission.resource;
 
   return {
     bucket: bucketName,
     key: objectKey,
-    region,
+    region: bucketRegion,
     awsSpec,
   };
 };
@@ -86,27 +84,13 @@ export const generateTransferUrls = async (
     sessionToken: credentials.AWS_SESSION_TOKEN,
   };
 
-  // The bucket may not be in the same region as the destination instance.
-  // S3 returns the `x-amz-bucket-region` header on any request to an existing
-  // bucket — including unauthenticated 403/301 responses — so we can discover
-  // the region without needing s3:ListBucket on the role.
-  const probeResponse = await fetch(
-    `https://${target.bucket}.s3.us-east-1.amazonaws.com/`,
-    { method: "HEAD" }
-  );
-  const bucketRegion =
-    probeResponse.headers.get("x-amz-bucket-region") ?? target.region;
-
   const s3 = new S3Client({
-    region: bucketRegion,
+    region: target.region,
     credentials: sdkCredentials,
   });
 
   const objectArgs = { Bucket: target.bucket, Key: target.key };
-  const [putUrl, getUrl, deleteUrl] = await Promise.all([
-    getSignedUrl(s3, new PutObjectCommand(objectArgs), {
-      expiresIn: PUT_EXPIRES_SECONDS,
-    }),
+  const [getUrl, deleteUrl] = await Promise.all([
     getSignedUrl(s3, new GetObjectCommand(objectArgs), {
       expiresIn: GET_EXPIRES_SECONDS,
     }),
@@ -115,5 +99,13 @@ export const generateTransferUrls = async (
     }),
   ]);
 
-  return { putUrl, getUrl, deleteUrl };
+  return {
+    s3,
+    getUrl,
+    deleteUrl,
+    expirySeconds: {
+      get: GET_EXPIRES_SECONDS,
+      delete: DELETE_EXPIRES_SECONDS,
+    },
+  };
 };

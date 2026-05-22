@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { PermissionSpec } from "../../types/request";
 import { AwsResourcePermissionSpec } from "../aws/types";
+import { S3Client } from "@aws-sdk/client-s3";
 
 export type FileTransferResource = {
   accountId: string;
@@ -18,6 +19,7 @@ export type FileTransferResource = {
   arn: string;
   region: string;
   bucketName: string;
+  bucketRegion: string;
   objectKey: string;
 };
 
@@ -33,7 +35,7 @@ export type FileTransferPermissionSpec = PermissionSpec<
   Record<string, never>
 > & {
   delegation: {
-    aws: AwsResourcePermissionSpec;
+    aws?: AwsResourcePermissionSpec;
   };
 };
 
@@ -45,7 +47,8 @@ export type TransferTarget = {
 };
 
 export type TransferUrls = {
-  putUrl: string;
+  s3: S3Client;
   getUrl: string;
   deleteUrl: string;
+  expirySeconds: { get: number; delete: number };
 };

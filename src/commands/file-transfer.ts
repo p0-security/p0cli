@@ -15,7 +15,8 @@ import {
   generateTransferUrls,
   provisionTransferRequest,
 } from "../plugins/file-transfer";
-import * as fs from "fs/promises";
+import { Upload } from "@aws-sdk/lib-storage";
+import { createReadStream } from "fs";
 import yargs from "yargs";
 
 export type FileTransferCommandArgs = {
@@ -28,7 +29,7 @@ export type FileTransferCommandArgs = {
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
     "file-transfer <source> <destination>",
-    "Transfer a local file to a remote instance via a temporary signed-URL bucket.",
+    "Transfer a local file to a remote instance via a temporary S3 bucket.",
     (yargs) =>
       yargs
         .positional("source", {
@@ -63,29 +64,68 @@ const fileTransferAction = async (
 
       const authn = await authenticate(args);
 
+      print2("Requesting file-transfer access...");
       const target = await provisionTransferRequest(authn, args);
+      print2(`Access approved for s3://${target.bucket}/${target.key}`);
 
-      const { putUrl, getUrl, deleteUrl } = await generateTransferUrls(
-        authn,
-        target,
-        args.debug
-      );
+      print2("Preparing upload credentials...");
+      const { s3, getUrl, deleteUrl, expirySeconds } =
+        await generateTransferUrls(authn, target, args.debug);
 
+      const fmt = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
       if (args.debug) {
-        print2(`PUT    (5m): ${putUrl}`);
-        print2(`GET    (5m): ${getUrl}`);
-        print2(`DELETE (1h): ${deleteUrl}`);
+        print2(`GET    (${fmt(expirySeconds.get)}): ${getUrl}`);
+        print2(`DELETE (${fmt(expirySeconds.delete)}): ${deleteUrl}`);
       }
 
-      const buffer = await fs.readFile(args.source);
-      const uploadResponse = await fetch(putUrl, {
-        method: "PUT",
-        body: buffer as unknown as BodyInit,
-      });
+      print2(`Uploading ${args.source}...`);
 
-      if (!uploadResponse.ok) {
-        const body = await uploadResponse.text().catch(() => "");
-        throw `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}${body ? `\n${body}` : ""}`;
+      // The backend grants the AWS role permission to write to our prefix, but
+      // IAM has eventual consistency — the policy can take several seconds to
+      // propagate before S3 honors it. Retry AccessDenied for up to 30s so the
+      // first invocation just works instead of failing the user.
+      const GRANT_PROPAGATION_TIMEOUT_MS = 30_000;
+      const RETRY_BASE_MS = 2_000;
+      const RETRY_MAX_MS = 5_000;
+      const startTime = Date.now();
+      let attempt = 0;
+      let uploaded = false;
+
+      while (!uploaded) {
+        attempt++;
+        const upload = new Upload({
+          client: s3,
+          params: {
+            Bucket: target.bucket,
+            Key: target.key,
+            Body: createReadStream(args.source),
+          },
+        });
+
+        upload.on("httpUploadProgress", (progress) => {
+          const loaded = progress.loaded ?? 0;
+          const total = progress.total ?? 0;
+          const mb = (loaded / 1024 / 1024).toFixed(1);
+          const pct = total ? ` (${Math.round((loaded / total) * 100)}%)` : "";
+          print2(`  uploaded ${mb} MB${pct}`);
+        });
+
+        try {
+          await upload.done();
+          uploaded = true;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const isAccessDenied = /AccessDenied|not authorized/i.test(message);
+          const elapsed = Date.now() - startTime;
+          if (!isAccessDenied || elapsed > GRANT_PROPAGATION_TIMEOUT_MS) {
+            throw `Upload failed: ${message}`;
+          }
+          const delay = Math.min(RETRY_BASE_MS * attempt, RETRY_MAX_MS);
+          print2(
+            `  access not yet propagated (attempt ${attempt}); retrying in ${delay / 1000}s...`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+        }
       }
 
       print2("Uploaded.");
