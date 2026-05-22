@@ -125,6 +125,36 @@ const STATUS_TABLE: Record<string, StatusInfo> = {
     terminal: true,
     success: false,
   },
+  CLEANUP_SUBMITTED: {
+    color: "yellow",
+    label: "Cleaning up",
+    terminal: false,
+    success: false,
+  },
+  CLEANED_UP: {
+    color: "gray",
+    label: "Cleaned up",
+    terminal: true,
+    success: false,
+  },
+  CLEANUP_ERRORED: {
+    color: "red",
+    label: "Cleanup errored",
+    terminal: true,
+    success: false,
+  },
+  DRAFT: {
+    color: "gray",
+    label: "Draft",
+    terminal: false,
+    success: false,
+  },
+  TRANSLATED: {
+    color: "gray",
+    label: "Translating",
+    terminal: false,
+    success: false,
+  },
 };
 
 export const statusInfo = (status: string): StatusInfo =>
@@ -140,10 +170,27 @@ export const isTerminalStatus = (status: string): boolean =>
 
 /** Best-effort one-line summary used in list rows and headers. */
 export const describeGrant = (g: MyGrant): string => {
-  const permSummary = renderPermissionSummary(g.permission);
-  return permSummary
-    ? `${g.type} · ${g.access} · ${permSummary}`
+  const summary = displaySummary(g) || renderPermissionSummary(g.permission);
+  return summary
+    ? `${g.type} · ${g.access} · ${summary}`
     : `${g.type} · ${g.access}`;
+};
+
+/**
+ * Pulls a one-line summary from the backend-provided display rows.
+ * Concatenates the first one or two visible rows by `content` only, since
+ * labels (e.g. "Linux Username", "Role") tend to add noise in the
+ * one-line context where the integration name already implies them.
+ */
+const displaySummary = (g: MyGrant): string => {
+  const rows = (g.display?.rows ?? []).filter(
+    (r) => !r.isHidden && !!r.content
+  );
+  if (rows.length === 0) return "";
+  return rows
+    .slice(0, 2)
+    .map((r) => r.content)
+    .join(" · ");
 };
 
 /** Picks a friendly summary key from an integration-specific permission

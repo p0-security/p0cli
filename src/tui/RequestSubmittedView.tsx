@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { MyGrant, fetchMyGrant } from "../drivers/api.js";
 import { Authn } from "../types/identity.js";
+import { RequestDetails } from "./RequestDetails.js";
 import {
   describeGrant,
   isTerminalStatus,
@@ -19,32 +20,54 @@ import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import React, { useEffect, useRef, useState } from "react";
 
-type PollingViewProps = {
-  authn: Authn;
-  requestIds: string[];
-  debug?: boolean;
-  /** Called when the user dismisses the view (Esc / Enter). */
-  onDismiss: () => void;
-};
-
 const POLL_INTERVAL_MS = 3000;
 
-type StatusEntry =
+type Entry =
   | { kind: "data"; grant: MyGrant }
   | { kind: "error"; error: string }
   | { kind: "loading" };
 
-export const PollingView: React.FC<PollingViewProps> = ({
+type Props = {
+  authn: Authn;
+  requestIds: string[];
+  debug?: boolean;
+  onDismiss: () => void;
+};
+
+/**
+ * Post-submit screen. When the submission produced exactly one request,
+ * we go straight to the unified RequestDetails view. When multiple
+ * requests were created (rare, but possible for some compound forms),
+ * we render a summary list and let the user drill into each.
+ */
+export const RequestSubmittedView: React.FC<Props> = (props) => {
+  if (props.requestIds.length === 1) {
+    return (
+      <RequestDetails
+        authn={props.authn}
+        requestId={props.requestIds[0]!}
+        debug={props.debug}
+        onBack={props.onDismiss}
+        backLabel="Continue"
+      />
+    );
+  }
+  return <MultiRequestSummary {...props} />;
+};
+
+const MultiRequestSummary: React.FC<Props> = ({
   authn,
   requestIds,
   debug,
   onDismiss,
 }) => {
-  const [entries, setEntries] = useState<Record<string, StatusEntry>>(() => {
-    const init: Record<string, StatusEntry> = {};
+  const [entries, setEntries] = useState<Record<string, Entry>>(() => {
+    const init: Record<string, Entry> = {};
     for (const id of requestIds) init[id] = { kind: "loading" };
     return init;
   });
+  const [drillId, setDrillId] = useState<string | null>(null);
+  const [idx, setIdx] = useState(0);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -72,7 +95,6 @@ export const PollingView: React.FC<PollingViewProps> = ({
     };
 
     for (const id of requestIds) void pollOne(id);
-
     return () => {
       cancelledRef.current = true;
       for (const t of timers) clearTimeout(t);
@@ -80,8 +102,30 @@ export const PollingView: React.FC<PollingViewProps> = ({
   }, [authn, debug, requestIds]);
 
   useInput((input, key) => {
-    if (key.return || key.escape || input === "q") onDismiss();
+    if (drillId) return;
+    if (key.upArrow || input === "k") {
+      setIdx((i) => (i + requestIds.length - 1) % requestIds.length);
+    } else if (key.downArrow || input === "j") {
+      setIdx((i) => (i + 1) % requestIds.length);
+    } else if (key.return) {
+      const id = requestIds[idx];
+      if (id) setDrillId(id);
+    } else if (key.escape || input === "q") {
+      onDismiss();
+    }
   });
+
+  if (drillId) {
+    return (
+      <RequestDetails
+        authn={authn}
+        requestId={drillId}
+        debug={debug}
+        onBack={() => setDrillId(null)}
+        backLabel="Back to list"
+      />
+    );
+  }
 
   const allTerminal =
     requestIds.length > 0 &&
@@ -93,32 +137,34 @@ export const PollingView: React.FC<PollingViewProps> = ({
   return (
     <Box flexDirection="column" paddingX={1}>
       <Text bold color={allTerminal ? "green" : "cyan"}>
-        {allTerminal ? "✓ Request complete" : "● Request submitted"}
+        {allTerminal ? "✓ Requests complete" : "● Requests submitted"}
       </Text>
+      <Text dimColor>↑/↓ navigate · Enter view details · q/Esc dismiss</Text>
       <Box flexDirection="column" marginTop={1}>
-        {requestIds.map((id) => (
-          <RequestRow key={id} requestId={id} entry={entries[id]} />
+        {requestIds.map((id, i) => (
+          <Row
+            key={id}
+            requestId={id}
+            entry={entries[id]}
+            focused={i === idx}
+          />
         ))}
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>
-          {allTerminal
-            ? "Press Enter or Esc to continue"
-            : `Polling every ${POLL_INTERVAL_MS / 1000}s — Enter/Esc to dismiss (request will continue in the background)`}
-        </Text>
       </Box>
     </Box>
   );
 };
 
-const RequestRow: React.FC<{
+const Row: React.FC<{
   requestId: string;
-  entry: StatusEntry | undefined;
-}> = ({ requestId, entry }) => {
+  entry: Entry | undefined;
+  focused: boolean;
+}> = ({ requestId, entry, focused }) => {
+  const marker = focused ? "❯ " : "  ";
   if (!entry || entry.kind === "loading") {
     return (
       <Box>
-        <Text>
+        <Text color={focused ? "cyan" : undefined} bold={focused}>
+          {marker}
           <Spinner type="dots" /> {requestId} — loading status…
         </Text>
       </Box>
@@ -128,7 +174,7 @@ const RequestRow: React.FC<{
     return (
       <Box>
         <Text color="red">
-          ✗ {requestId} — {entry.error}
+          {marker}✗ {requestId} — {entry.error}
         </Text>
       </Box>
     );
@@ -139,12 +185,15 @@ const RequestRow: React.FC<{
   return (
     <Box flexDirection="column">
       <Box>
+        <Text color={focused ? "cyan" : undefined} bold={focused}>
+          {marker}
+        </Text>
         <Text color={info.color} bold={info.terminal}>
           {icon}{" "}
         </Text>
         <Text bold>{describeGrant(grant)}</Text>
       </Box>
-      <Box marginLeft={2}>
+      <Box marginLeft={4}>
         <Text color={info.color}>{info.label}</Text>
         <Text dimColor> ({grant.status})</Text>
       </Box>

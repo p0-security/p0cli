@@ -51,6 +51,23 @@ const webRequestsUrl = (tenant: string) =>
 const mineUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/permission-requests/mine`;
 
+export type GrantDisplayRow = {
+  label: string;
+  content: string;
+  isHidden?: boolean;
+};
+
+export type GrantHistoryEntry = {
+  status: string;
+  label: string;
+  timestamp: number;
+};
+
+export type GrantDisplay = {
+  rows: GrantDisplayRow[];
+  history: GrantHistoryEntry[];
+};
+
 export type MyGrant = {
   requestId: string;
   type: string;
@@ -72,6 +89,12 @@ export type MyGrant = {
     name?: string;
     email?: string;
   };
+  /**
+   * Optional display payload produced server-side. Older backends (or
+   * non-mine endpoints) may not populate this, in which case the TUI
+   * falls back to per-field rendering.
+   */
+  display?: GrantDisplay;
 };
 
 export const fetchOrgData = async <T>(orgId: string) =>

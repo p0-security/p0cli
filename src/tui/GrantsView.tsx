@@ -8,19 +8,13 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import {
-  MyGrant,
-  fetchMyGrant,
-  fetchMyGrants,
-  relinquishGrant,
-} from "../drivers/api.js";
+import { MyGrant, fetchMyGrants, relinquishGrant } from "../drivers/api.js";
 import { Authn } from "../types/identity.js";
+import { RequestDetails } from "./RequestDetails.js";
 import {
   describeGrant,
   formatExpiry,
   formatRelative,
-  formatTimestamp,
-  isTerminalStatus,
   statusInfo,
 } from "./grant-display.js";
 import { Box, Text, useInput } from "ink";
@@ -46,9 +40,7 @@ type ListState =
   | { kind: "loading" }
   | { kind: "ready"; grants: MyGrant[] };
 
-const RELINQUISHABLE_STATUS = "DONE_NOTIFIED";
 const PAGE_SIZE = 8;
-const DETAIL_POLL_INTERVAL_MS = 3000;
 
 export const GrantsView: React.FC<GrantsViewProps> = ({
   authn,
@@ -100,7 +92,7 @@ export const GrantsView: React.FC<GrantsViewProps> = ({
       );
     case "details":
       return (
-        <DetailsScreen
+        <RequestDetails
           authn={authn}
           requestId={view.grantId}
           debug={debug}
@@ -109,6 +101,7 @@ export const GrantsView: React.FC<GrantsViewProps> = ({
             void reloadList();
           }}
           onRelinquish={(g) => setView({ kind: "confirming", grant: g })}
+          backLabel="Back to list"
         />
       );
     case "confirming":
@@ -278,292 +271,6 @@ const GrantListRow: React.FC<{
 const truncate = (s: string, max: number): string =>
   s.length <= max ? s : s.slice(0, max - 1) + "…";
 
-type DetailsState =
-  | { kind: "error"; error: string }
-  | { kind: "loading" }
-  | { kind: "ready"; grant: MyGrant };
-
-const DetailsScreen: React.FC<{
-  authn: Authn;
-  requestId: string;
-  debug?: boolean;
-  onBack: () => void;
-  onRelinquish: (g: MyGrant) => void;
-}> = ({ authn, requestId, debug, onBack, onRelinquish }) => {
-  const [state, setState] = useState<DetailsState>({ kind: "loading" });
-  const [pollWarning, setPollWarning] = useState<string | null>(null);
-
-  // Self-contained polling. Cancels on unmount AND stops polling when the
-  // status reaches a terminal state (no more transitions possible).
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const tick = async () => {
-      if (cancelled) return;
-      try {
-        const grant = await fetchMyGrant(authn, requestId, debug);
-        if (cancelled) return;
-        setState({ kind: "ready", grant });
-        setPollWarning(null);
-        if (isTerminalStatus(grant.status)) return;
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        // First fetch failure → show error screen. Subsequent failures only
-        // mark a refresh warning so the user can keep seeing the last data.
-        setState((prev) =>
-          prev.kind === "loading" ? { kind: "error", error: message } : prev
-        );
-        setPollWarning(message);
-      }
-      timer = setTimeout(() => void tick(), DETAIL_POLL_INTERVAL_MS);
-    };
-
-    void tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [authn, debug, requestId]);
-
-  if (state.kind === "loading") {
-    return (
-      <Box paddingX={1}>
-        <Text>
-          <Spinner type="dots" /> Loading grant…
-        </Text>
-      </Box>
-    );
-  }
-  if (state.kind === "error") {
-    return <ErrorScreen error={state.error} onBack={onBack} />;
-  }
-
-  return (
-    <DetailsContent
-      grant={state.grant}
-      pollWarning={pollWarning}
-      onBack={onBack}
-      onRelinquish={onRelinquish}
-    />
-  );
-};
-
-const DetailsContent: React.FC<{
-  grant: MyGrant;
-  pollWarning: string | null;
-  onBack: () => void;
-  onRelinquish: (g: MyGrant) => void;
-}> = ({ grant, pollWarning, onBack, onRelinquish }) => {
-  const canRelinquish = grant.status === RELINQUISHABLE_STATUS;
-  const actions: Array<"back" | "relinquish"> = canRelinquish
-    ? ["relinquish", "back"]
-    : ["back"];
-  // Reset focus when the action set shrinks (e.g., after relinquish the
-  // "relinquish" entry disappears).
-  const [actionIdx, setActionIdx] = useState(0);
-  useEffect(() => {
-    if (actionIdx >= actions.length) setActionIdx(0);
-  }, [actionIdx, actions.length]);
-
-  useInput((input, key) => {
-    if (key.upArrow || input === "k") {
-      setActionIdx((i) => (i + actions.length - 1) % actions.length);
-    } else if (key.downArrow || input === "j") {
-      setActionIdx((i) => (i + 1) % actions.length);
-    } else if (key.return) {
-      const a = actions[actionIdx];
-      if (a === "relinquish") onRelinquish(grant);
-      else if (a === "back") onBack();
-    } else if (key.escape || input === "q") {
-      onBack();
-    }
-  });
-
-  const info = statusInfo(grant.status);
-  const permissionEntries = flattenObject(grant.permission);
-  const delegationEntries = flattenObject(grant.delegation);
-
-  return (
-    <Box flexDirection="column" paddingX={1}>
-      <Text bold>{describeGrant(grant)}</Text>
-      <Box marginTop={1} flexDirection="column">
-        <Field label="Status">
-          <Text color={info.color}>● {info.label} </Text>
-          <Text dimColor>({grant.status})</Text>
-        </Field>
-        <Field label="Type">
-          <Text>{grant.type}</Text>
-        </Field>
-        <Field label="Access">
-          <Text>{grant.access}</Text>
-        </Field>
-        <Field label="Requestor">
-          <Text>{grant.requestor}</Text>
-        </Field>
-        <Field label="Principal">
-          <Text>
-            {grant.principal}
-            {grant.principal === grant.requestor ? (
-              <Text dimColor> (self)</Text>
-            ) : null}
-          </Text>
-        </Field>
-        <Field label="Requested">
-          <Text>{formatTimestamp(grant.requestedTimestamp)}</Text>
-          <Text dimColor>
-            {" · " + formatRelative(grant.requestedTimestamp)}
-          </Text>
-        </Field>
-        <Field label="Granted">
-          <Text>{formatTimestamp(grant.grantTimestamp)}</Text>
-          {grant.grantTimestamp ? (
-            <Text dimColor>{" · " + formatRelative(grant.grantTimestamp)}</Text>
-          ) : null}
-        </Field>
-        <Field label="Expires">
-          <Text>
-            {formatTimestamp(grant.expiryTimestamp)}
-            {grant.expiryTimestamp ? (
-              <Text dimColor>{` · ${formatExpiry(grant)}`}</Text>
-            ) : null}
-          </Text>
-        </Field>
-        {grant.duration ? (
-          <Field label="Duration">
-            <Text>{grant.duration}</Text>
-          </Field>
-        ) : null}
-        {grant.reason ? (
-          <Field label="Reason">
-            <Text>{grant.reason}</Text>
-          </Field>
-        ) : null}
-        {grant.approvalDetails ? (
-          <Field label="Approved by">
-            <Text>
-              {grant.approvalDetails.name ?? grant.approvalDetails.email ?? "—"}
-              {grant.approvalDetails.approvedTimestamp ? (
-                <Text dimColor>
-                  {" · " +
-                    formatRelative(grant.approvalDetails.approvedTimestamp)}
-                </Text>
-              ) : null}
-              {grant.approvalDetails.approvalSource ? (
-                <Text dimColor>
-                  {" · via " + grant.approvalDetails.approvalSource}
-                </Text>
-              ) : null}
-            </Text>
-          </Field>
-        ) : null}
-      </Box>
-
-      <KeyValueSection title="PERMISSION" entries={permissionEntries} />
-      <KeyValueSection title="DELEGATION" entries={delegationEntries} />
-
-      {!canRelinquish ? (
-        <Box marginTop={1}>
-          <Text dimColor italic>
-            Relinquish is only available while access is active (status
-            DONE_NOTIFIED).
-          </Text>
-        </Box>
-      ) : null}
-      {pollWarning ? (
-        <Box marginTop={1}>
-          <Text dimColor>(refresh: {pollWarning})</Text>
-        </Box>
-      ) : null}
-      <Box flexDirection="column" marginTop={1}>
-        {actions.map((a, i) => (
-          <ActionRow
-            key={a}
-            label={a === "relinquish" ? "Relinquish" : "Back"}
-            kind={a}
-            focused={i === actionIdx}
-          />
-        ))}
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>↑/↓ navigate · Enter to select · q/Esc back</Text>
-      </Box>
-    </Box>
-  );
-};
-
-const ActionRow: React.FC<{
-  label: string;
-  kind: "back" | "relinquish";
-  focused: boolean;
-}> = ({ label, kind, focused }) => {
-  const color = focused
-    ? kind === "relinquish"
-      ? "yellow"
-      : "cyan"
-    : undefined;
-  return (
-    <Box>
-      <Box width={2}>
-        <Text color="cyan" bold>
-          {focused ? "❯" : " "}
-        </Text>
-      </Box>
-      <Text color={color} bold={focused}>
-        [ {label} ]
-      </Text>
-    </Box>
-  );
-};
-
-const KeyValueSection: React.FC<{
-  title: string;
-  entries: Array<{ key: string; value: string }>;
-}> = ({ title, entries }) => {
-  if (entries.length === 0) return null;
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color="gray" bold>
-        {title}
-      </Text>
-      {entries.map((e) => (
-        <KeyValueRow key={e.key} entry={e} />
-      ))}
-    </Box>
-  );
-};
-
-const Field: React.FC<{
-  label: string;
-  children: React.ReactNode;
-}> = ({ label, children }) => (
-  <Box>
-    <Box width={14}>
-      <Text color="gray">{label}</Text>
-    </Box>
-    <Box flexGrow={1}>
-      <Text>{children}</Text>
-    </Box>
-  </Box>
-);
-
-const KeyValueRow: React.FC<{
-  entry: { key: string; value: string };
-}> = ({ entry }) => (
-  <Box>
-    <Box width={2}>
-      <Text> </Text>
-    </Box>
-    <Box width={24}>
-      <Text dimColor>{entry.key}</Text>
-    </Box>
-    <Box flexGrow={1}>
-      <Text>{entry.value}</Text>
-    </Box>
-  </Box>
-);
-
 const ConfirmScreen: React.FC<{
   grant: MyGrant;
   onConfirm: () => void;
@@ -644,31 +351,4 @@ const ErrorScreen: React.FC<{ error: string; onBack: () => void }> = ({
       <Text dimColor>Press Enter or Esc to go back.</Text>
     </Box>
   );
-};
-
-const flattenObject = (
-  obj: Record<string, unknown>,
-  prefix = ""
-): Array<{ key: string; value: string }> => {
-  const out: Array<{ key: string; value: string }> = [];
-  for (const [k, v] of Object.entries(obj)) {
-    const key = prefix ? `${prefix}.${k}` : k;
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      out.push(...flattenObject(v as Record<string, unknown>, key));
-    } else {
-      out.push({ key, value: formatScalar(v) });
-    }
-  }
-  return out;
-};
-
-const formatScalar = (v: unknown): string => {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
 };

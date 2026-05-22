@@ -10,8 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { Authn } from "../types/identity.js";
 import { GrantsView } from "./GrantsView.js";
-import { PollingView } from "./PollingView.js";
 import { RequestForm } from "./RequestForm.js";
+import { RequestSubmittedView } from "./RequestSubmittedView.js";
 import { TuiEntryFlow } from "./index.js";
 import { Box, Text, useApp, useInput } from "ink";
 import React, { useCallback, useState } from "react";
@@ -26,8 +26,8 @@ type AppProps = {
 type Screen =
   | { kind: "menu" }
   | { kind: "my-access" }
-  | { kind: "polling"; requestIds: string[] }
-  | { kind: "request" };
+  | { kind: "request" }
+  | { kind: "submitted"; requestIds: string[] };
 
 const initialScreen = (entry: TuiEntryFlow): Screen =>
   entry === "request" ? { kind: "request" } : { kind: "menu" };
@@ -67,12 +67,14 @@ export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
           authn={authn}
           debug={debug}
           onCancel={backFromSubScreen}
-          onSubmitted={(ids) => setScreen({ kind: "polling", requestIds: ids })}
+          onSubmitted={(ids) =>
+            setScreen({ kind: "submitted", requestIds: ids })
+          }
         />
       );
-    case "polling":
+    case "submitted":
       return (
-        <PollingView
+        <RequestSubmittedView
           authn={authn}
           requestIds={screen.requestIds}
           debug={debug}
