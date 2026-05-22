@@ -405,13 +405,34 @@ const FieldRow: React.FC<FieldRowProps> = (props) => {
           <ExpandedEditor {...props} />
         </Box>
       ) : null}
-      {field.help && !editing ? (
+      {/* Help renders below the row only while the row is focused (and
+       *  the value isn't being edited inline). Showing it on every row
+       *  by default gave the form an uneven vertical rhythm relative
+       *  to the request form, and the persistent help line read like
+       *  another value — hard to tell apart from the user's input.
+       *  Context-on-focus matches the practical appearance of the
+       *  request form, where most blocks carry no `hint` so the row
+       *  below stays empty in most cases. */}
+      {field.help && focused && !editing ? (
         <Box marginLeft={2 + LABEL_WIDTH}>
           <Text dimColor>{field.help}</Text>
         </Box>
       ) : null}
     </Box>
   );
+};
+
+/**
+ * Ghost text shown in the value column when a field is empty. Falls
+ * back to the field's `help` when no explicit `placeholder` is set so
+ * the user still gets a hint about what to type — and that hint is
+ * naturally "overwritten" by their input, the same way placeholders
+ * behave in the request form.
+ */
+const emptyGhost = (field: WorkflowField): string => {
+  if ("placeholder" in field && field.placeholder) return field.placeholder;
+  if ("help" in field && field.help) return field.help;
+  return "(empty)";
 };
 
 const FieldSummary: React.FC<FieldRowProps> = ({ field, value }) => {
@@ -429,7 +450,7 @@ const FieldSummary: React.FC<FieldRowProps> = ({ field, value }) => {
     if (!opt) {
       return (
         <Text dimColor italic>
-          (not set)
+          {emptyGhost(field)}
         </Text>
       );
     }
@@ -440,7 +461,7 @@ const FieldSummary: React.FC<FieldRowProps> = ({ field, value }) => {
     if (!raw) {
       return (
         <Text dimColor italic>
-          {field.placeholder ?? "(press Enter to search)"}
+          {emptyGhost(field)}
         </Text>
       );
     }
@@ -451,9 +472,7 @@ const FieldSummary: React.FC<FieldRowProps> = ({ field, value }) => {
   if (!raw) {
     return (
       <Text dimColor italic>
-        {"placeholder" in field && field.placeholder
-          ? field.placeholder
-          : "(empty)"}
+        {emptyGhost(field)}
       </Text>
     );
   }
@@ -498,6 +517,16 @@ const TextFieldEditor: React.FC<FieldRowProps> = ({
     if (key.escape) onCancelEdit();
   });
 
+  // Same fallback as FieldSummary so the ghost text the user saw in
+  // navigate mode persists as the TextInput placeholder when they
+  // start editing an empty field.
+  const placeholder =
+    "placeholder" in field && field.placeholder
+      ? field.placeholder
+      : "help" in field && field.help
+        ? field.help
+        : undefined;
+
   return (
     <Box>
       <Text color="cyan">{"> "}</Text>
@@ -505,7 +534,7 @@ const TextFieldEditor: React.FC<FieldRowProps> = ({
         value={draft}
         onChange={setDraft}
         onSubmit={() => onCommit(draft)}
-        placeholder={"placeholder" in field ? field.placeholder : undefined}
+        placeholder={placeholder}
       />
     </Box>
   );
