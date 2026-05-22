@@ -16,7 +16,7 @@ import {
   provisionTransferRequest,
 } from "../plugins/file-transfer";
 import { Upload } from "@aws-sdk/lib-storage";
-import { createReadStream } from "fs";
+import { createReadStream, statSync } from "fs";
 import yargs from "yargs";
 
 export type FileTransferCommandArgs = {
@@ -62,6 +62,19 @@ const fileTransferAction = async (
       span.setAttribute("source", args.source);
       span.setAttribute("destination", args.destination);
 
+      // Fail before requesting backend approval if the source can't be uploaded —
+      // a missing path or directory would otherwise only surface mid-upload, after
+      // the user has already waited on the approval flow.
+      let sourceStats;
+      try {
+        sourceStats = statSync(args.source);
+      } catch {
+        throw `Source file not found: ${args.source}`;
+      }
+      if (!sourceStats.isFile()) {
+        throw `Source path is not a regular file: ${args.source}`;
+      }
+
       const authn = await authenticate(args);
 
       print2("Requesting file-transfer access...");
@@ -72,7 +85,8 @@ const fileTransferAction = async (
       const { s3, getUrl, deleteUrl, expirySeconds } =
         await generateTransferUrls(authn, target, args.debug);
 
-      const fmt = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
+      const fmt = (s: number) =>
+        s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
       if (args.debug) {
         print2(`GET    (${fmt(expirySeconds.get)}): ${getUrl}`);
         print2(`DELETE (${fmt(expirySeconds.delete)}): ${deleteUrl}`);
@@ -115,12 +129,18 @@ const fileTransferAction = async (
           uploaded = true;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          const isAccessDenied = /AccessDenied|not authorized/i.test(message);
+          // AWS SDK v3 sets `name` to the AWS error code. Matching the typed
+          // field avoids breaking if a future SDK reworks the message text.
+          const isAccessDenied =
+            err instanceof Error && err.name === "AccessDenied";
           const elapsed = Date.now() - startTime;
-          if (!isAccessDenied || elapsed > GRANT_PROPAGATION_TIMEOUT_MS) {
+          const delay = Math.min(RETRY_BASE_MS * attempt, RETRY_MAX_MS);
+          if (
+            !isAccessDenied ||
+            elapsed + delay > GRANT_PROPAGATION_TIMEOUT_MS
+          ) {
             throw `Upload failed: ${message}`;
           }
-          const delay = Math.min(RETRY_BASE_MS * attempt, RETRY_MAX_MS);
           print2(
             `  access not yet propagated (attempt ${attempt}); retrying in ${delay / 1000}s...`
           );
