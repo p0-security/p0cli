@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
-  SuppressedExit,
+  isSuppressedExit,
   setSuppressExit,
 } from "../../opentelemetry/otel-helpers.js";
 import { parsePassthrough } from "./preview.js";
@@ -40,8 +40,8 @@ const toBool = (v: WorkflowValues[string]): boolean | undefined =>
  *
  * SSH/SCP/RDP handlers call `exitProcess` on their happy path; this
  * function wraps each call with `setSuppressExit(true)` so those
- * "exits" become catchable throws of the `SuppressedExit` sentinel,
- * letting the TUI loop re-mount.
+ * "exits" become catchable `SuppressedExit` throws, letting the TUI
+ * loop re-mount.
  */
 export const runWorkflow = async (
   workflowId: string,
@@ -54,19 +54,67 @@ export const runWorkflow = async (
   }
 
   const previousSuppress = setSuppressExit(true);
+  // Temporarily swap the uncaughtException / unhandledRejection
+  // handlers from src/index.ts so an unhandled `SuppressedExit`
+  // (e.g. if yargs swallows it) doesn't kill the TUI process.
+  const restoreGuards = installCrashGuards();
   try {
     const { runCommands } = await import("../../commands/index.js");
     await runCommands(argv);
     return { ok: true };
   } catch (err) {
-    if (err === SuppressedExit) {
+    if (isSuppressedExit(err)) {
       // Handler called exitProcess on its happy path (SSH/SCP/RDP).
-      return { ok: true };
+      return { ok: err.exitCode === 0, message: err.message };
     }
     return { ok: false, message: errorMessage(err) };
   } finally {
+    restoreGuards();
     setSuppressExit(previousSuppress);
   }
+};
+
+/**
+ * Defensive shim around the process-level handlers in `src/index.ts`.
+ * Those handlers call `process.exit(1)` on any uncaught exception or
+ * unhandled rejection — a sensible default for non-interactive runs,
+ * but disastrous from the TUI's workflow loop, where the same throw
+ * can occur on a normal happy path (`SuppressedExit`) or from a
+ * benign child-process race after SSH exits. While a workflow is
+ * running we swap those handlers for ones that log and continue.
+ */
+const installCrashGuards = (): (() => void) => {
+  const prevUncaught = process.listeners("uncaughtException").slice();
+  const prevRejection = process.listeners("unhandledRejection").slice();
+  process.removeAllListeners("uncaughtException");
+  process.removeAllListeners("unhandledRejection");
+
+  const onUncaught = (err: unknown) => {
+    if (isSuppressedExit(err)) return; // Expected; ignore.
+    // Otherwise log but DON'T exit — the executor's try/catch will
+    // surface the failure via WorkflowResult on the next tick.
+    // eslint-disable-next-line no-console
+    console.error(
+      "Workflow background error:",
+      err instanceof Error ? err.message : String(err)
+    );
+  };
+  process.on("uncaughtException", onUncaught);
+  process.on("unhandledRejection", onUncaught);
+
+  return () => {
+    process.removeListener("uncaughtException", onUncaught);
+    process.removeListener("unhandledRejection", onUncaught);
+    for (const l of prevUncaught) {
+      process.on("uncaughtException", l as (err: Error) => void);
+    }
+    for (const l of prevRejection) {
+      process.on(
+        "unhandledRejection",
+        l as (reason: unknown, promise: Promise<unknown>) => void
+      );
+    }
+  };
 };
 
 /**

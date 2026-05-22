@@ -124,14 +124,23 @@ async function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
  * between runs.
  */
 export const runCommands = async (argv: string[]): Promise<void> => {
-  const base = yargs(argv).version(stringifyVersionInfo(p0VersionInfo));
+  const base = yargs(argv)
+    .version(stringifyVersionInfo(p0VersionInfo))
+    // Critical for the TUI workflow loop: never let yargs itself call
+    // `process.exit`. Without this, a `--help` invocation or a strict()
+    // failure inside a workflow would kill the TUI.
+    .exitProcess(false);
   const cli = commands
     .reduce((m, c) => c(m), base)
     .strict()
     .fail((message, error) => {
       // Propagate the error to the workflow loop so it can surface the
       // failure on TUI re-mount, instead of calling exitProcess.
-      throw error ?? new Error(message);
+      throw error instanceof Error
+        ? error
+        : new Error(
+            typeof error === "string" ? error : (message ?? "command failed")
+          );
     });
   await cli.parseAsync();
 };

@@ -132,8 +132,24 @@ export const markSpanOk = (span: Span): void => {
 let suppressExit = false;
 let suppressedExitCode: number | undefined;
 
-/** Sentinel thrown by `exitProcess` when {@link suppressExit} is on. */
-export const SuppressedExit = Symbol("SuppressedExit");
+/**
+ * Error thrown by `exitProcess` when {@link suppressExit} is on, instead
+ * of actually calling `process.exit`. Uses a named subclass (rather
+ * than a Symbol) so it survives intact through yargs's `.fail` wiring,
+ * `traceSpan`'s re-throw, and Node's `uncaughtException` handler (all
+ * of which assume the thrown value behaves like an Error).
+ */
+export class SuppressedExit extends Error {
+  readonly exitCode: number;
+  constructor(exitCode: number) {
+    super(`exitProcess(${exitCode}) suppressed`);
+    this.name = "SuppressedExit";
+    this.exitCode = exitCode;
+  }
+}
+
+export const isSuppressedExit = (err: unknown): err is SuppressedExit =>
+  err instanceof SuppressedExit;
 
 /** Toggled by the TUI's workflow loop. Returns the previous value so the
  *  caller can restore it after the workflow completes. */
@@ -173,7 +189,7 @@ export const exitProcess = (exitCode: number): never => {
     // Thrown so the call site really does stop execution like a real
     // `process.exit`. The TUI loop catches this sentinel and reads
     // `getSuppressedExitCode()` to recover the intended code.
-    throw SuppressedExit;
+    throw new SuppressedExit(exitCode);
   }
 
   process.exit(exitCode);

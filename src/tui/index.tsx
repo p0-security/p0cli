@@ -132,27 +132,69 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
       }
       // Pause so the user can see the workflow's terminal output (which
       // is on the main screen buffer) before we switch back to the TUI's
-      // alternate buffer.
+      // alternate buffer. SSH leaves stdin in a non-trivial state, so
+      // pressEnterToContinue is defensive about restoring sane defaults.
       await pressEnterToContinue();
     }
 
-    session = await loadSession(args.debug);
+    // Refresh the session before re-mounting. Wrapped because a failure
+    // here (transient network, Firebase race after SSH) shouldn't kill
+    // the TUI — fall back to logged-out and surface a message.
+    try {
+      session = await loadSession(args.debug);
+    } catch (err) {
+      session = {
+        kind: "logged-out",
+        defaultOrg:
+          session.kind === "logged-in" ? session.orgSlug : session.defaultOrg,
+        message: `Could not reload session: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
   }
 };
 
+/**
+ * Pauses for a single Enter keypress. Resets the post-SSH terminal
+ * state (raw mode off, stdin resumed, listeners removed) so the next
+ * Ink mount starts from a clean slate.
+ */
 const pressEnterToContinue = async (): Promise<void> => {
   if (!process.stdin.isTTY) return;
+
+  const stdin = process.stdin;
+  const wasRaw = stdin.isRaw;
+  try {
+    stdin.setRawMode?.(false);
+  } catch {
+    // Some terminals reject setRawMode after subprocess handoff; safe to ignore.
+  }
+  // Stale listeners (e.g. from the SSH child's shared stdio) would
+  // re-trigger when we resume — strip them.
+  stdin.removeAllListeners("data");
+  stdin.setEncoding("utf8");
+
   process.stdout.write("\nPress Enter to return to the menu… ");
   await new Promise<void>((resolve) => {
-    const onData = (chunk: Buffer) => {
-      if (chunk.includes(0x0a) || chunk.includes(0x0d)) {
-        process.stdin.off("data", onData);
-        process.stdin.pause();
+    const onData = (chunk: Buffer | string) => {
+      const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      if (s.includes("\n") || s.includes("\r")) {
+        stdin.off("data", onData);
+        stdin.pause();
         process.stdout.write("\n");
         resolve();
       }
     };
-    process.stdin.resume();
-    process.stdin.on("data", onData);
+    stdin.resume();
+    stdin.on("data", onData);
   });
+
+  // Restore raw mode if a subsequent Ink mount expects it (Ink will
+  // re-enable on its own, but this keeps state observable).
+  try {
+    stdin.setRawMode?.(wasRaw);
+  } catch {
+    // Ignore.
+  }
 };
