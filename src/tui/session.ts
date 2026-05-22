@@ -8,13 +8,12 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { fetchAccountInfo } from "../drivers/api.js";
 import {
   authenticate,
   loadCredentials,
   remainingTokenTime,
 } from "../drivers/auth/index.js";
-import { Authn } from "../types/identity.js";
+import { Authn, Identity } from "../types/identity.js";
 
 /**
  * Snapshot of who the user is right now, taken at TUI mount time.
@@ -76,22 +75,69 @@ export const loadSession = async (debug?: boolean): Promise<Session> => {
     };
   }
 
-  // Resolve the user's email via /account (best-effort — not blocking).
-  let email: string | undefined;
-  try {
-    const account = await fetchAccountInfo<{ email?: string }>(authn, debug);
-    email = account?.email;
-  } catch {
-    email = undefined;
-  }
-
   return {
     kind: "logged-in",
     authn,
     orgSlug: identity.org.slug,
-    email,
+    email: resolveEmail(authn, identity),
     expiresInSec,
   };
+};
+
+/**
+ * Best-effort resolution of the user's email for the header display.
+ *
+ * Tries, in order:
+ * 1. Firebase user credential — set when the org goes through Firebase
+ *    Auth (the common path; produced by `authenticateToFirebase`).
+ *    Always carries the upstream IdP's email (Google, Okta SAML, …).
+ * 2. JWT claims on the id_token — universal across every SSO provider
+ *    that follows OIDC. Decoded inline (we trust our own credentials;
+ *    no signature check needed for a display-only field).
+ *
+ * Returns undefined if neither path yields a string; the header then
+ * falls back to "(unknown user)" but the rest of the TUI is unaffected.
+ * The `/account` endpoint can't help here — it only returns org-level
+ * metadata (orgName, cloudStack, …), no caller identity.
+ */
+const resolveEmail = (authn: Authn, identity: Identity): string | undefined => {
+  const firebaseEmail = authn.userCredential?.user.email;
+  if (typeof firebaseEmail === "string" && firebaseEmail.length > 0) {
+    return firebaseEmail;
+  }
+  return extractEmailFromIdToken(identity.credential.id_token);
+};
+
+/**
+ * Decodes the `email` claim (or `preferred_username` as a fallback —
+ * some Okta deployments only populate that) from an OIDC id_token's
+ * payload. Pure base64url + JSON; no crypto, no library. If anything
+ * about the token is malformed we return undefined and let the caller
+ * fall back.
+ */
+const extractEmailFromIdToken = (
+  idToken: string | undefined
+): string | undefined => {
+  if (!idToken) return undefined;
+  const parts = idToken.split(".");
+  if (parts.length < 2 || !parts[1]) return undefined;
+  try {
+    // base64url → base64 (replace url-safe chars, pad to length % 4).
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=");
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    const claims = JSON.parse(json) as Record<string, unknown>;
+    const email = claims["email"];
+    if (typeof email === "string" && email.length > 0) return email;
+    // Some Okta orgs include the user identifier under
+    // preferred_username (often the email-like login) when `email` is
+    // omitted from the access/ID token claims.
+    const preferred = claims["preferred_username"];
+    if (typeof preferred === "string" && preferred.length > 0) return preferred;
+    return undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 /**
