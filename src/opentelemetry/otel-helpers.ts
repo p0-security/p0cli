@@ -120,6 +120,37 @@ export const markSpanOk = (span: Span): void => {
 };
 
 /**
+ * Process-wide flag set by the interactive TUI's workflow loop before
+ * it invokes a subcommand handler. When true, `exitProcess` records the
+ * intended exit code in {@link suppressedExitCode} and throws
+ * {@link SuppressedExit} instead of actually exiting, so the TUI can
+ * re-mount after the workflow finishes.
+ *
+ * Outside the TUI loop this is always false; non-interactive `p0`
+ * commands keep their existing exit semantics.
+ */
+let suppressExit = false;
+let suppressedExitCode: number | undefined;
+
+/** Sentinel thrown by `exitProcess` when {@link suppressExit} is on. */
+export const SuppressedExit = Symbol("SuppressedExit");
+
+/** Toggled by the TUI's workflow loop. Returns the previous value so the
+ *  caller can restore it after the workflow completes. */
+export const setSuppressExit = (next: boolean): boolean => {
+  const prev = suppressExit;
+  suppressExit = next;
+  suppressedExitCode = undefined;
+  return prev;
+};
+
+/** Returns the exit code the most recent suppressed `exitProcess` call
+ *  intended to use. Resets to undefined when {@link setSuppressExit} is
+ *  called. */
+export const getSuppressedExitCode = (): number | undefined =>
+  suppressedExitCode;
+
+/**
  * Exit the process with the given exit code, ensuring any active span is properly
  * marked as error and ended before terminating.
  *
@@ -135,6 +166,14 @@ export const exitProcess = (exitCode: number): never => {
       markSpanError(activeSpan, `Process exiting with code ${exitCode}`);
     }
     activeSpan.end();
+  }
+
+  if (suppressExit) {
+    suppressedExitCode = exitCode;
+    // Thrown so the call site really does stop execution like a real
+    // `process.exit`. The TUI loop catches this sentinel and reads
+    // `getSuppressedExitCode()` to recover the intended code.
+    throw SuppressedExit;
   }
 
   process.exit(exitCode);

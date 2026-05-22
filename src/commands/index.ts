@@ -116,6 +116,26 @@ async function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
   }
 }
 
+/**
+ * Builds a fresh yargs CLI bound to the given argv. Used by the
+ * interactive TUI's workflow loop to dispatch through the same command
+ * machinery `p0 ...` would use non-interactively. Each call constructs
+ * a fresh instance so async builders (notably `aws`) don't leak state
+ * between runs.
+ */
+export const runCommands = async (argv: string[]): Promise<void> => {
+  const base = yargs(argv).version(stringifyVersionInfo(p0VersionInfo));
+  const cli = commands
+    .reduce((m, c) => c(m), base)
+    .strict()
+    .fail((message, error) => {
+      // Propagate the error to the workflow loop so it can surface the
+      // failure on TUI re-mount, instead of calling exitProcess.
+      throw error ?? new Error(message);
+    });
+  await cli.parseAsync();
+};
+
 export const getCli = async () =>
   withInteractiveEntry(commands.reduce((m, c) => c(m), await buildArgv()))
     .middleware(conditionalCheckVersion)

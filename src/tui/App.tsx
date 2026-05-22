@@ -14,6 +14,7 @@ import { RequestForm } from "./RequestForm.js";
 import { RequestSubmittedView } from "./RequestSubmittedView.js";
 import { TuiEntryFlow, TuiIntent } from "./index.js";
 import { Session, formatSessionRemaining } from "./session.js";
+import { WorkflowForm } from "./workflows/WorkflowForm.js";
 import { Box, Text, useInput } from "ink";
 import React, { useCallback, useState } from "react";
 
@@ -30,7 +31,8 @@ type Screen =
   | { kind: "menu" }
   | { kind: "my-access" }
   | { kind: "request" }
-  | { kind: "submitted"; requestIds: string[] };
+  | { kind: "submitted"; requestIds: string[] }
+  | { kind: "workflow" };
 
 const initialScreen = (entry: TuiEntryFlow, session: Session): Screen => {
   // A direct `p0 request` against a logged-out session can't do anything
@@ -153,6 +155,20 @@ const Content: React.FC<{
         );
       }
       return <GrantsView authn={session.authn} debug={debug} onBack={onBack} />;
+    case "workflow":
+      if (session.kind !== "logged-in") {
+        return (
+          <NotLoggedIn message="You need to log in before you can run a workflow." />
+        );
+      }
+      return (
+        <WorkflowForm
+          onSubmit={(spec, values) =>
+            onIntent({ kind: "workflow", workflowId: spec.id, values })
+          }
+          onCancel={onBack}
+        />
+      );
   }
 };
 
@@ -193,6 +209,10 @@ const menuItemsFor = (session: Session): MenuItem[] => {
   }
   return [
     { label: "Request access", screen: { kind: "request" } },
+    {
+      label: "Run a workflow (ssh, kubeconfig, aws…)",
+      screen: { kind: "workflow" },
+    },
     { label: "My access (view / relinquish)", screen: { kind: "my-access" } },
     { label: "Log out", screen: { kind: "logout-confirm" } },
     { label: "Quit", screen: "quit" },

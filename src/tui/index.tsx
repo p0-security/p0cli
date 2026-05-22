@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Session, loadSession } from "./session.js";
+import { WorkflowValues } from "./workflows/types.js";
 import React from "react";
 
 export type TuiEntryFlow = "menu" | "request";
@@ -30,7 +31,8 @@ export type RunTuiResult = {
 export type TuiIntent =
   | { exitCode: number; kind: "exit" }
   | { kind: "login"; orgSlug: string }
-  | { kind: "logout" };
+  | { kind: "logout" }
+  | { kind: "workflow"; values: WorkflowValues; workflowId: string };
 
 /** XTerm "use alternate screen buffer" sequence — pushes the current screen
  *  onto a stack and clears the display so the TUI doesn't trample the user's
@@ -92,6 +94,8 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
   // Lazy import to avoid pulling auth/firestore into yargs-only code paths.
   const { login } = await import("../commands/login.js");
   const { deleteIdentity } = await import("../drivers/auth/index.js");
+  const { runWorkflow } = await import("./workflows/executor.js");
+  const { print2 } = await import("../drivers/stdio.js");
 
   let entry = args.entry;
   let session = await loadSession(args.debug);
@@ -117,8 +121,38 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
       }
     } else if (intent.kind === "logout") {
       await deleteIdentity();
+    } else if (intent.kind === "workflow") {
+      const result = await runWorkflow(
+        intent.workflowId,
+        intent.values,
+        args.debug
+      );
+      if (!result.ok && result.message) {
+        print2(`\nWorkflow failed: ${result.message}`);
+      }
+      // Pause so the user can see the workflow's terminal output (which
+      // is on the main screen buffer) before we switch back to the TUI's
+      // alternate buffer.
+      await pressEnterToContinue();
     }
 
     session = await loadSession(args.debug);
   }
+};
+
+const pressEnterToContinue = async (): Promise<void> => {
+  if (!process.stdin.isTTY) return;
+  process.stdout.write("\nPress Enter to return to the menu… ");
+  await new Promise<void>((resolve) => {
+    const onData = (chunk: Buffer) => {
+      if (chunk.includes(0x0a) || chunk.includes(0x0d)) {
+        process.stdin.off("data", onData);
+        process.stdin.pause();
+        process.stdout.write("\n");
+        resolve();
+      }
+    };
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+  });
 };
