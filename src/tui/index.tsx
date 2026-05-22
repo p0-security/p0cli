@@ -122,6 +122,15 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
     } else if (intent.kind === "logout") {
       await deleteIdentity();
     } else if (intent.kind === "workflow") {
+      // Clear the main screen buffer (including scrollback where the
+      // terminal supports `\x1b[3J`) before handing off. Without this,
+      // workflow output appears on top of whatever was on the user's
+      // shell before they ran `p0 -i` — including any exit text from
+      // a previous SSH session on the same TUI run — making the
+      // access-check messages hard to spot.
+      await clearMainBuffer();
+      await printWorkflowPlaceholder(intent.workflowId, intent.values);
+
       const result = await runWorkflow(
         intent.workflowId,
         intent.values,
@@ -153,6 +162,40 @@ export const runTui = async (args: RunTuiArgs): Promise<RunTuiResult> => {
       };
     }
   }
+};
+
+/**
+ * Wipes the visible screen + scrollback so the workflow's output
+ * starts on a blank canvas. `\x1b[2J` clears the visible region,
+ * `\x1b[3J` clears the xterm scrollback (no-op on terminals that
+ * don't support it), and `\x1b[H` parks the cursor at the top.
+ */
+const clearMainBuffer = async (): Promise<void> => {
+  if (!process.stdout.isTTY) return;
+  process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+};
+
+/**
+ * Prints a banner so the user has something to look at during the
+ * ~second of latency between the form submit and the first network
+ * status message from the workflow handler. Otherwise the cleared
+ * screen could read as "broken / hung", especially right after an
+ * SSH session ends and the user expects continuity.
+ */
+const printWorkflowPlaceholder = async (
+  workflowId: string,
+  values: import("./workflows/types.js").WorkflowValues
+): Promise<void> => {
+  const { findWorkflow } = await import("./workflows/catalog.js");
+  const { buildPreview } = await import("./workflows/preview.js");
+  const spec = findWorkflow(workflowId);
+  if (!spec) return;
+  const preview = buildPreview(spec, values);
+  // Two-line banner: the command being run + a "requesting access"
+  // hint. The handler itself will start streaming its own status
+  // messages immediately after this.
+  process.stdout.write(`Starting workflow:\n  $ ${preview}\n\n`);
+  process.stdout.write("Requesting access through P0…\n");
 };
 
 /**
