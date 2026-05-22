@@ -8,107 +8,212 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { Authn } from "../types/identity.js";
 import { GrantsView } from "./GrantsView.js";
+import { LoginScreen } from "./LoginScreen.js";
 import { RequestForm } from "./RequestForm.js";
 import { RequestSubmittedView } from "./RequestSubmittedView.js";
-import { TuiEntryFlow } from "./index.js";
-import { Box, Text, useApp, useInput } from "ink";
+import { TuiEntryFlow, TuiIntent } from "./index.js";
+import { Session, formatSessionRemaining } from "./session.js";
+import { Box, Text, useInput } from "ink";
 import React, { useCallback, useState } from "react";
 
 type AppProps = {
-  authn: Authn;
+  session: Session;
   entry: TuiEntryFlow;
   debug?: boolean;
-  onExit: (exitCode: number) => void;
+  onIntent: (intent: TuiIntent) => void;
 };
 
 type Screen =
+  | { kind: "login" }
+  | { kind: "logout-confirm" }
   | { kind: "menu" }
   | { kind: "my-access" }
   | { kind: "request" }
   | { kind: "submitted"; requestIds: string[] };
 
-const initialScreen = (entry: TuiEntryFlow): Screen =>
-  entry === "request" ? { kind: "request" } : { kind: "menu" };
+const initialScreen = (entry: TuiEntryFlow, session: Session): Screen => {
+  // A direct `p0 request` against a logged-out session can't do anything
+  // useful — route to login first.
+  if (session.kind === "logged-out") return { kind: "login" };
+  return entry === "request" ? { kind: "request" } : { kind: "menu" };
+};
 
-export const App: React.FC<AppProps> = ({ authn, entry, debug, onExit }) => {
-  const { exit } = useApp();
-  const [screen, setScreen] = useState<Screen>(initialScreen(entry));
-
-  const handleExit = useCallback(
-    (code: number) => {
-      exit();
-      onExit(code);
-    },
-    [exit, onExit]
+export const App: React.FC<AppProps> = ({
+  session,
+  entry,
+  debug,
+  onIntent,
+}) => {
+  const [screen, setScreen] = useState<Screen>(() =>
+    initialScreen(entry, session)
   );
 
-  // When the user came in via the main menu, returning there is the natural
-  // dismiss target; for a direct `p0 request` we exit instead.
+  const exit = useCallback(
+    (code: number) => onIntent({ kind: "exit", exitCode: code }),
+    [onIntent]
+  );
+
+  // For sub-screens that should return to the main menu when dismissed
+  // (via the menu entry) or exit (via direct `p0 request`).
   const backFromSubScreen = useCallback(() => {
-    if (entry === "menu") {
+    if (entry === "menu" || session.kind === "logged-out") {
       setScreen({ kind: "menu" });
     } else {
-      handleExit(0);
+      exit(0);
     }
-  }, [entry, handleExit]);
+  }, [entry, exit, session.kind]);
 
   useInput((input, key) => {
-    if (key.ctrl && input === "c") handleExit(130);
+    if (key.ctrl && input === "c") exit(130);
   });
 
+  return (
+    <Box flexDirection="column">
+      <Header session={session} />
+      <Content
+        screen={screen}
+        session={session}
+        debug={debug}
+        onPickScreen={setScreen}
+        onIntent={onIntent}
+        onBack={backFromSubScreen}
+        onQuit={() => exit(0)}
+      />
+    </Box>
+  );
+};
+
+const Content: React.FC<{
+  screen: Screen;
+  session: Session;
+  debug?: boolean;
+  onPickScreen: (s: Screen) => void;
+  onIntent: (intent: TuiIntent) => void;
+  onBack: () => void;
+  onQuit: () => void;
+}> = ({ screen, session, debug, onPickScreen, onIntent, onBack, onQuit }) => {
   switch (screen.kind) {
     case "menu":
-      return <MainMenu onPick={setScreen} onQuit={() => handleExit(0)} />;
+      return (
+        <MainMenu session={session} onPick={onPickScreen} onQuit={onQuit} />
+      );
+    case "login":
+      return (
+        <LoginScreen
+          defaultOrg={
+            session.kind === "logged-out" ? session.defaultOrg : undefined
+          }
+          message={session.kind === "logged-out" ? session.message : undefined}
+          onSubmit={(orgSlug) => onIntent({ kind: "login", orgSlug })}
+          onCancel={onQuit}
+        />
+      );
+    case "logout-confirm":
+      return (
+        <LogoutConfirm
+          session={session}
+          onConfirm={() => onIntent({ kind: "logout" })}
+          onCancel={() => onPickScreen({ kind: "menu" })}
+        />
+      );
     case "request":
+      if (session.kind !== "logged-in") {
+        // Defensive — menu shouldn't let this happen, but route gracefully.
+        return (
+          <NotLoggedIn message="You need to log in before you can request access." />
+        );
+      }
       return (
         <RequestForm
-          authn={authn}
+          authn={session.authn}
           debug={debug}
-          onCancel={backFromSubScreen}
+          onCancel={onBack}
           onSubmitted={(ids) =>
-            setScreen({ kind: "submitted", requestIds: ids })
+            onPickScreen({ kind: "submitted", requestIds: ids })
           }
         />
       );
     case "submitted":
+      if (session.kind !== "logged-in") {
+        return <NotLoggedIn message="Your session ended." />;
+      }
       return (
         <RequestSubmittedView
-          authn={authn}
+          authn={session.authn}
           requestIds={screen.requestIds}
           debug={debug}
-          onDismiss={backFromSubScreen}
+          onDismiss={onBack}
         />
       );
     case "my-access":
-      return (
-        <GrantsView authn={authn} debug={debug} onBack={backFromSubScreen} />
-      );
+      if (session.kind !== "logged-in") {
+        return (
+          <NotLoggedIn message="You need to log in to view your access." />
+        );
+      }
+      return <GrantsView authn={session.authn} debug={debug} onBack={onBack} />;
   }
 };
 
-type MainMenuProps = {
-  onPick: (screen: Screen) => void;
-  onQuit: () => void;
+const Header: React.FC<{ session: Session }> = ({ session }) => {
+  if (session.kind === "logged-in") {
+    const remaining = formatSessionRemaining(session.expiresInSec);
+    return (
+      <Box paddingX={1} flexDirection="row">
+        <Text bold>P0</Text>
+        <Text dimColor> · </Text>
+        <Text>{session.email ?? "(unknown user)"}</Text>
+        <Text dimColor> · </Text>
+        <Text color="cyan">{session.orgSlug}</Text>
+        <Text dimColor> · session {remaining}</Text>
+      </Box>
+    );
+  }
+  return (
+    <Box paddingX={1} flexDirection="row">
+      <Text bold>P0</Text>
+      <Text dimColor> · </Text>
+      <Text color="yellow">not logged in</Text>
+      {session.defaultOrg ? (
+        <Text dimColor> · default org: {session.defaultOrg}</Text>
+      ) : null}
+    </Box>
+  );
 };
 
-const MENU_ITEMS: Array<{ label: string; screen: Screen | "quit" }> = [
-  { label: "Request access", screen: { kind: "request" } },
-  { label: "My access (view / relinquish)", screen: { kind: "my-access" } },
-  { label: "Quit", screen: "quit" },
-];
+type MenuItem = { label: string; screen: Screen | "quit" };
 
-const MainMenu: React.FC<MainMenuProps> = ({ onPick, onQuit }) => {
+const menuItemsFor = (session: Session): MenuItem[] => {
+  if (session.kind === "logged-out") {
+    return [
+      { label: "Log in", screen: { kind: "login" } },
+      { label: "Quit", screen: "quit" },
+    ];
+  }
+  return [
+    { label: "Request access", screen: { kind: "request" } },
+    { label: "My access (view / relinquish)", screen: { kind: "my-access" } },
+    { label: "Log out", screen: { kind: "logout-confirm" } },
+    { label: "Quit", screen: "quit" },
+  ];
+};
+
+const MainMenu: React.FC<{
+  session: Session;
+  onPick: (screen: Screen) => void;
+  onQuit: () => void;
+}> = ({ session, onPick, onQuit }) => {
+  const items = menuItemsFor(session);
   const [index, setIndex] = useState(0);
 
   useInput((input, key) => {
     if (key.upArrow || input === "k") {
-      setIndex((i) => (i + MENU_ITEMS.length - 1) % MENU_ITEMS.length);
+      setIndex((i) => (i + items.length - 1) % items.length);
     } else if (key.downArrow || input === "j") {
-      setIndex((i) => (i + 1) % MENU_ITEMS.length);
+      setIndex((i) => (i + 1) % items.length);
     } else if (key.return) {
-      const item = MENU_ITEMS[index];
+      const item = items[index];
       if (!item) return;
       if (item.screen === "quit") onQuit();
       else onPick(item.screen);
@@ -121,8 +226,15 @@ const MainMenu: React.FC<MainMenuProps> = ({ onPick, onQuit }) => {
     <Box flexDirection="column" paddingX={1}>
       <Text bold>P0 Interactive</Text>
       <Text dimColor>↑/↓ navigate · Enter select · q/Esc quit</Text>
+      {session.kind === "logged-out" ? (
+        <Box marginTop={1}>
+          <Text color="yellow">
+            Log in to request access or view your existing grants.
+          </Text>
+        </Box>
+      ) : null}
       <Box flexDirection="column" marginTop={1}>
-        {MENU_ITEMS.map((item, i) => {
+        {items.map((item, i) => {
           const focused = i === index;
           return (
             <Text key={item.label} color={focused ? "cyan" : undefined}>
@@ -135,3 +247,36 @@ const MainMenu: React.FC<MainMenuProps> = ({ onPick, onQuit }) => {
     </Box>
   );
 };
+
+const LogoutConfirm: React.FC<{
+  session: Session;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ session, onConfirm, onCancel }) => {
+  useInput((input, key) => {
+    if (input === "y") onConfirm();
+    else if (input === "n" || key.escape) onCancel();
+  });
+  const target = session.kind === "logged-in" ? session.orgSlug : "this device";
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Text bold color="yellow">
+        Log out of {target}?
+      </Text>
+      <Text dimColor>
+        This clears the cached credentials on this device. You can log back in
+        at any time.
+      </Text>
+      <Box marginTop={1}>
+        <Text dimColor>y to confirm · n or Esc to cancel</Text>
+      </Box>
+    </Box>
+  );
+};
+
+const NotLoggedIn: React.FC<{ message: string }> = ({ message }) => (
+  <Box flexDirection="column" paddingX={1}>
+    <Text color="yellow">{message}</Text>
+    <Text dimColor>Press q/Esc to return to the main menu.</Text>
+  </Box>
+);

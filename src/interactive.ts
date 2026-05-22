@@ -8,23 +8,21 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { authenticate } from "./drivers/auth";
 
 /**
- * Authenticates, launches the Ink-based TUI, and translates its result into a
- * process exit code. Lives outside src/tui/ so that callers in CommonJS code
- * (yargs handlers) don't have to deal with the ESM boundary.
+ * Entry point for the interactive TUI. Does NOT pre-authenticate — the
+ * TUI itself handles logged-in / logged-out state, including launching
+ * the login flow when needed. This means `p0 -i` works even when the
+ * user has no valid credentials yet.
  */
 export const runInteractive = async (options: {
   entry: "menu" | "request";
   debug?: boolean;
 }): Promise<void> => {
-  const authn = await authenticate({ debug: options.debug });
   // Dynamic import because src/tui is an ESM sub-package; statically importing
   // from CJS callers fails under Node16 module resolution.
   const { runTui } = await import("./tui/index.js");
   const result = await runTui({
-    authn,
     entry: options.entry,
     debug: options.debug,
   });
