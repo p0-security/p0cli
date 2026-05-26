@@ -13,11 +13,8 @@ import { request } from "../../commands/shared/request";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { awsCloudAuth } from "../aws/auth";
-import {
-  FileTransferPermissionSpec,
-  TransferTarget,
-  TransferUrls,
-} from "./types";
+import { AwsResourcePermissionSpec } from "../aws/types";
+import { FileTransferPermissionSpec } from "./types";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -33,7 +30,7 @@ const DELETE_EXPIRES_SECONDS = 60 * 60;
 export const provisionTransferRequest = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>
-): Promise<TransferTarget> => {
+) => {
   const response = await request("request")<
     PermissionRequest<FileTransferPermissionSpec>
   >(
@@ -57,7 +54,7 @@ export const provisionTransferRequest = async (
 
   const awsSpec = response.request.delegation.aws;
   if (!awsSpec) {
-    throw "Backend granted file-transfer access, but did not provide AWS delegation";
+    throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
 
   const { bucketName, bucketRegion, objectKey } =
@@ -73,9 +70,19 @@ export const provisionTransferRequest = async (
 
 export const generateTransferUrls = async (
   authn: Authn,
-  target: TransferTarget,
+  target: {
+    bucket: string;
+    key: string;
+    region: string;
+    awsSpec: AwsResourcePermissionSpec;
+  },
   debug?: boolean
-): Promise<TransferUrls> => {
+): Promise<{
+  s3: S3Client;
+  getUrl: string;
+  deleteUrl: string;
+  expirySeconds: { get: number; delete: number };
+}> => {
   const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
 
   const sdkCredentials = {

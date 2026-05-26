@@ -86,11 +86,14 @@ const fileTransferAction = async (
       const { s3, getUrl, deleteUrl, expirySeconds } =
         await generateTransferUrls(authn, target, args.debug);
 
-      const fmt = (s: number) =>
+      const renderDurationSec = (s: number) =>
         s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+      // TODO: remove logging when we remove the launchdarkly file-transfer flag
       if (args.debug) {
-        print2(`GET    (${fmt(expirySeconds.get)}): ${getUrl}`);
-        print2(`DELETE (${fmt(expirySeconds.delete)}): ${deleteUrl}`);
+        print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);
+        print2(
+          `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
+        );
       }
 
       print2(`Uploading ${args.source}...`);
