@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { traceSpan } from "../opentelemetry/otel-helpers";
@@ -96,56 +97,46 @@ const fileTransferAction = async (
 
       // The backend grants the AWS role permission to write to our prefix, but
       // IAM has eventual consistency — the policy can take several seconds to
-      // propagate before S3 honors it. Retry AccessDenied for up to 30s so the
-      // first invocation just works instead of failing the user.
-      const GRANT_PROPAGATION_TIMEOUT_MS = 30_000;
-      const RETRY_BASE_MS = 2_000;
-      const RETRY_MAX_MS = 5_000;
-      const startTime = Date.now();
-      let attempt = 0;
-      let uploaded = false;
-
-      while (!uploaded) {
-        attempt++;
-        const upload = new Upload({
-          client: s3,
-          params: {
-            Bucket: target.bucket,
-            Key: target.key,
-            Body: createReadStream(args.source),
+      // propagate before S3 honors it. Retry AccessDenied so the first
+      // invocation just works instead of failing the user.
+      try {
+        await retryWithSleep(
+          async () => {
+            const upload = new Upload({
+              client: s3,
+              params: {
+                Bucket: target.bucket,
+                Key: target.key,
+                Body: createReadStream(args.source),
+              },
+            });
+            upload.on("httpUploadProgress", (progress) => {
+              const loaded = progress.loaded ?? 0;
+              const total = progress.total ?? 0;
+              const mb = (loaded / 1024 / 1024).toFixed(1);
+              const pct = total
+                ? ` (${Math.round((loaded / total) * 100)}%)`
+                : "";
+              print2(`  uploaded ${mb} MB${pct}`);
+            });
+            await upload.done();
           },
-        });
-
-        upload.on("httpUploadProgress", (progress) => {
-          const loaded = progress.loaded ?? 0;
-          const total = progress.total ?? 0;
-          const mb = (loaded / 1024 / 1024).toFixed(1);
-          const pct = total ? ` (${Math.round((loaded / total) * 100)}%)` : "";
-          print2(`  uploaded ${mb} MB${pct}`);
-        });
-
-        try {
-          await upload.done();
-          uploaded = true;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          // AWS SDK v3 sets `name` to the AWS error code. Matching the typed
-          // field avoids breaking if a future SDK reworks the message text.
-          const isAccessDenied =
-            err instanceof Error && err.name === "AccessDenied";
-          const elapsed = Date.now() - startTime;
-          const delay = Math.min(RETRY_BASE_MS * attempt, RETRY_MAX_MS);
-          if (
-            !isAccessDenied ||
-            elapsed + delay > GRANT_PROPAGATION_TIMEOUT_MS
-          ) {
-            throw `Upload failed: ${message}`;
+          {
+            retries: 8,
+            delayMs: 2_000,
+            maxDelayMs: 5_000,
+            multiplier: 1.3,
+            jitterFactor: 0.3,
+            // AWS SDK v3 sets `name` to the AWS error code. Matching the typed
+            // field avoids breaking if a future SDK reworks the message text.
+            shouldRetry: (err) =>
+              err instanceof Error && err.name === "AccessDenied",
+            debug: args.debug,
           }
-          print2(
-            `  access not yet propagated (attempt ${attempt}); retrying in ${delay / 1000}s...`
-          );
-          await new Promise((r) => setTimeout(r, delay));
-        }
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw `Upload failed: ${message}`;
       }
 
       print2("Uploaded.");
