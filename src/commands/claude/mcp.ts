@@ -57,7 +57,9 @@ type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
 
 const CLIENT_PATH = postfixPath("claude/mcp-client.json");
 
-const REDIRECT_PORT = 8080;
+// In dev use cases the default port (=8080) is likely to be consumed by another listening service.
+// Avoid by defaulting to a random port valid for both Windows and *nix architectures.
+const REDIRECT_PORT = 52566;
 
 export const mcpCommand = (yargs: yargs.Argv<{ debug?: boolean }>) =>
   yargs
@@ -126,9 +128,8 @@ const getHostname = async () => {
   switch (os) {
     case "mac":
       return (await promisify(exec)("scutil --get LocalHostName")).stdout;
-    case "win":
-      return (await promisify(exec)("hostname")).stdout;
     case "linux":
+    case "win":
       return (await promisify(exec)("hostname")).stdout;
     case "unknown":
       throw `Unsupported operating system: ${os}`;
