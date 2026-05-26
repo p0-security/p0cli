@@ -9,22 +9,24 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { P0_PATH } from "../../util";
+import { compact } from "lodash";
 import * as path from "path";
 
-export const getIdentityFilePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `identity-${process.env.P0_ORG}.json`)
-    : path.join(P0_PATH, "identity.json");
+export const postfixPath = (fname: string) => {
+  const parts = fname.split(".");
+  return path.join(
+    P0_PATH,
+    process.env.P0_ORG
+      ? compact([`${parts[0]}-${process.env.P0_ORG}`, parts[1]]).join(".")
+      : fname
+  );
+};
 
-export const getIdentityCachePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `cache-${process.env.P0_ORG}`)
-    : path.join(P0_PATH, "cache");
+export const getIdentityFilePath = () => postfixPath("identity.json");
 
-export const getConfigFilePath = () =>
-  process.env.P0_ORG
-    ? path.join(P0_PATH, `config.json-${process.env.P0_ORG}`)
-    : path.join(P0_PATH, "config.json");
+export const getIdentityCachePath = () => postfixPath("cache");
+
+export const getConfigFilePath = () => postfixPath("config.json");
 
 export const getBootstrapOrgDataPath = (orgId: string): string => {
   const safeOrgId = path.basename(orgId);
