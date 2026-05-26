@@ -12,19 +12,17 @@ import { PermissionSpec } from "../../types/request";
 import { AwsResourcePermissionSpec } from "../aws/types";
 import { S3Client } from "@aws-sdk/client-s3";
 
-export type FileTransferResource = {
-  accountId: string;
-  instanceId: string;
-  instanceName: string;
-  arn: string;
-  region: string;
-  bucketName: string;
-  bucketRegion: string;
-  objectKey: string;
-};
-
 export type FileTransferPermission = {
-  resource: FileTransferResource;
+  resource: {
+    accountId: string;
+    instanceId: string;
+    instanceName: string;
+    arn: string;
+    region: string;
+    bucketName: string;
+    bucketRegion: string;
+    objectKey: string;
+  };
   destination: string;
   type: "resource";
 };
