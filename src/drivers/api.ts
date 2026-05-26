@@ -19,7 +19,8 @@ import * as path from "node:path";
 import yargs from "yargs";
 
 const tenantOrgUrl = (tenant: string) => `${getAppUrl()}/orgs/${tenant}`;
-const tenantUrl = (tenant: string) => `${getTenantConfig().appUrl}/o/${tenant}`;
+export const tenantUrl = (tenant: string) =>
+  `${getTenantConfig().appUrl}/o/${tenant}`;
 const publicKeysUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/public-keys`;
 const sshHostKeysUrl = (tenant: string) =>
@@ -356,7 +357,7 @@ const baseFetch = async <T>(args: {
   }
 };
 
-const authFetch = async <T>(
+export const authFetch = async <T>(
   authn: Authn,
   args: {
     url: string;
