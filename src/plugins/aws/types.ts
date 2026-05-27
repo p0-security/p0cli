@@ -26,6 +26,9 @@ export type AwsIamLogin = {
     | {
         type: "email";
       }
+    | {
+        type: "email-local-part";
+      }
     | { type: "tag"; tagName: string };
 };
 
