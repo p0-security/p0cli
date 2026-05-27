@@ -179,9 +179,9 @@ describe("awsSshProvider.requestToSsh", () => {
     });
 
     it("throws when neither delegation nor resource provides accountId", () => {
-      expect(() =>
-        awsSshProvider.requestToSsh(buildRequest([]))
-      ).toThrow("Backend did not provide an AWS account ID for SSH session.");
+      expect(() => awsSshProvider.requestToSsh(buildRequest([]))).toThrow(
+        "Backend did not provide an AWS account ID for SSH session."
+      );
     });
   });
 });

@@ -176,13 +176,11 @@ export const awsSshProvider: SshProvider<
     const { linuxUserName, hostKeys } = generated;
     const awsDelegate = getDelegate(delegation, "aws");
     // TODO: Update after P0 backend data-model update
-    const { idcId, idcRegion, accountId } =
-      awsDelegate?.permission ?? resource;
+    const { idcId, idcRegion, accountId } = awsDelegate?.permission ?? resource;
     if (!accountId) {
       throw "Backend did not provide an AWS account ID for SSH session.";
     }
-    const name =
-      awsDelegate?.generated.name ?? generated?.resource?.name ?? "";
+    const name = awsDelegate?.generated.name ?? generated?.resource?.name ?? "";
     const common = {
       linuxUserName,
       accountId,

@@ -105,7 +105,9 @@ describe("kubeconfigAction", () => {
       AWS_SESSION_TOKEN: "t",
       AWS_SECURITY_TOKEN: "t",
     });
-    mockSpinUntil.mockImplementation(async (_msg: string, action: any) => action);
+    mockSpinUntil.mockImplementation(
+      async (_msg: string, action: any) => action
+    );
     mockExec.mockResolvedValue({ stdout: "ok", stderr: "", code: 0 });
     mockWriteAwsTempCredentials.mockResolvedValue(undefined);
     mockWriteAwsConfigProfile.mockResolvedValue(undefined);
@@ -169,7 +171,9 @@ describe("kubeconfigAction", () => {
       AWS_SESSION_TOKEN: "t",
       AWS_SECURITY_TOKEN: "t",
     });
-    mockSpinUntil.mockImplementation(async (_msg: string, action: any) => action);
+    mockSpinUntil.mockImplementation(
+      async (_msg: string, action: any) => action
+    );
     mockExec.mockResolvedValue({ stdout: "ok", stderr: "", code: 0 });
     mockRequestAccessToCluster.mockResolvedValueOnce(
       buildRequest([{ key: "aws", request: AWS_DELEGATE }])
@@ -180,4 +184,3 @@ describe("kubeconfigAction", () => {
     expect(arrayCallArg).toEqual(recordCallArg);
   });
 });
-

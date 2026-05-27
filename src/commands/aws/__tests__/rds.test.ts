@@ -12,10 +12,10 @@ import { fetchIntegrationConfig } from "../../../drivers/api";
 import { awsCloudAuth } from "../../../plugins/aws/auth";
 import { AwsResourcePermissionSpec } from "../../../plugins/aws/types";
 import { DbPermissionSpec } from "../../../plugins/db/types";
+import { failure } from "../../../testing/yargs";
 import { Authn } from "../../../types/identity";
 import { PermissionRequest } from "../../../types/request";
 import { exec } from "../../../util";
-import { failure } from "../../../testing/yargs";
 import { decodeProvisionStatus } from "../../shared";
 import { request } from "../../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "../files";
@@ -212,9 +212,7 @@ describe("rds generate-db-auth-token", () => {
       "rds generate-db-auth-token --arch postgres --role admin"
     );
 
-    expect(error).toBe(
-      "P0 granted access, but db-1 is not a RDS instance."
-    );
+    expect(error).toBe("P0 granted access, but db-1 is not a RDS instance.");
     expect(mockAwsCloudAuth).not.toHaveBeenCalled();
   });
 });

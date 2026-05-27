@@ -42,8 +42,7 @@ export type DelegationField<Old extends Record<string, any>> =
  * that.
  */
 export const getDelegate = <K extends string, V>(
-  delegation:
-    DelegationEntry<K, V>[] | { [P in K]?: V } | null | undefined,
+  delegation: DelegationEntry<K, V>[] | { [P in K]?: V } | null | undefined,
   key: K
 ): V | undefined => {
   if (delegation == null) return undefined;
