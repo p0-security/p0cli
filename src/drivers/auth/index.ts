@@ -157,11 +157,15 @@ export const writeIdentity = async (
   print2(`Saving authorization to ${identityFilePath}.`);
   const dir = path.dirname(identityFilePath);
   await fs.mkdir(dir, { recursive: true });
+  // Write to a sibling tmp file then rename, so a crash mid-write can't leave
+  // identity.json truncated. Same-directory rename keeps the operation atomic.
+  const tmpPath = `${identityFilePath}.tmp`;
   await fs.writeFile(
-    identityFilePath,
+    tmpPath,
     JSON.stringify({ credential: { ...credential, expires_at }, org }, null, 2),
     { mode: "600" }
   );
+  await fs.rename(tmpPath, identityFilePath);
 };
 
 export const deleteIdentity = async () => {
