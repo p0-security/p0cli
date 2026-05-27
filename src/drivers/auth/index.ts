@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { login } from "../../commands/login";
 import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
+import { getProviderType } from "../../types/authUtils";
 import { Authn, Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
@@ -18,7 +19,9 @@ import { tracesUrl } from "../api";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { getExpiredCredentialsMessage } from "../util";
+import { withIdentityLock } from "./lock";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
+import { refreshOktaTokens } from "./refresh";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -131,6 +134,38 @@ const loadCredentialsWithAutoLogin = async (options?: {
 
   if (remainingTokenTime(identity) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
     return identity;
+  }
+
+  // Token is at/past expiry. Try the silent refresh-token grant first, and
+  // only fall through to the interactive device flow if that path is
+  // unavailable or fails. Currently scoped to Okta \u2014 other OIDC providers
+  // don't populate `refresh_token` in this codebase.
+  if (
+    identity.credential.refresh_token &&
+    getProviderType(identity.org) === "okta"
+  ) {
+    try {
+      return await withIdentityLock(async () => {
+        // Double-checked under the lock: a peer process may have refreshed
+        // identity.json while we were waiting to acquire it.
+        const current = await loadCredentials();
+        if (remainingTokenTime(current) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
+          return current;
+        }
+        const refreshed = await refreshOktaTokens(current, {
+          debug: options?.debug,
+        });
+        await writeIdentity(current.org, refreshed);
+        return await loadCredentials();
+      });
+    } catch (e: any) {
+      if (options?.debug) {
+        const detail = e?.reason ?? e?.code ?? e?.message ?? String(e);
+        print2(
+          `Okta refresh-token grant failed (${detail}); falling back to device flow.`
+        );
+      }
+    }
   }
 
   if (options?.noRefresh) {
