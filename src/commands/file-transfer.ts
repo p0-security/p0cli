@@ -18,6 +18,7 @@ import {
 } from "../plugins/file-transfer";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
+import { basename } from "node:path";
 import yargs from "yargs";
 
 export type FileTransferCommandArgs = {
@@ -80,11 +81,19 @@ const fileTransferAction = async (
 
       print2("Requesting file-transfer access...");
       const target = await provisionTransferRequest(authn, args);
-      print2(`Access approved for s3://${target.bucket}/${target.key}`);
+      print2(`Access approved for s3://${target.bucket}/${target.prefix}`);
+
+      // target.prefix is the backend-granted prefix (ends in `/`); append the
+      // local file's basename so the S3 object preserves the original filename.
+      const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
       const { s3, getUrl, deleteUrl, expirySeconds } =
-        await generateTransferUrls(authn, target, args.debug);
+        await generateTransferUrls(
+          authn,
+          { ...target, key: uploadKey },
+          args.debug
+        );
 
       const renderDurationSec = (s: number) =>
         s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
@@ -109,7 +118,7 @@ const fileTransferAction = async (
               client: s3,
               params: {
                 Bucket: target.bucket,
-                Key: target.key,
+                Key: uploadKey,
                 Body: createReadStream(args.source),
               },
             });
@@ -125,10 +134,10 @@ const fileTransferAction = async (
             await upload.done();
           },
           {
-            retries: 8,
+            retries: 20,
             delayMs: 2_000,
-            maxDelayMs: 5_000,
-            multiplier: 1.3,
+            maxDelayMs: 10_000,
+            multiplier: 1.5,
             jitterFactor: 0.3,
             // AWS SDK v3 sets `name` to the AWS error code. Matching the typed
             // field avoids breaking if a future SDK reworks the message text.

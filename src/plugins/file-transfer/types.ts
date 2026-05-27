@@ -20,7 +20,7 @@ export type FileTransferPermission = {
     region: string;
     bucketName: string;
     bucketRegion: string;
-    objectKey: string;
+    objectPrefix: string;
   };
   destination: string;
   type: "resource";

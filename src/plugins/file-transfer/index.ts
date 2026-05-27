@@ -57,12 +57,12 @@ export const provisionTransferRequest = async (
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
 
-  const { bucketName, bucketRegion, objectKey } =
+  const { bucketName, bucketRegion, objectPrefix } =
     response.request.permission.resource;
 
   return {
     bucket: bucketName,
-    key: objectKey,
+    prefix: objectPrefix,
     region: bucketRegion,
     awsSpec,
   };
