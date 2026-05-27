@@ -41,7 +41,7 @@ const doActualLogin = async (orgWithSlug: OrgData, debug?: boolean) => {
 
   if (!loginFn) throw "Unsupported login for your organization";
 
-  const tokenResponse = await loginFn(orgWithSlug);
+  const tokenResponse = await loginFn(orgWithSlug, { debug });
 
   await writeIdentity(orgWithSlug, tokenResponse);
 };

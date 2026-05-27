@@ -145,27 +145,62 @@ const fetchSamlResponse = async (
   return typeof samlInputValue === "string" ? samlInputValue : undefined;
 };
 
-/** Logs in to Okta via OIDC */
-export const oktaLogin = async (org: OrgData) =>
-  oidcLogin<AuthorizeResponse, TokenResponse>(
-    oidcLoginSteps(org, "openid email profile okta.apps.sso", () => {
-      const providerType = getProviderType(org);
-      const providerDomain = getProviderDomain(org);
+const oktaOidcUrls = (org: OrgData) => () => {
+  const providerType = getProviderType(org);
+  const providerDomain = getProviderDomain(org);
 
-      assert(
-        providerType === "okta",
-        "Invalid provider configuration (expected okta OIDC provider)"
-      );
-      assert(
-        providerDomain,
-        "Invalid provider configuration (missing Okta domain)"
-      );
-      return {
-        deviceAuthorizationUrl: `https://${providerDomain}/oauth2/v1/device/authorize`,
-        tokenUrl: `https://${providerDomain}/oauth2/v1/token`,
-      };
-    })
+  assert(
+    providerType === "okta",
+    "Invalid provider configuration (expected okta OIDC provider)"
   );
+  assert(
+    providerDomain,
+    "Invalid provider configuration (missing Okta domain)"
+  );
+  return {
+    deviceAuthorizationUrl: `https://${providerDomain}/oauth2/v1/device/authorize`,
+    tokenUrl: `https://${providerDomain}/oauth2/v1/token`,
+  };
+};
+
+const OKTA_BASE_SCOPE = "openid email profile okta.apps.sso";
+const OKTA_OFFLINE_SCOPE = `${OKTA_BASE_SCOPE} offline_access`;
+
+/** Logs in to Okta via OIDC.
+ *
+ * Requests `offline_access` so we can silently refresh the access token at TTL.
+ * Some Okta tenants disallow this scope at the app config — in that case
+ * `/device/authorize` returns `invalid_scope`; we retry once without it and
+ * proceed with the legacy device-only flow.
+ */
+export const oktaLogin = async (
+  org: OrgData,
+  options?: { debug?: boolean }
+): Promise<TokenResponse> => {
+  const urls = oktaOidcUrls(org);
+  try {
+    const tokenResponse = await oidcLogin<AuthorizeResponse, TokenResponse>(
+      oidcLoginSteps(org, OKTA_OFFLINE_SCOPE, urls)
+    );
+    if (!tokenResponse.refresh_token && options?.debug) {
+      print2(
+        "Okta token response omitted refresh_token; CLI will re-prompt for auth at session TTL."
+      );
+    }
+    return tokenResponse;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (!message.includes("invalid_scope")) throw e;
+    if (options?.debug) {
+      print2(
+        "Okta tenant rejected offline_access at /device/authorize; retrying without it."
+      );
+    }
+    return await oidcLogin<AuthorizeResponse, TokenResponse>(
+      oidcLoginSteps(org, OKTA_BASE_SCOPE, urls)
+    );
+  }
+};
 
 /**
  * Converts OIDC tokens into a SAML assertion for AWS federated authentication.
