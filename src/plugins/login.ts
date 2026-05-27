@@ -32,10 +32,7 @@ export type LoginPluginType = (typeof loginPlugins)[number];
 
 export const pluginLoginMap: Record<
   string,
-  (
-    org: OrgData,
-    options?: { debug?: boolean }
-  ) => Promise<TokenResponse>
+  (org: OrgData, options?: { debug?: boolean }) => Promise<TokenResponse>
 > = {
   google: googleLogin,
   okta: oktaLogin,
