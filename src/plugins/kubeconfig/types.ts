@@ -29,12 +29,9 @@ export type K8sConfig = {
 export type K8sPermissionSpec = PermissionSpec<
   "k8s",
   K8sResourcePermission,
-  K8sGenerated
-> & {
-  delegation?: {
-    aws?: AwsResourcePermissionSpec;
-  };
-};
+  K8sGenerated,
+  { aws?: AwsResourcePermissionSpec }
+>;
 
 export type K8sResourcePermission = {
   resource: {

@@ -21,6 +21,7 @@ import {
   requestAccessToCluster,
 } from "../plugins/kubeconfig";
 import { ensureEksInstall } from "../plugins/kubeconfig/install";
+import { getDelegate } from "../types/delegation";
 import { ciEquals, exec, osSafeCommand } from "../util";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./aws/files";
 import yargs from "yargs";
@@ -100,7 +101,7 @@ const kubeconfigAction = async (
   // No spinUntil(); there is one inside requestAccessToCluster() if needed
   const request = await requestAccessToCluster(authn, args, clusterId, role);
 
-  const awsDelegation = request.delegation.aws;
+  const awsDelegation = getDelegate(request.delegation, "aws");
   if (!awsDelegation) {
     throw "Backend granted k8s access, but this is not an EKS cluster.";
   }

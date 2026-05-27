@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { DbPermissionSpec } from "../plugins/db/types";
 import { K8sPermissionSpec } from "../plugins/kubeconfig/types";
+import { DelegationField } from "./delegation";
 import { AzureRdpRequest } from "./rdp";
 import { PluginSshRequest } from "./ssh";
 
@@ -25,15 +26,15 @@ export type PermissionSpec<
   K extends string,
   P extends Record<string, any>,
   G extends object | undefined = undefined,
-  D extends Record<string, PermissionSpec<any, any, any, any>> = Record<
+  D extends Record<
     string,
-    never
-  >,
+    PermissionSpec<any, any, any, any> | undefined
+  > = Record<string, never>,
 > = {
   type: K;
   permission: P;
   generated: G;
-  delegation: D;
+  delegation?: DelegationField<D>;
 };
 
 export type PluginRequest =

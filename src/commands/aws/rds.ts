@@ -13,6 +13,7 @@ import { print1, print2 } from "../../drivers/stdio";
 import { awsCloudAuth } from "../../plugins/aws/auth";
 import { parseArn } from "../../plugins/aws/utils";
 import { DbPermissionSpec } from "../../plugins/db/types";
+import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { exec, osSafeCommand, throwAssertNever } from "../../util";
@@ -152,7 +153,8 @@ const fetchConfig = async (
 const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
   const access = await requestRdsAccess(argv, authn);
 
-  const awsDelegation = access.delegation?.["aws-rds"].delegation?.aws;
+  const awsRdsDelegate = getDelegate(access.delegation, "aws-rds");
+  const awsDelegation = getDelegate(awsRdsDelegate?.delegation, "aws");
   if (!awsDelegation) {
     throw `P0 granted access, but ${access.permission.instanceId} is not a RDS instance.`;
   }
@@ -169,7 +171,7 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const database = argv.database ?? dbConfig.defaultDb;
 
-  const dbResource = access.delegation["aws-rds"].delegation.aws.permission.arn;
+  const dbResource = awsDelegation.permission.arn;
 
   const { region } = parseArn(dbResource);
   const profileName = `p0_${access.permission.instanceId}`;
