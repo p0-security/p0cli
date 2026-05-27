@@ -20,7 +20,7 @@ export const REFRESH_FAILED = "REFRESH_FAILED" as const;
 export type RefreshError = {
   code: typeof REFRESH_FAILED;
   reason:
-    | "http_error"  
+    | "http_error"
     | "missing_id_token"
     | "missing_provider_config"
     | "network_error"
@@ -38,7 +38,7 @@ const refreshError = (
  * Merge a newly-issued credential from the refresh-token grant with the
  * previously-stored credential. Note, not all fields are included in the
  * refreshed token, and thus must be carried forward from the previous/original token.
-**/
+ **/
 export const mergeRefreshedCredential = (
   previous: TokenResponse,
   refreshed: TokenResponse
@@ -119,4 +119,55 @@ export const refreshOktaTokens = async (
   }
 
   return mergeRefreshedCredential(identity.credential, refreshed);
+};
+
+/**
+ * Best-effort revoke of the stored refresh_token at Okta's /oauth2/v1/revoke.
+ *
+ * Called before destroying the local identity file on logout. Failures are
+ * intentionally swallowed: a stuck network call should not block the user
+ * from logging out locally. Per RFC 7009 Okta returns 200 for already-revoked
+ * tokens, so this is safe to call without preflight checks.
+ */
+export const revokeOktaRefreshToken = async (
+  identity: Identity,
+  options?: { debug?: boolean }
+): Promise<void> => {
+  const refresh_token = identity.credential.refresh_token;
+  if (!refresh_token) return;
+
+  const providerDomain = getProviderDomain(identity.org);
+  const clientId = getClientId(identity.org);
+  if (!providerDomain || !clientId) {
+    if (options?.debug) {
+      print2(
+        "Skipping refresh-token revoke: missing provider domain or client id."
+      );
+    }
+    return;
+  }
+
+  try {
+    const response = await fetch(`https://${providerDomain}/oauth2/v1/revoke`, {
+      method: "POST",
+      headers: OIDC_HEADERS,
+      body: urlEncode({
+        client_id: clientId,
+        token: refresh_token,
+        token_type_hint: "refresh_token",
+      }),
+    });
+    if (!response.ok && options?.debug) {
+      print2(
+        `Refresh-token revoke returned ${response.status} ${response.statusText}; proceeding with logout.`
+      );
+    }
+  } catch (e) {
+    if (options?.debug) {
+      const detail = e instanceof Error ? e.message : String(e);
+      print2(
+        `Refresh-token revoke failed (${detail}); proceeding with logout.`
+      );
+    }
+  }
 };

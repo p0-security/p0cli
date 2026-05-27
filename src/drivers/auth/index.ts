@@ -21,7 +21,7 @@ import { print2 } from "../stdio";
 import { getExpiredCredentialsMessage } from "../util";
 import { withIdentityLock } from "./lock";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
-import { refreshOktaTokens } from "./refresh";
+import { refreshOktaTokens, revokeOktaRefreshToken } from "./refresh";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -136,10 +136,9 @@ const loadCredentialsWithAutoLogin = async (options?: {
     return identity;
   }
 
-  // Token is at/past expiry. Try the silent refresh-token grant first, and
-  // only fall through to the interactive device flow if that path is
-  // unavailable or fails. Currently scoped to Okta \u2014 other OIDC providers
-  // don't populate `refresh_token` in this codebase.
+  // If token is expired, and provider is okta, try the silent refresh-token
+  // grant first, and only fall through to the interactive device flow if that
+  // path is unavailable or fails.
   if (
     identity.credential.refresh_token &&
     getProviderType(identity.org) === "okta"
@@ -203,7 +202,20 @@ export const writeIdentity = async (
   await fs.rename(tmpPath, identityFilePath);
 };
 
-export const deleteIdentity = async () => {
+export const deleteIdentity = async (options?: { debug?: boolean }) => {
+  // Best-effort: revoke the refresh_token at the IDP before destroying our
+  // local copy.
+  try {
+    const identity = await loadCredentials();
+    if (
+      identity.credential.refresh_token &&
+      getProviderType(identity.org) === "okta"
+    ) {
+      await revokeOktaRefreshToken(identity, { debug: options?.debug });
+    }
+  } catch {
+    // No identity to revoke (already cleared, or never logged in). Proceed.
+  }
   await clearIdentityCache();
   await clearIdentityFile();
 };
