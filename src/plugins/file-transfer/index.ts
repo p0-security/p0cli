@@ -1,0 +1,118 @@
+/** Copyright © 2024-present P0 Security
+
+This file is part of @p0security/cli
+
+@p0security/cli is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+
+@p0security/cli is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
+**/
+import { FileTransferCommandArgs } from "../../commands/file-transfer";
+import { request } from "../../commands/shared/request";
+import { Authn } from "../../types/identity";
+import { PermissionRequest } from "../../types/request";
+import { awsCloudAuth } from "../aws/auth";
+import { AwsResourcePermissionSpec } from "../aws/types";
+import { FileTransferPermissionSpec } from "./types";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { pick } from "lodash";
+import yargs from "yargs";
+
+const GET_EXPIRES_SECONDS = 5 * 60;
+const DELETE_EXPIRES_SECONDS = 60 * 60;
+
+export const provisionTransferRequest = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>
+) => {
+  const response = await request("request")<
+    PermissionRequest<FileTransferPermissionSpec>
+  >(
+    {
+      ...pick(args, "$0", "_"),
+      arguments: [
+        "file-transfer",
+        "session",
+        args.destination,
+        ...(args.reason ? ["--reason", args.reason] : []),
+      ],
+      wait: true,
+    },
+    authn,
+    { message: "approval-required" }
+  );
+
+  if (!response) {
+    throw "Did not receive a response from server";
+  }
+
+  const awsSpec = response.request.delegation.aws;
+  if (!awsSpec) {
+    throw "Backend granted file-transfer access, but there was an error getting AWS access details";
+  }
+
+  const { bucketName, bucketRegion, objectPrefix } =
+    response.request.permission.resource;
+
+  return {
+    bucket: bucketName,
+    prefix: objectPrefix,
+    region: bucketRegion,
+    awsSpec,
+  };
+};
+
+export const generateTransferUrls = async (
+  authn: Authn,
+  target: {
+    bucket: string;
+    key: string;
+    region: string;
+    awsSpec: AwsResourcePermissionSpec;
+  },
+  debug?: boolean
+): Promise<{
+  s3: S3Client;
+  getUrl: string;
+  deleteUrl: string;
+  expirySeconds: { get: number; delete: number };
+}> => {
+  const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
+
+  const sdkCredentials = {
+    accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+    secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
+    sessionToken: credentials.AWS_SESSION_TOKEN,
+  };
+
+  const s3 = new S3Client({
+    region: target.region,
+    credentials: sdkCredentials,
+  });
+
+  const objectArgs = { Bucket: target.bucket, Key: target.key };
+  const [getUrl, deleteUrl] = await Promise.all([
+    getSignedUrl(s3, new GetObjectCommand(objectArgs), {
+      expiresIn: GET_EXPIRES_SECONDS,
+    }),
+    getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
+      expiresIn: DELETE_EXPIRES_SECONDS,
+    }),
+  ]);
+
+  return {
+    s3,
+    getUrl,
+    deleteUrl,
+    expirySeconds: {
+      get: GET_EXPIRES_SECONDS,
+      delete: DELETE_EXPIRES_SECONDS,
+    },
+  };
+};

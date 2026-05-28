@@ -16,6 +16,7 @@ import { p0VersionInfo, stringifyVersionInfo } from "../version";
 import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { claudeCommand } from "./claude";
+import { fileTransferCommand } from "./file-transfer";
 import { grantCommand } from "./grant";
 import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
@@ -48,6 +49,7 @@ const commands = [
   rdpCommand,
   kubeconfigCommand,
   printBearerTokenCommand,
+  fileTransferCommand,
 ];
 
 const buildArgv = async () => {
