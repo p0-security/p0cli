@@ -23,11 +23,11 @@ export type DelegationEntry<K extends string, R> = {
 /** Delegation field that tolerates both the legacy record form and the new
  * array form. Callers should not read this directly — use {@link getDelegate}.
  */
-export type DelegationField<Old extends Record<string, any>> =
+export type DelegationField<Spec extends Record<string, any>> =
   | {
-      [K in keyof Old & string]: DelegationEntry<K, Old[K]>;
-    }[keyof Old & string][]
-  | Old;
+      [K in keyof Spec & string]: DelegationEntry<K, Spec[K]>;
+    }[keyof Spec & string][]
+  | Spec;
 
 /** Resolve a delegate by key, accepting either the legacy record-form
  * delegation or the new array-form delegation.
@@ -35,9 +35,9 @@ export type DelegationField<Old extends Record<string, any>> =
  * Returns the underlying delegate value (with `permission`, `generated`,
  * and nested `delegation` fields), or `undefined` if no entry matches.
  *
- * The generic shape (`K`, `V` rather than the full `Old` record) is
- * deliberate: matching the union `DelegationField<Old>` bidirectionally
- * confuses TS's inference and can lock `Old` onto the array branch.
+ * The generic shape (`K`, `V` rather than the full `Spec` record) is
+ * deliberate: matching the union `DelegationField<Spec>` bidirectionally
+ * confuses TS's inference and can lock `Spec` onto the array branch.
  * Pinning `K` to the key argument and inferring `V` from the value avoids
  * that.
  */
