@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { FileTransferCommandArgs } from "../../commands/file-transfer";
 import { request } from "../../commands/shared/request";
+import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { awsCloudAuth } from "../aws/auth";
@@ -52,7 +53,7 @@ export const provisionTransferRequest = async (
     throw "Did not receive a response from server";
   }
 
-  const awsSpec = response.request.delegation.aws;
+  const awsSpec = getDelegate(response.request.delegation, "aws");
   if (!awsSpec) {
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
