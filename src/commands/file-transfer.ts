@@ -11,11 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
-import { traceSpan } from "../opentelemetry/otel-helpers";
+import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import {
   generateTransferUrls,
   provisionTransferRequest,
+  signGetUrl,
 } from "../plugins/file-transfer";
+import { sshOrScp } from "../plugins/ssh";
+import { prepareRequest } from "./shared/ssh";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -88,18 +91,16 @@ const fileTransferAction = async (
       const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
-      const { s3, getUrl, deleteUrl, expirySeconds } =
-        await generateTransferUrls(
-          authn,
-          { ...target, key: uploadKey },
-          args.debug
-        );
+      const { s3, deleteUrl, expirySeconds } = await generateTransferUrls(
+        authn,
+        { ...target, key: uploadKey },
+        args.debug
+      );
 
       const renderDurationSec = (s: number) =>
         s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
       // TODO: remove logging when we remove the launchdarkly file-transfer flag
       if (args.debug) {
-        print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);
         print2(
           `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
         );
@@ -152,6 +153,74 @@ const fileTransferAction = async (
       }
 
       print2("Uploaded.");
+
+      // Step 2: have the destination instance pull the file from S3.
+      // This is a separate approval ticket (SSH provider) — file-transfer
+      // access granted bucket write only, not instance shell access.
+      print2(`Requesting download access on ${args.destination}...`);
+
+      // Drop `source` (local file path) before passing to SSH plumbing —
+      // `createCommand` uses `"source" in args` to route between scp and ssh,
+      // and we want the ssh branch here.
+      const { source: _source, ...sshBaseArgs } = args;
+      const sshCmdArgs = {
+        ...sshBaseArgs,
+        arguments: [] as string[],
+        sshOptions: [] as string[],
+      };
+
+      const { request, requestId, privateKey, sshProvider, sshHostKeys } =
+        await prepareRequest(authn, sshCmdArgs, args.destination);
+
+      // Re-sign GET URL now so the 5-min TTL starts after approval clears,
+      // not before — otherwise long approval waits could expire the URL.
+      const { url: freshGetUrl, expirySeconds: getExpiry } = await signGetUrl(
+        s3,
+        { bucket: target.bucket, key: uploadKey }
+      );
+      if (args.debug) {
+        print2(`GET    (${renderDurationSec(getExpiry)}): ${freshGetUrl}`);
+      }
+
+      const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
+      print2(
+        `Downloading to ${request.linuxUserName}@${args.destination}:${remotePath}...`
+      );
+
+      // TODO(CUS-68): final download command (curl vs aws s3 cp vs wget) is
+      // being decided in CUS-68. Using curl for now — universally present on
+      // mainstream EC2 AMIs (Amazon Linux, Ubuntu, RHEL, etc.).
+      const downloadCmdArgs = {
+        ...sshCmdArgs,
+        command: "curl",
+        arguments: ["-sSfL", freshGetUrl, "-o", remotePath],
+      };
+
+      const exitCode = await sshOrScp({
+        authn,
+        request,
+        requestId,
+        cmdArgs: downloadCmdArgs,
+        privateKey,
+        sshProvider,
+        sshHostKeys,
+      });
+
+      if (exitCode === 127) {
+        throw `curl not found on ${args.destination}. The file is in S3 — install curl on the instance and re-run, or wait for CUS-68 to add a fallback downloader.`;
+      }
+      if (exitCode !== null && exitCode !== 0) {
+        throw `Remote download exited with code ${exitCode}`;
+      }
+
+      print2(`Downloaded to ${remotePath}.`);
+
+      // Force exit to prevent hanging due to orphaned child processes (e.g.,
+      // session-manager-plugin) holding open file descriptors. See:
+      // https://github.com/aws/amazon-ssm-agent/issues/173
+      if (process.env.NODE_ENV !== "unit") {
+        exitProcess(0);
+      }
     },
     {
       command: "file-transfer",

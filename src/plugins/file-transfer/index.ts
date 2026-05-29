@@ -79,9 +79,8 @@ export const generateTransferUrls = async (
   debug?: boolean
 ): Promise<{
   s3: S3Client;
-  getUrl: string;
   deleteUrl: string;
-  expirySeconds: { get: number; delete: number };
+  expirySeconds: { delete: number };
 }> => {
   const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
 
@@ -96,23 +95,29 @@ export const generateTransferUrls = async (
     credentials: sdkCredentials,
   });
 
-  const objectArgs = { Bucket: target.bucket, Key: target.key };
-  const [getUrl, deleteUrl] = await Promise.all([
-    getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: GET_EXPIRES_SECONDS,
-    }),
-    getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: DELETE_EXPIRES_SECONDS,
-    }),
-  ]);
+  const deleteUrl = await getSignedUrl(
+    s3,
+    new DeleteObjectCommand({ Bucket: target.bucket, Key: target.key }),
+    { expiresIn: DELETE_EXPIRES_SECONDS }
+  );
 
   return {
     s3,
-    getUrl,
     deleteUrl,
-    expirySeconds: {
-      get: GET_EXPIRES_SECONDS,
-      delete: DELETE_EXPIRES_SECONDS,
-    },
+    expirySeconds: { delete: DELETE_EXPIRES_SECONDS },
   };
+};
+
+// GET URL is signed late (after SSH approval clears) so the 5-min TTL covers
+// the actual download window instead of expiring during approval wait.
+export const signGetUrl = async (
+  s3: S3Client,
+  target: { bucket: string; key: string }
+): Promise<{ url: string; expirySeconds: number }> => {
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: target.bucket, Key: target.key }),
+    { expiresIn: GET_EXPIRES_SECONDS }
+  );
+  return { url, expirySeconds: GET_EXPIRES_SECONDS };
 };
