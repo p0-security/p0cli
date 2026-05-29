@@ -15,6 +15,7 @@ import {
 } from "../../common/keys";
 import { fetchSshHostKeys, submitPublicKey } from "../../drivers/api";
 import { print2 } from "../../drivers/stdio";
+import { getDelegate } from "../../types/delegation";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
@@ -173,11 +174,13 @@ export const awsSshProvider: SshProvider<
     const { resource, region } = permission;
     const { instanceId } = resource;
     const { linuxUserName, hostKeys } = generated;
+    const awsDelegate = getDelegate(delegation, "aws");
     // TODO: Update after P0 backend data-model update
-    const { idcId, idcRegion, accountId } =
-      delegation?.aws?.permission ?? resource;
-    const name =
-      delegation?.aws?.generated.name ?? generated?.resource?.name ?? "";
+    const { idcId, idcRegion, accountId } = awsDelegate?.permission ?? resource;
+    if (!accountId) {
+      throw "Backend did not provide an AWS account ID for SSH session.";
+    }
+    const name = awsDelegate?.generated.name ?? generated?.resource?.name ?? "";
     const common = {
       linuxUserName,
       accountId,
