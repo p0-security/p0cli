@@ -74,6 +74,7 @@ vi.mock("../../drivers/stdio", () => ({
 // Mock config to prevent actual config loading
 vi.mock("../../drivers/config", () => ({
   getHelpMessage: vi.fn(() => "For help, visit https://p0.dev"),
+  getContactMessage: vi.fn(() => "Contact P0 for help."),
 }));
 
 // Mock version check middleware
