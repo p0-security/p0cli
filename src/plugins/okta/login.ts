@@ -163,7 +163,9 @@ const oktaOidcUrls = (org: OrgData) => () => {
   };
 };
 
-const OKTA_BASE_SCOPE = "openid email profile okta.apps.sso";
+const OKTA_BASE_SCOPE = "openid email profile";
+
+const OKTA_BROWSER_SCOPE = `${OKTA_BASE_SCOPE} okta.apps.sso`;
 const OKTA_OFFLINE_SCOPE = `${OKTA_BASE_SCOPE} offline_access`;
 
 /** Logs in to Okta via OIDC.
@@ -192,12 +194,10 @@ export const oktaLogin = async (
     const message = e instanceof Error ? e.message : String(e);
     if (!message.includes("invalid_scope")) throw e;
     if (options?.debug) {
-      print2(
-        "Okta tenant rejected offline_access at /device/authorize; retrying without it."
-      );
+      print2("Okta tenant rejected offline_access; retrying without it.");
     }
     return await oidcLogin<AuthorizeResponse, TokenResponse>(
-      oidcLoginSteps(org, OKTA_BASE_SCOPE, urls)
+      oidcLoginSteps(org, OKTA_BROWSER_SCOPE, urls)
     );
   }
 };
