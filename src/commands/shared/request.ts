@@ -155,6 +155,9 @@ export const request =
       data: RequestResponse<T> | undefined
     ): { shouldLogMessage: boolean; data: RequestResponse<T> } => {
       if (data && "ok" in data && "message" in data && data.ok) {
+        for (const warning of data.warnings ?? []) {
+          print2(`Warning: ${warning}`);
+        }
         const shouldLogMessage =
           !options?.message ||
           options?.message === "all" ||

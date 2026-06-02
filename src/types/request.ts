@@ -27,10 +27,8 @@ export type PermissionSpec<
   K extends string,
   P extends Record<string, any>,
   G extends object | undefined = undefined,
-  D extends Record<
-    string,
-    PermissionSpec<any, any, any, any> | undefined
-  > = Record<string, never>,
+  D extends Record<string, PermissionSpec<any, any, any, any> | undefined> =
+    Record<string, never>,
 > = {
   type: K;
   permission: P;
@@ -59,4 +57,5 @@ export type RequestResponse<T> = {
   isPreexisting: boolean;
   isPersistent: boolean;
   isPreapproved: boolean;
+  warnings?: string[];
 };
