@@ -220,6 +220,67 @@ export const getOperatingSystem = (): OperatingSystem => {
   }
 };
 
+export type ShellKind = "fish" | "posix";
+
+export const detectShell = (
+  env: NodeJS.ProcessEnv = process.env
+): ShellKind => {
+  const shellName = path.basename(env.SHELL ?? "").toLowerCase();
+  return shellName === "fish" ? "fish" : "posix";
+};
+
+export type EnvAssignmentOptions = {
+  /** Wrap the value in double quotes; necessary for values that may contain
+   * shell-special characters (e.g. DB passwords). */
+  quote?: boolean;
+};
+
+/**
+ * Formats shell snippets (environment-variable assignments and references,
+ * command evaluation) in the syntax of a particular shell family.
+ *
+ * Use {@link newShellFormatter} to obtain the formatter for the user's detected
+ * shell, e.g. `newShellFormatter().formatEnvAssignment("KEY", "value")`.
+ */
+export type ShellFormatter = {
+  readonly shell: ShellKind;
+
+  formatEnvAssignment: (
+    key: string,
+    value: string,
+    options?: EnvAssignmentOptions
+  ) => string;
+
+  formatEnvReference: (key: string) => string;
+
+  formatEvalCommand: (command: string) => string;
+};
+
+const posixShellFormatter: ShellFormatter = {
+  shell: "posix",
+  formatEnvAssignment: (key, value, options) =>
+    `export ${key}=${options?.quote ? `"${value}"` : value}`,
+  formatEnvReference: (key) => `\${${key}}`,
+  formatEvalCommand: (command) => `$(${command})`,
+};
+
+const fishShellFormatter: ShellFormatter = {
+  shell: "fish",
+  formatEnvAssignment: (key, value, options) =>
+    `set -gx ${key} ${options?.quote ? `"${value}"` : value}`,
+  formatEnvReference: (key) => `$${key}`,
+  formatEvalCommand: (command) => `${command} | source`,
+};
+
+const SHELL_FORMATTERS: Record<ShellKind, ShellFormatter> = {
+  fish: fishShellFormatter,
+  posix: posixShellFormatter,
+};
+
+export const newShellFormatter = (
+  shell: ShellKind = detectShell()
+): ShellFormatter => SHELL_FORMATTERS[shell];
+
 /**
  * Wraps a command with the operating-system specific method
  * executing it.

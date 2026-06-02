@@ -14,7 +14,7 @@ import { print1, print2 } from "../../../drivers/stdio";
 import { failure } from "../../../testing/yargs";
 import { samlResponse } from "./__input__/saml-response";
 import { stsResponse } from "./__input__/sts-response";
-import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
 
 vi.mock("fs/promises");
@@ -96,7 +96,20 @@ describe("aws role", () => {
         });
       });
       describe("assume", () => {
+        const originalShell = process.env.SHELL;
+        afterEach(() => {
+          process.env.SHELL = originalShell;
+        });
+
         it("should assume a role", async () => {
+          process.env.SHELL = "/bin/bash";
+          await awsCommand(yargs()).parse("aws role assume Role1");
+          expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
+          expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
+        });
+
+        it("should print fish-compatible syntax when the login shell is fish", async () => {
+          process.env.SHELL = "/usr/bin/fish";
           await awsCommand(yargs()).parse("aws role assume Role1");
           expect(mockPrint2.mock.calls).toMatchSnapshot("stderr");
           expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");

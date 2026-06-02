@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { fetchIntegrationConfig } from "../../../drivers/api";
+import { print2 } from "../../../drivers/stdio";
 import { awsCloudAuth } from "../../../plugins/aws/auth";
 import { AwsResourcePermissionSpec } from "../../../plugins/aws/types";
 import { DbPermissionSpec } from "../../../plugins/db/types";
@@ -50,6 +51,7 @@ const mockFetchIntegrationConfig = fetchIntegrationConfig as Mock;
 const mockWriteAwsTempCredentials = writeAwsTempCredentials as Mock;
 const mockWriteAwsConfigProfile = writeAwsConfigProfile as Mock;
 const mockExec = exec as Mock;
+const mockPrint2 = print2 as Mock;
 
 const AWS_DELEGATE: AwsResourcePermissionSpec = {
   type: "aws",
@@ -214,5 +216,50 @@ describe("rds generate-db-auth-token", () => {
 
     expect(error).toBe("P0 granted access, but db-1 is not a RDS instance.");
     expect(mockAwsCloudAuth).not.toHaveBeenCalled();
+  });
+
+  describe("connection instructions are shell-aware", () => {
+    const originalShell = process.env.SHELL;
+    afterEach(() => {
+      process.env.SHELL = originalShell;
+    });
+
+    const runWithShell = async (shell: string, arch: "mysql" | "postgres") => {
+      process.env.SHELL = shell;
+      mockAccessResponse({
+        "aws-rds": {
+          permission: { vpcId: "vpc-1" },
+          delegation: { aws: AWS_DELEGATE },
+        },
+      });
+      await buildRdsYargs().parse(
+        `rds generate-db-auth-token --arch ${arch} --role admin`
+      );
+      return mockPrint2.mock.calls.map((call) => call[0]).join("\n");
+    };
+
+    it("prints POSIX `export` / `${VAR}` instructions under bash (postgres)", async () => {
+      const output = await runWithShell("/bin/bash", "postgres");
+      expect(output).toContain('export PGPASSWORD="fake-rds-token"');
+      expect(output).toContain('export RDS_HOST="db.host"');
+      expect(output).toContain('export RDS_SSL_CA="/certs/global-bundle.pem"');
+      expect(output).toContain("host=${RDS_HOST}");
+      expect(output).not.toContain("set -gx");
+    });
+
+    it("prints fish `set -gx` / `$VAR` instructions when the login shell is fish (postgres)", async () => {
+      const output = await runWithShell("/usr/bin/fish", "postgres");
+      expect(output).toContain('set -gx PGPASSWORD "fake-rds-token"');
+      expect(output).toContain('set -gx RDS_HOST "db.host"');
+      expect(output).toContain('set -gx RDS_SSL_CA "/certs/global-bundle.pem"');
+      expect(output).toContain("host=$RDS_HOST");
+      expect(output).not.toContain("export PGPASSWORD");
+    });
+
+    it("uses MYSQL_PWD with fish syntax for mysql when the login shell is fish", async () => {
+      const output = await runWithShell("/usr/bin/fish", "mysql");
+      expect(output).toContain('set -gx MYSQL_PWD "fake-rds-token"');
+      expect(output).toContain("mysql -h $RDS_HOST");
+    });
   });
 });
