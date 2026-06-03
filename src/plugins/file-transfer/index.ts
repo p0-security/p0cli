@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { FileTransferCommandArgs } from "../../commands/file-transfer";
 import { request } from "../../commands/shared/request";
+import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { awsCloudAuth } from "../aws/auth";
@@ -52,7 +53,7 @@ export const provisionTransferRequest = async (
     throw "Did not receive a response from server";
   }
 
-  const awsSpec = response.request.delegation.aws;
+  const awsSpec = getDelegate(response.request.delegation, "aws");
   if (!awsSpec) {
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
@@ -79,9 +80,8 @@ export const generateTransferUrls = async (
   debug?: boolean
 ): Promise<{
   s3: S3Client;
-  getUrl: string;
   deleteUrl: string;
-  expirySeconds: { get: number; delete: number };
+  expirySeconds: { delete: number };
 }> => {
   const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
 
@@ -96,23 +96,29 @@ export const generateTransferUrls = async (
     credentials: sdkCredentials,
   });
 
-  const objectArgs = { Bucket: target.bucket, Key: target.key };
-  const [getUrl, deleteUrl] = await Promise.all([
-    getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: GET_EXPIRES_SECONDS,
-    }),
-    getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: DELETE_EXPIRES_SECONDS,
-    }),
-  ]);
+  const deleteUrl = await getSignedUrl(
+    s3,
+    new DeleteObjectCommand({ Bucket: target.bucket, Key: target.key }),
+    { expiresIn: DELETE_EXPIRES_SECONDS }
+  );
 
   return {
     s3,
-    getUrl,
     deleteUrl,
-    expirySeconds: {
-      get: GET_EXPIRES_SECONDS,
-      delete: DELETE_EXPIRES_SECONDS,
-    },
+    expirySeconds: { delete: DELETE_EXPIRES_SECONDS },
   };
+};
+
+// GET URL is signed late (after SSH approval clears) so the 5-min TTL covers
+// the actual download window instead of expiring during approval wait.
+export const signGetUrl = async (
+  s3: S3Client,
+  target: { bucket: string; key: string }
+): Promise<{ url: string; expirySeconds: number }> => {
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: target.bucket, Key: target.key }),
+    { expiresIn: GET_EXPIRES_SECONDS }
+  );
+  return { url, expirySeconds: GET_EXPIRES_SECONDS };
 };

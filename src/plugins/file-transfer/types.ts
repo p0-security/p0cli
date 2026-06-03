@@ -29,9 +29,6 @@ export type FileTransferPermission = {
 export type FileTransferPermissionSpec = PermissionSpec<
   "file-transfer",
   FileTransferPermission,
-  Record<string, never>
-> & {
-  delegation: {
-    aws?: AwsResourcePermissionSpec;
-  };
-};
+  Record<string, never>,
+  { aws?: AwsResourcePermissionSpec }
+>;
