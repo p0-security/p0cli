@@ -36,6 +36,7 @@ const safeDelete = async (
 const logout = async (debug: boolean): Promise<void> => {
   print2("Logging out...");
 
+  // Revoke identity token and delete related files
   await deleteIdentity({ debug });
 
   const configPath = getConfigFilePath();

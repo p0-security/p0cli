@@ -91,13 +91,8 @@ export const refreshOktaTokens = async (
   }
 
   if (!response.ok) {
-    let detail: string | undefined;
-    try {
-      detail = await response.text();
-    } catch {
-      // ignore
-    }
     if (options?.debug) {
+      const detail = await response.text().catch(() => undefined);
       print2(
         `Okta refresh-token grant failed: ${response.status} ${response.statusText} ${detail ?? ""}`
       );
@@ -123,11 +118,6 @@ export const refreshOktaTokens = async (
 
 /**
  * Best-effort revoke of the stored refresh_token at Okta's /oauth2/v1/revoke.
- *
- * Called before destroying the local identity file on logout. Failures are
- * intentionally swallowed: a stuck network call should not block the user
- * from logging out locally. Per RFC 7009 Okta returns 200 for already-revoked
- * tokens, so this is safe to call without preflight checks.
  */
 export const revokeOktaRefreshToken = async (
   identity: Identity,

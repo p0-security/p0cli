@@ -205,17 +205,15 @@ export const writeIdentity = async (
 export const deleteIdentity = async (options?: { debug?: boolean }) => {
   // Best-effort: revoke the refresh_token at the IDP before destroying our
   // local copy.
-  try {
-    const identity = await loadCredentials();
-    if (
-      identity.credential.refresh_token &&
-      getProviderType(identity.org) === "okta"
-    ) {
-      await revokeOktaRefreshToken(identity, { debug: options?.debug });
-    }
-  } catch {
-    // No identity to revoke (already cleared, or never logged in). Proceed.
+
+  const identity = await loadCredentials();
+  if (
+    identity.credential.refresh_token &&
+    getProviderType(identity.org) === "okta"
+  ) {
+    await revokeOktaRefreshToken(identity, { debug: options?.debug });
   }
+
   await clearIdentityCache();
   await clearIdentityFile();
 };
