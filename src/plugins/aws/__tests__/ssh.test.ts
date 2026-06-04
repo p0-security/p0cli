@@ -223,10 +223,10 @@ describe("awsSshProvider.reproCommands", () => {
     process.env.SHELL = originalShell;
   });
 
-  it("emits POSIX command substitution for a role request under bash", () => {
+  it("emits an eval-wrapped command substitution for a role request under bash", () => {
     process.env.SHELL = "/bin/bash";
     expect(awsSshProvider.reproCommands(ROLE_REQUEST)).toEqual([
-      "$(p0 aws role assume Role1 --account 123456789012 --no-request)",
+      'eval "$(p0 aws role assume Role1 --account 123456789012 --no-request)"',
     ]);
   });
 

@@ -10,7 +10,7 @@ exports[`aws role > a single installed account > with Okta SAML > assume > shoul
     "
 Or, populate these environment variables by evaluating the output of this command:
 
-  $(p0 aws role assume Role1) ",
+  eval "$(p0 aws role assume Role1)" ",
   ],
 ]
 `;

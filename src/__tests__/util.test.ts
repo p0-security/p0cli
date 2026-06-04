@@ -44,7 +44,7 @@ describe("detectShell", () => {
   });
 });
 
-describe("posix formatter — must remain byte-identical to legacy output", () => {
+describe("posix formatter (env assignments/references remain byte-identical to legacy output)", () => {
   const f = newShellFormatter("posix");
 
   it("emits the legacy `export KEY=value` assignment", () => {
@@ -63,9 +63,9 @@ describe("posix formatter — must remain byte-identical to legacy output", () =
     expect(f.formatEnvReference("RDS_HOST")).toBe("${RDS_HOST}");
   });
 
-  it("emits POSIX command substitution", () => {
+  it("wraps command substitution in eval so multiline output runs line-by-line", () => {
     expect(f.formatEvalCommand("p0 aws role assume Role1")).toBe(
-      "$(p0 aws role assume Role1)"
+      'eval "$(p0 aws role assume Role1)"'
     );
   });
 });

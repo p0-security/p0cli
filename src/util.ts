@@ -230,8 +230,15 @@ export const detectShell = (
 };
 
 export type EnvAssignmentOptions = {
-  /** Wrap the value in double quotes; necessary for values that may contain
-   * shell-special characters (e.g. DB passwords). */
+  /**
+   * Wrap the value in double quotes so that whitespace does not cause
+   * word-splitting or globbing (e.g. DB passwords that contain spaces).
+   *
+   * Note: double quotes do NOT escape an embedded `"`, `$`, `` ` ``, or `\`
+   * in POSIX or fish — `$VAR`/`` `cmd` `` still expand. This is intended for
+   * displaying copy-paste instructions for typical generated credentials, not
+   * for safely quoting arbitrary untrusted values.
+   */
   quote?: boolean;
 };
 
@@ -261,7 +268,13 @@ const posixShellFormatter: ShellFormatter = {
   formatEnvAssignment: (key, value, options) =>
     `export ${key}=${options?.quote ? `"${value}"` : value}`,
   formatEnvReference: (key) => `\${${key}}`,
-  formatEvalCommand: (command) => `$(${command})`,
+  // Use `eval "$(...)"` rather than a bare `$(...)`: the command emits one
+  // `export ...` line per credential, and an unquoted command substitution
+  // collapses those newlines via word-splitting into a single
+  // `export A=v1 export B=v2 ...` line — which exports a stray variable named
+  // `export` and is brittle. Quoting inside `eval` preserves the newlines so
+  // each line runs as its own command, matching fish's `| source` behavior.
+  formatEvalCommand: (command) => `eval "$(${command})"`,
 };
 
 const fishShellFormatter: ShellFormatter = {
