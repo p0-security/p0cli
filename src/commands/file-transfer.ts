@@ -13,6 +13,7 @@ import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { traceSpan } from "../opentelemetry/otel-helpers";
 import {
+  createTransferClient,
   generateTransferUrls,
   provisionTransferRequest,
 } from "../plugins/file-transfer";
@@ -88,22 +89,7 @@ const fileTransferAction = async (
       const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
-      const { s3, getUrl, deleteUrl, expirySeconds } =
-        await generateTransferUrls(
-          authn,
-          { ...target, key: uploadKey },
-          args.debug
-        );
-
-      const renderDurationSec = (s: number) =>
-        s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
-      // TODO: remove logging when we remove the launchdarkly file-transfer flag
-      if (args.debug) {
-        print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);
-        print2(
-          `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
-        );
-      }
+      const s3 = createTransferClient(authn, target, args.debug);
 
       print2(`Uploading ${args.source}...`);
 
@@ -152,6 +138,25 @@ const fileTransferAction = async (
       }
 
       print2("Uploaded.");
+
+      // Sign the download/cleanup URLs only now that the file is uploaded — the
+      // GET window is finite, so we don't want it ticking during the upload.
+      const { getUrl, deleteUrl, expirySeconds } = await generateTransferUrls(
+        authn,
+        s3,
+        { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
+        args.debug
+      );
+
+      const renderDurationSec = (s: number) =>
+        s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+      // TODO: remove logging when we remove the launchdarkly file-transfer flag
+      if (args.debug) {
+        print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);
+        print2(
+          `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
+        );
+      }
     },
     {
       command: "file-transfer",

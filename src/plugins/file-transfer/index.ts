@@ -24,7 +24,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const GET_EXPIRES_SECONDS = 5 * 60;
+const GET_EXPIRES_SECONDS = 60 * 60;
 const DELETE_EXPIRES_SECONDS = 60 * 60;
 
 export const provisionTransferRequest = async (
@@ -68,51 +68,78 @@ export const provisionTransferRequest = async (
   };
 };
 
+/**
+ * Builds an S3 client whose credentials refresh automatically. A large upload
+ * can run longer than the temporary credentials live; passing a provider
+ * function (that returns `expiration`) lets the SDK re-fetch fresh credentials
+ * mid-upload instead of failing the in-flight parts with ExpiredToken.
+ */
+export const createTransferClient = (
+  authn: Authn,
+  target: { region: string; awsSpec: AwsResourcePermissionSpec },
+  debug?: boolean
+): S3Client =>
+  new S3Client({
+    region: target.region,
+    credentials: async () => {
+      const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
+      return {
+        accessKeyId: credentials.AWS_ACCESS_KEY_ID,
+        secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
+        sessionToken: credentials.AWS_SESSION_TOKEN,
+        // Providing `expiration` is what tells the SDK to call this provider
+        // again when the credentials are close to expiring. awsCloudAuth is
+        // cached and re-fetches once the old credentials expire.
+        ...(credentials.expiresAt !== undefined
+          ? { expiration: new Date(credentials.expiresAt) }
+          : {}),
+      };
+    },
+  });
+
+/**
+ * Signs the GET (download) and DELETE (cleanup) URLs. Call this AFTER the upload
+ * completes: the GET window is finite, and signing before a large upload would
+ * burn that window while the file is still uploading.
+ *
+ * Each expiry is capped to the credentials' remaining lifetime so a URL can
+ * never outlive the credentials that signed it.
+ */
 export const generateTransferUrls = async (
   authn: Authn,
-  target: {
-    bucket: string;
-    key: string;
-    region: string;
-    awsSpec: AwsResourcePermissionSpec;
-  },
+  s3: S3Client,
+  target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
   debug?: boolean
 ): Promise<{
-  s3: S3Client;
   getUrl: string;
   deleteUrl: string;
   expirySeconds: { get: number; delete: number };
 }> => {
-  const credentials = await awsCloudAuth(authn, target.awsSpec, debug);
-
-  const sdkCredentials = {
-    accessKeyId: credentials.AWS_ACCESS_KEY_ID,
-    secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
-    sessionToken: credentials.AWS_SESSION_TOKEN,
-  };
-
-  const s3 = new S3Client({
-    region: target.region,
-    credentials: sdkCredentials,
-  });
+  const { expiresAt } = await awsCloudAuth(authn, target.awsSpec, debug);
+  // If we somehow don't know the expiry, fall back to the configured limits
+  // (Infinity makes Math.min pick the constant). Math.max(0, ...) avoids signing
+  // an already-expired URL if the credentials are right at the edge.
+  const remaining =
+    expiresAt !== undefined
+      ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+      : Infinity;
+  const getSeconds = Math.min(GET_EXPIRES_SECONDS, remaining);
+  const deleteSeconds = Math.min(DELETE_EXPIRES_SECONDS, remaining);
 
   const objectArgs = { Bucket: target.bucket, Key: target.key };
   const [getUrl, deleteUrl] = await Promise.all([
     getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: GET_EXPIRES_SECONDS,
+      expiresIn: getSeconds,
     }),
     getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: DELETE_EXPIRES_SECONDS,
+      expiresIn: deleteSeconds,
     }),
   ]);
 
   return {
-    s3,
     getUrl,
     deleteUrl,
-    expirySeconds: {
-      get: GET_EXPIRES_SECONDS,
-      delete: DELETE_EXPIRES_SECONDS,
-    },
+    // Report the ACTUAL (capped) seconds so debug output is honest.
+    expirySeconds: { get: getSeconds, delete: deleteSeconds },
   };
 };

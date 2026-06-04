@@ -41,6 +41,7 @@ const stsAssume = async (
     AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
     AWS_SESSION_TOKEN: stsCredentials.SessionToken,
     AWS_SECURITY_TOKEN: stsCredentials.SessionToken,
+    expiresAt: Date.parse(stsCredentials.Expiration), // epoch ms
   };
 };
 
