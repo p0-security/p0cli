@@ -11,4 +11,5 @@ You should have received a copy of the GNU General Public License along with @p0
 export type AllowResponse = {
   ok: true;
   message: string;
+  warnings?: string[];
 };

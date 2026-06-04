@@ -12,6 +12,7 @@ import { AnsiSgr } from "../drivers/ansi";
 import { fetchAdminLsCommand, fetchCommand } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { print1, print2, spinUntil } from "../drivers/stdio";
+import { ResourceListerItem } from "../types/command";
 import { getAppName } from "../util";
 import { max, orderBy, slice } from "lodash";
 import pluralize from "pluralize";
@@ -21,15 +22,11 @@ const DEFAULT_RESPONSE_SIZE = 15;
 
 type LsResponse = {
   ok: true;
-  items: {
-    key: string;
-    value: string;
-    group?: string;
-    isPreexisting?: boolean;
-  }[];
+  items: ResourceListerItem[];
   isTruncated: boolean;
   term: string;
   arg: string;
+  warnings?: string[];
 };
 
 /** Extract an argument value from list of arguments.
@@ -113,6 +110,8 @@ const ls = async (
   const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
+    data.warnings?.forEach((warning) => print2(warning));
+
     const truncated = slice(data.items, 0, args.size);
 
     if (args.json) {

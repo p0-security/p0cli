@@ -54,8 +54,9 @@ export const allow = async (
     ...args.arguments,
   ]);
 
-  if (data && "ok" in data && "message" in data && data.ok) {
-    print2(data.message);
+  if (data && "ok" in data && data.ok) {
+    data.warnings?.forEach((warning) => print2(warning));
+    if ("message" in data && data.message) print2(data.message);
     return data;
   } else {
     throw data;
