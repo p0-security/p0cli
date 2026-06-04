@@ -87,9 +87,6 @@ export const createTransferClient = (
         accessKeyId: credentials.AWS_ACCESS_KEY_ID,
         secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
         sessionToken: credentials.AWS_SESSION_TOKEN,
-        // Providing `expiration` is what tells the SDK to call this provider
-        // again when the credentials are close to expiring. awsCloudAuth is
-        // cached and re-fetches once the old credentials expire.
         ...(credentials.expiresAt !== undefined
           ? { expiration: new Date(credentials.expiresAt) }
           : {}),
@@ -123,16 +120,16 @@ export const generateTransferUrls = async (
     expiresAt !== undefined
       ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
       : Infinity;
-  const getSeconds = Math.min(GET_EXPIRES_SECONDS, remaining);
-  const deleteSeconds = Math.min(DELETE_EXPIRES_SECONDS, remaining);
+  const getExpirySeconds = Math.min(GET_EXPIRES_SECONDS, remaining);
+  const deleteExpirySeconds = Math.min(DELETE_EXPIRES_SECONDS, remaining);
 
   const objectArgs = { Bucket: target.bucket, Key: target.key };
   const [getUrl, deleteUrl] = await Promise.all([
     getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: getSeconds,
+      expiresIn: getExpirySeconds,
     }),
     getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: deleteSeconds,
+      expiresIn: deleteExpirySeconds,
     }),
   ]);
 
@@ -140,6 +137,6 @@ export const generateTransferUrls = async (
     getUrl,
     deleteUrl,
     // Report the ACTUAL (capped) seconds so debug output is honest.
-    expirySeconds: { get: getSeconds, delete: deleteSeconds },
+    expirySeconds: { get: getExpirySeconds, delete: deleteExpirySeconds },
   };
 };
