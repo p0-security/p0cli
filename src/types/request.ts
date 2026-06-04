@@ -57,5 +57,4 @@ export type RequestResponse<T> = {
   isPreexisting: boolean;
   isPersistent: boolean;
   isPreapproved: boolean;
-  warnings?: string[];
 };
