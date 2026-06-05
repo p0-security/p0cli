@@ -14,19 +14,17 @@ import { describe, expect, it } from "vitest";
 const asEnv = (env: Record<string, string>) => env as NodeJS.ProcessEnv;
 
 describe("detectShell", () => {
-  it("treats every common POSIX shell as posix", () => {
-    for (const shell of [
-      "/bin/bash",
-      "/usr/bin/bash",
-      "/usr/bin/zsh",
-      "/bin/zsh",
-      "/bin/sh",
-      "/bin/dash",
-      "/usr/bin/ksh",
-      "/usr/bin/bash", // git-bash on Windows reports this
-    ]) {
-      expect(detectShell(asEnv({ SHELL: shell }))).toBe("posix");
-    }
+  it.each([
+    "/bin/bash",
+    "/usr/bin/bash",
+    "/usr/bin/zsh",
+    "/bin/zsh",
+    "/bin/sh",
+    "/bin/dash",
+    "/usr/bin/ksh",
+    "/usr/bin/bash", // git-bash on Windows reports this
+  ])("treats %s as posix", (shell) => {
+    expect(detectShell(asEnv({ SHELL: shell }))).toBe("posix");
   });
 
   it("detects fish only on an exact basename match (no false positives)", () => {
