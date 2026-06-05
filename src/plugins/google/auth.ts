@@ -24,7 +24,13 @@ const runGcloudLogin = async ({ debug }: { debug?: boolean }) =>
     print2("Logging in to Google Cloud CLI...");
     const { command, args } = gcloudCommandArgs(["auth", "login"]);
     const child = spawnWithCleanEnv(command, args, {
-      // [stdin, stdout, stderr]: route child stdout to OUR stderr (never fd 1)
+      // stdio is [stdin, stdout, stderr]. We send the child's stdout to OUR
+      // stderr instead of inheriting fd 1: `gcloud auth login` writes its
+      // human-readable progress to stdout, but this CLI reserves fd 1 for
+      // machine-readable output (e.g. access tokens, JSON) that callers parse.
+      // Inheriting the child's stdout would interleave gcloud's chatter into
+      // that stream and corrupt it, so we redirect it to stderr — where
+      // human-facing text belongs.
       stdio: ["inherit", process.stderr, "inherit"],
     });
     child.on("error", (error) =>
