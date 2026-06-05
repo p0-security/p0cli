@@ -17,7 +17,7 @@ import { fetchSshHostKeys, submitPublicKey } from "../../drivers/api";
 import { print2 } from "../../drivers/stdio";
 import { getDelegate } from "../../types/delegation";
 import { SshProvider } from "../../types/ssh";
-import { getAppName, throwAssertNever } from "../../util";
+import { getAppName, newShellFormatter, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
@@ -126,9 +126,8 @@ export const awsSshProvider: SshProvider<
   reproCommands: (request) => {
     // TODO: Add manual commands for IDC login
     if (request.access !== "idc") {
-      return [
-        `eval $(${getAppName()} aws role assume ${request.role} --account ${request.accountId} --no-request)`,
-      ];
+      const assumeCommand = `${getAppName()} aws role assume ${request.role} --account ${request.accountId} --no-request`;
+      return [newShellFormatter().formatEvalCommand(assumeCommand)];
     }
     return undefined;
   },
