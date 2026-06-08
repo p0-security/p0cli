@@ -12,12 +12,15 @@ import { PermissionSpec } from "../../types/request";
 import { CliPermissionSpec } from "../../types/ssh";
 import { CommonSshPermissionSpec } from "../ssh/types";
 
-export type AwsCredentials = {
+export type AwsCredentialFields = {
   AWS_ACCESS_KEY_ID: string;
   AWS_SECRET_ACCESS_KEY: string;
   AWS_SESSION_TOKEN: string;
   // AWS_SECURITY_TOKEN is the legacy version of AWS_SESSION_TOKEN. It does seem to take precedence over AWS_SESSION_TOKEN. The okta-aws-cli sets both: https://github.com/okta/okta-aws-cli/blob/f1e09eab509e295a7e7b3002d14f2a96b8c60914/internal/output/envvar.go#L49L63
   AWS_SECURITY_TOKEN: string;
+};
+
+export type AwsCredentials = AwsCredentialFields & {
   expiresAt?: number;
 };
 
