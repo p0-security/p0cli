@@ -12,12 +12,12 @@ import { print1, print2 } from "../../drivers/stdio";
 import { AwsCredentials } from "../../plugins/aws/types";
 import { sys } from "typescript";
 
-const CREDENTIAL_FIELDS: (keyof AwsCredentials)[] = [
+const CREDENTIAL_FIELDS = [
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
   "AWS_SECURITY_TOKEN",
-];
+] as const satisfies readonly (keyof AwsCredentials)[];
 
 export const printAwsCredentials = (
   awsCredentials: AwsCredentials,
