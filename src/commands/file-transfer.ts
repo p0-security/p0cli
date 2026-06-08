@@ -29,6 +29,9 @@ export type FileTransferCommandArgs = {
   debug?: boolean;
 };
 
+const renderDurationSec = (s: number) =>
+  s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
     "file-transfer <source> <destination>",
@@ -148,8 +151,6 @@ const fileTransferAction = async (
         args.debug
       );
 
-      const renderDurationSec = (s: number) =>
-        s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
       // TODO: remove logging when we remove the launchdarkly file-transfer flag
       if (args.debug) {
         print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);

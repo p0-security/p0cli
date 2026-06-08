@@ -24,8 +24,9 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const GET_EXPIRES_SECONDS = 60 * 60;
-const DELETE_EXPIRES_SECONDS = 60 * 60;
+const SECONDS_TO_EXPIRE_GET_URL = 60 * 60;
+const SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
+const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
   authn: Authn,
@@ -87,6 +88,9 @@ export const createTransferClient = (
         accessKeyId: credentials.AWS_ACCESS_KEY_ID,
         secretAccessKey: credentials.AWS_SECRET_ACCESS_KEY,
         sessionToken: credentials.AWS_SESSION_TOKEN,
+        // Providing `expiration` is what tells the SDK to treat these creds as
+        // temporary. The SDK caches them and re-invokes this provider once they
+        // expire (or are within its skew window).
         ...(credentials.expiresAt !== undefined
           ? { expiration: new Date(credentials.expiresAt) }
           : {}),
@@ -113,23 +117,29 @@ export const generateTransferUrls = async (
   expirySeconds: { get: number; delete: number };
 }> => {
   const { expiresAt } = await awsCloudAuth(authn, target.awsSpec, debug);
-  // If we somehow don't know the expiry, fall back to the configured limits
-  // (Infinity makes Math.min pick the constant). Math.max(0, ...) avoids signing
-  // an already-expired URL if the credentials are right at the edge.
   const remaining =
     expiresAt !== undefined
-      ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+      ? Math.floor((expiresAt - Date.now()) / 1000)
       : Infinity;
-  const getExpirySeconds = Math.min(GET_EXPIRES_SECONDS, remaining);
-  const deleteExpirySeconds = Math.min(DELETE_EXPIRES_SECONDS, remaining);
+  if (remaining < MIN_URL_EXPIRY_THRESHOLD_SECONDS) {
+    throw new Error(
+      `AWS credentials expire in ${remaining}s — too soon to sign usable URLs. ` +
+        `Check your system clock or re-run the request.`
+    );
+  }
+  const secondsToExpireGetUrl = Math.min(SECONDS_TO_EXPIRE_GET_URL, remaining);
+  const secondsToExpireDeleteUrl = Math.min(
+    SECONDS_TO_EXPIRE_DELETE_URL,
+    remaining
+  );
 
   const objectArgs = { Bucket: target.bucket, Key: target.key };
   const [getUrl, deleteUrl] = await Promise.all([
     getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: getExpirySeconds,
+      expiresIn: secondsToExpireGetUrl,
     }),
     getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: deleteExpirySeconds,
+      expiresIn: secondsToExpireDeleteUrl,
     }),
   ]);
 
@@ -137,6 +147,9 @@ export const generateTransferUrls = async (
     getUrl,
     deleteUrl,
     // Report the ACTUAL (capped) seconds so debug output is honest.
-    expirySeconds: { get: getExpirySeconds, delete: deleteExpirySeconds },
+    expirySeconds: {
+      get: secondsToExpireGetUrl,
+      delete: secondsToExpireDeleteUrl,
+    },
   };
 };

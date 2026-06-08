@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { awsCloudAuth } from "../../aws/auth";
+import type { AwsResourcePermissionSpec } from "../../aws/types";
 import { generateTransferUrls } from "../index";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,8 +26,23 @@ describe("generateTransferUrls()", () => {
   const target = {
     bucket: "my-bucket",
     key: "uploads/user/abc/file.txt",
-    awsSpec: {} as never,
+    awsSpec: {
+      type: "aws",
+      permission: {
+        account: "test-account",
+        accountId: "123456789012",
+        arn: "arn:aws:iam::123456789012:role/test",
+        name: "test-role",
+        idcId: undefined,
+        idcRegion: undefined,
+      },
+      generated: { name: "test-role" },
+      delegation: {},
+    } satisfies AwsResourcePermissionSpec,
   };
+
+  const authn = {} as any;
+  const s3 = {} as any;
 
   // expiresIn passed to the GET and DELETE getSignedUrl calls, respectively.
   const signedExpiries = () => ({
@@ -47,9 +63,9 @@ describe("generateTransferUrls()", () => {
   it("uses the full configured window when credentials outlive it", async () => {
     vi.mocked(awsCloudAuth).mockResolvedValue({
       expiresAt: NOW + 2 * ONE_HOUR * 1000,
-    } as never);
+    } as any);
 
-    const result = await generateTransferUrls({} as never, {} as never, target);
+    const result = await generateTransferUrls(authn, s3, target);
 
     expect(signedExpiries()).toEqual({ get: ONE_HOUR, delete: ONE_HOUR });
     expect(result.expirySeconds).toEqual({ get: ONE_HOUR, delete: ONE_HOUR });
@@ -58,29 +74,39 @@ describe("generateTransferUrls()", () => {
   it("caps the window to the remaining credential lifetime", async () => {
     vi.mocked(awsCloudAuth).mockResolvedValue({
       expiresAt: NOW + 300 * 1000, // 5 minutes left
-    } as never);
+    } as any);
 
-    const result = await generateTransferUrls({} as never, {} as never, target);
+    const result = await generateTransferUrls(authn, s3, target);
 
     expect(signedExpiries()).toEqual({ get: 300, delete: 300 });
     expect(result.expirySeconds).toEqual({ get: 300, delete: 300 });
   });
 
   it("falls back to the configured window when expiry is unknown", async () => {
-    vi.mocked(awsCloudAuth).mockResolvedValue({} as never);
+    vi.mocked(awsCloudAuth).mockResolvedValue({} as any);
 
-    await generateTransferUrls({} as never, {} as never, target);
+    await generateTransferUrls(authn, s3, target);
 
     expect(signedExpiries()).toEqual({ get: ONE_HOUR, delete: ONE_HOUR });
   });
 
-  it("never signs a negative window when credentials are already expired", async () => {
+  it("throws when credentials are already expired", async () => {
     vi.mocked(awsCloudAuth).mockResolvedValue({
       expiresAt: NOW - 1000,
-    } as never);
+    } as any);
 
-    await generateTransferUrls({} as never, {} as never, target);
+    await expect(generateTransferUrls(authn, s3, target)).rejects.toThrow(
+      /too soon to sign usable URLs/
+    );
+  });
 
-    expect(signedExpiries()).toEqual({ get: 0, delete: 0 });
+  it("throws when credentials expire below the usable threshold", async () => {
+    vi.mocked(awsCloudAuth).mockResolvedValue({
+      expiresAt: NOW + 30 * 1000, // 30s left, below 60s threshold
+    } as any);
+
+    await expect(generateTransferUrls(authn, s3, target)).rejects.toThrow(
+      /too soon to sign usable URLs/
+    );
   });
 });
