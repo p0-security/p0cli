@@ -8,8 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { PermissionRequest, PluginRequest } from "./request";
-
 /** A single resource returned by the backend's resource lister (e.g. `ls`). */
 export type ResourceListerItem = {
   key: string;
@@ -17,23 +15,3 @@ export type ResourceListerItem = {
   group?: string;
   isPreexisting?: boolean;
 };
-
-/**
- * Canonical response shape for the `/command/` endpoint.
- *
- * Every successful variant may carry non-fatal `warnings` that should be
- * surfaced to the user without failing the command. The final variant is a
- * success that carries only warnings (no message, items, or request).
- */
-export type CommandResult =
-  | {
-      ok: true;
-      id: string;
-      message: string;
-      request: PermissionRequest<PluginRequest>;
-      warnings?: string[];
-    }
-  | { error: string }
-  | { ok: true; items: ResourceListerItem[]; warnings?: string[] }
-  | { ok: true; message: string; warnings?: string[] }
-  | { ok: true; warnings: string[] };

@@ -155,8 +155,6 @@ export const request =
       data: RequestResponse<T> | undefined
     ): { shouldLogMessage: boolean; data: RequestResponse<T> } => {
       if (data && "ok" in data && "message" in data && data.ok) {
-        // Surface any non-fatal warnings regardless of message-quieting options.
-        data.warnings?.forEach((warning) => print2(warning));
         const shouldLogMessage =
           !options?.message ||
           options?.message === "all" ||

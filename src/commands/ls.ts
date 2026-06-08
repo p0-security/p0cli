@@ -26,7 +26,6 @@ type LsResponse = {
   isTruncated: boolean;
   term: string;
   arg: string;
-  warnings?: string[];
 };
 
 /** Extract an argument value from list of arguments.
@@ -110,8 +109,6 @@ const ls = async (
   const data = await spinUntil("Listing accessible resources", responsePromise);
 
   if (data && "ok" in data && data.ok) {
-    data.warnings?.forEach((warning) => print2(warning));
-
     const truncated = slice(data.items, 0, args.size);
 
     if (args.json) {
