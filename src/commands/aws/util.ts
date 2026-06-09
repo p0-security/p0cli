@@ -9,11 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print1, print2 } from "../../drivers/stdio";
-import { AwsCredentials } from "../../plugins/aws/types";
+import { AwsCredentialFields, AwsCredentials } from "../../plugins/aws/types";
 import { newShellFormatter } from "../../util";
 import { sys } from "typescript";
 
-const CREDENTIAL_FIELDS: (keyof AwsCredentials)[] = [
+const CREDENTIAL_FIELDS: (keyof AwsCredentialFields)[] = [
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
