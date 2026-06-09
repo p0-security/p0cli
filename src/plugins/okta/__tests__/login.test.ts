@@ -14,10 +14,8 @@ import {
   getProviderType,
 } from "../../../types/authUtils";
 import { Identity } from "../../../types/identity";
-import { OrgData } from "../../../types/org";
 import { AwsFederatedLogin } from "../../aws/types";
-import { oidcLogin, oidcLoginSteps } from "../../oidc/login";
-import { fetchSamlAssertionForAws, oktaLogin } from "../login";
+import { fetchSamlAssertionForAws } from "../login";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../types/authUtils");
@@ -77,67 +75,5 @@ describe("fetchSsoWebToken", () => {
 
     expect(mockJson).toHaveBeenCalledOnce();
     expect(mockText).not.toHaveBeenCalled();
-  });
-});
-
-describe("oktaLogin scope handling", () => {
-  const mockOrg = { slug: "test-org" } as unknown as OrgData;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getProviderType).mockReturnValue("okta");
-    vi.mocked(getProviderDomain).mockReturnValue("example.okta.com");
-    vi.mocked(getClientId).mockReturnValue("mock-client-id");
-    // oidcLoginSteps is shape-only here; we only need a non-null return so
-    // that oidcLogin gets called. The mock for oidcLogin is the assertion target.
-    vi.mocked(oidcLoginSteps).mockReturnValue({} as any);
-  });
-
-  it("requests offline_access on the first attempt", async () => {
-    vi.mocked(oidcLogin).mockResolvedValue({
-      access_token: "at",
-      id_token: "id",
-      refresh_token: "rt",
-      expires_in: 3600,
-      expiry: "x",
-    } as any);
-
-    await oktaLogin(mockOrg);
-
-    expect(oidcLoginSteps).toHaveBeenCalledOnce();
-    const [, scope] = vi.mocked(oidcLoginSteps).mock.calls[0]!;
-    expect(scope).toContain("offline_access");
-  });
-
-  it("retries without offline_access on invalid_scope", async () => {
-    vi.mocked(oidcLogin)
-      .mockRejectedValueOnce(
-        new Error(
-          'Error in fetch request to .../device/authorize\n400\n\n{"error":"invalid_scope"}'
-        )
-      )
-      .mockResolvedValueOnce({
-        access_token: "at",
-        id_token: "id",
-        expires_in: 3600,
-        expiry: "x",
-      } as any);
-
-    await oktaLogin(mockOrg);
-
-    expect(oidcLoginSteps).toHaveBeenCalledTimes(2);
-    const firstScope = vi.mocked(oidcLoginSteps).mock.calls[0]![1];
-    const secondScope = vi.mocked(oidcLoginSteps).mock.calls[1]![1];
-    expect(firstScope).toContain("offline_access");
-    expect(secondScope).not.toContain("offline_access");
-  });
-
-  it("propagates non-invalid_scope errors without retry", async () => {
-    vi.mocked(oidcLogin).mockRejectedValue(
-      new Error("some other auth failure")
-    );
-
-    await expect(oktaLogin(mockOrg)).rejects.toThrow("some other auth failure");
-    expect(oidcLoginSteps).toHaveBeenCalledOnce();
   });
 });

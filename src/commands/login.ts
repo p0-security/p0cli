@@ -41,7 +41,7 @@ const doActualLogin = async (orgWithSlug: OrgData, debug?: boolean) => {
 
   if (!loginFn) throw "Unsupported login for your organization";
 
-  const tokenResponse = await loginFn(orgWithSlug, { debug });
+  const tokenResponse = await loginFn(orgWithSlug);
 
   await writeIdentity(orgWithSlug, tokenResponse);
 };
@@ -127,8 +127,7 @@ export const login = async (
     print2(`You are currently logged in to the ${orgSlug} organization.`);
   }
 
-  // Only show the "expires in" line for identities that lack a refresh_token.
-  if (tokenTimeRemaining > 0 && !identity?.credential.refresh_token) {
+  if (tokenTimeRemaining > 0) {
     print2(
       `The current session expires in ${formatTimeLeft(tokenTimeRemaining)}.`
     );

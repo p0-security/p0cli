@@ -8,8 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { deleteIdentity } from "../drivers/auth";
-import { getConfigFilePath } from "../drivers/auth/path";
+import {
+  getIdentityFilePath,
+  getIdentityCachePath,
+  getConfigFilePath,
+} from "../drivers/auth/path";
 import { print2 } from "../drivers/stdio";
 import fs from "fs/promises";
 import yargs from "yargs";
@@ -36,11 +39,14 @@ const safeDelete = async (
 const logout = async (debug: boolean): Promise<void> => {
   print2("Logging out...");
 
-  // Revoke identity token and delete related files
-  await deleteIdentity({ debug });
+  const identityPath = getIdentityFilePath();
+  await safeDelete(identityPath, "identity file", debug);
 
   const configPath = getConfigFilePath();
   await safeDelete(configPath, "config file", debug);
+
+  const cachePath = getIdentityCachePath();
+  await safeDelete(cachePath, "cache", debug);
 
   print2("Successfully logged out. All authentication data has been cleared.");
 };

@@ -3,7 +3,7 @@
 exports[`login > organization exists > should write the user's identity & config to the file system 1`] = `
 [
   [
-    "/dummy/identity/file/path.tmp",
+    "/dummy/identity/file/path",
     "{
   "credential": {
     "access_token": "test-access-token",
