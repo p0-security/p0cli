@@ -13,9 +13,15 @@ import { print1, print2 } from "../../drivers/stdio";
 import { awsCloudAuth } from "../../plugins/aws/auth";
 import { parseArn } from "../../plugins/aws/utils";
 import { DbPermissionSpec } from "../../plugins/db/types";
+import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
-import { exec, osSafeCommand, throwAssertNever } from "../../util";
+import {
+  exec,
+  newShellFormatter,
+  osSafeCommand,
+  throwAssertNever,
+} from "../../util";
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./files";
@@ -152,7 +158,8 @@ const fetchConfig = async (
 const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
   const access = await requestRdsAccess(argv, authn);
 
-  const awsDelegation = access.delegation?.["aws-rds"].delegation?.aws;
+  const awsRdsDelegate = getDelegate(access.delegation, "aws-rds");
+  const awsDelegation = getDelegate(awsRdsDelegate?.delegation, "aws");
   if (!awsDelegation) {
     throw `P0 granted access, but ${access.permission.instanceId} is not a RDS instance.`;
   }
@@ -169,7 +176,7 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const database = argv.database ?? dbConfig.defaultDb;
 
-  const dbResource = access.delegation["aws-rds"].delegation.aws.permission.arn;
+  const dbResource = awsDelegation.permission.arn;
 
   const { region } = parseArn(dbResource);
   const profileName = `p0_${access.permission.instanceId}`;
@@ -204,13 +211,18 @@ const rdsGenerateDbAuthToken = async (argv: RdsArgs, authn: Authn) => {
 
   const result = await exec(command, args, { check: true });
 
-  const pgInstructions = `export PGPASSWORD="${result.stdout.trim()}"
-  
-  psql "host=$\{RDS_HOST} port=${port} sslmode=verify-full sslrootcert=$\{RDS_SSL_CA} ${database ? `dbname=${database} ` : ""}user=${userName}"`;
+  const formatter = newShellFormatter();
+  const password = result.stdout.trim();
+  const rdsHostRef = formatter.formatEnvReference("RDS_HOST");
+  const rdsCaRef = formatter.formatEnvReference("RDS_SSL_CA");
 
-  const mysqlInstructions = `export MYSQL_PWD="${result.stdout.trim()}"
-  
-  mysql -h $\{RDS_HOST} --ssl-ca=$\{RDS_SSL_CA} --ssl-verify-server-cert -P ${port} -u ${userName} ${database}`;
+  const pgInstructions = `${formatter.formatEnvAssignment("PGPASSWORD", password, { quote: true })}
+
+  psql "host=${rdsHostRef} port=${port} sslmode=verify-full sslrootcert=${rdsCaRef} ${database ? `dbname=${database} ` : ""}user=${userName}"`;
+
+  const mysqlInstructions = `${formatter.formatEnvAssignment("MYSQL_PWD", password, { quote: true })}
+
+  mysql -h ${rdsHostRef} --ssl-ca=${rdsCaRef} --ssl-verify-server-cert -P ${port} -u ${userName} ${database}`;
 
   print2(result.stderr);
   print2(`Access your database by exporting the result of this command and executing psql in an environment with network access to the instance.
@@ -221,8 +233,8 @@ If you are executing from CloudShell this will be done for you already, and the 
 
 On CloudShell, you can execute:
 
-  export RDS_SSL_CA='/certs/global-bundle.pem'
-  export RDS_HOST='${dbConfig.hostname}'
+  ${formatter.formatEnvAssignment("RDS_SSL_CA", "/certs/global-bundle.pem", { quote: true })}
+  ${formatter.formatEnvAssignment("RDS_HOST", dbConfig.hostname, { quote: true })}
   ${argv.arch === "mysql" ? mysqlInstructions : argv.arch === "postgres" ? pgInstructions : throwAssertNever(argv.arch)}
 
 `);
