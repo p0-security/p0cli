@@ -10,7 +10,6 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { login } from "../../commands/login";
 import { setExporterAfterLogin } from "../../opentelemetry/instrumentation";
-import { getProviderType } from "../../types/authUtils";
 import { Authn, Identity } from "../../types/identity";
 import { TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
@@ -19,9 +18,7 @@ import { tracesUrl } from "../api";
 import { authenticateToFirebase } from "../firestore";
 import { print2 } from "../stdio";
 import { getExpiredCredentialsMessage } from "../util";
-import { withIdentityLock } from "./lock";
 import { getIdentityCachePath, getIdentityFilePath } from "./path";
-import { refreshOktaTokens, revokeOktaRefreshToken } from "./refresh";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -136,37 +133,6 @@ const loadCredentialsWithAutoLogin = async (options?: {
     return identity;
   }
 
-  // If token is expired, and provider is okta, try the silent refresh-token
-  // grant first, and only fall through to the interactive device flow if that
-  // path is unavailable or fails.
-  if (
-    identity.credential.refresh_token &&
-    getProviderType(identity.org) === "okta"
-  ) {
-    try {
-      return await withIdentityLock(async () => {
-        // Double-checked under the lock: a peer process may have refreshed
-        // identity.json while we were waiting to acquire it.
-        const current = await loadCredentials();
-        if (remainingTokenTime(current) > MIN_REMAINING_TOKEN_TIME_SECONDS) {
-          return current;
-        }
-        const refreshed = await refreshOktaTokens(current, {
-          debug: options?.debug,
-        });
-        await writeIdentity(current.org, refreshed);
-        return await loadCredentials();
-      });
-    } catch (e: any) {
-      if (options?.debug) {
-        const detail = e?.reason ?? e?.code ?? e?.message ?? String(e);
-        print2(
-          `Okta refresh-token grant failed (${detail}); falling back to device flow.`
-        );
-      }
-    }
-  }
-
   if (options?.noRefresh) {
     throw getExpiredCredentialsMessage();
   }
@@ -191,29 +157,14 @@ export const writeIdentity = async (
   print2(`Saving authorization to ${identityFilePath}.`);
   const dir = path.dirname(identityFilePath);
   await fs.mkdir(dir, { recursive: true });
-  // Write to a sibling tmp file then rename, so a crash mid-write can't leave
-  // identity.json truncated. Same-directory rename keeps the operation atomic.
-  const tmpPath = `${identityFilePath}.tmp`;
   await fs.writeFile(
-    tmpPath,
+    identityFilePath,
     JSON.stringify({ credential: { ...credential, expires_at }, org }, null, 2),
     { mode: "600" }
   );
-  await fs.rename(tmpPath, identityFilePath);
 };
 
-export const deleteIdentity = async (options?: { debug?: boolean }) => {
-  // Best-effort: revoke the refresh_token at the IDP before destroying our
-  // local copy.
-
-  const identity = await loadCredentials();
-  if (
-    identity.credential.refresh_token &&
-    getProviderType(identity.org) === "okta"
-  ) {
-    await revokeOktaRefreshToken(identity, { debug: options?.debug });
-  }
-
+export const deleteIdentity = async () => {
   await clearIdentityCache();
   await clearIdentityFile();
 };

@@ -32,18 +32,18 @@ export type LoginPluginType = (typeof loginPlugins)[number];
 
 export const pluginLoginMap: Record<
   string,
-  (org: OrgData, options?: { debug?: boolean }) => Promise<TokenResponse>
+  (org: OrgData) => Promise<TokenResponse>
 > = {
   google: googleLogin,
   okta: oktaLogin,
   ping: pingLogin,
   "google-oidc": googleLogin,
-  "oidc-pkce": async (org, options) => {
+  "oidc-pkce": async (org) => {
     const providerType = getProviderType(org);
     if (!providerType) {
       throw "Missing provider type for OIDC PKCE login";
     }
-    return await pluginLoginMap[providerType]!(org, options);
+    return await pluginLoginMap[providerType]!(org);
   },
   password: emailPasswordLogin,
   "azure-oidc": azureLogin,
