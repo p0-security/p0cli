@@ -203,10 +203,13 @@ async function spawnSshNode(
       );
     }
 
+    // `expiresAt` is metadata, not an env var, so exclude it from the child env.
+    const { expiresAt: _expiresAt, ...credentialEnv } =
+      options.credential ?? {};
     const child = spawn(options.command, options.args, {
       env: {
         ...createCleanChildEnv(),
-        ...options.credential,
+        ...credentialEnv,
       },
       stdio: options.stdio,
       shell: false,
@@ -696,7 +699,7 @@ export const sshProxy = async (args: {
   const { authn, sshProvider, request, requestId, debug } = args;
 
   const credential: AwsCredentials | undefined =
-    await sshProvider.cloudProviderLogin(authn, request);
+    await sshProvider.cloudProviderLogin(authn, request, debug);
 
   const abortController = new AbortController();
 

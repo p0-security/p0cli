@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { asyncSpawn } from "../../common/subprocess";
 import { print2 } from "../../drivers/stdio";
+import { ensureGcloudLogin } from "./auth";
 import { ImportSshPublicKeyResponse } from "./types";
 import { gcloudCommandArgs } from "./util";
 
@@ -30,14 +31,12 @@ export const importSshKey = async (
 ) => {
   const debug = options?.debug ?? false;
 
-  // Force debug=false otherwise it prints the access token
-  const { command: accessTokenCommand, args: accessTokenArgs } =
-    gcloudCommandArgs(["auth", "print-access-token"]);
-  const accessToken = await asyncSpawn(
-    { debug: false },
-    accessTokenCommand,
-    accessTokenArgs
-  );
+  // Ensure the user is logged in to the Google Cloud CLI and return a valid
+  // access token. This is the earliest point a gcloud token is required in the
+  // direct `p0 ssh` and `ssh-resolve` flows (before the cloudProviderLogin hook
+  // runs), so the login must happen here. `gcloud auth login` runs only when
+  // the existing token is invalid.
+  const accessToken = await ensureGcloudLogin({ debug });
 
   const { command: accountCommand, args: accountArgs } = gcloudCommandArgs([
     "config",

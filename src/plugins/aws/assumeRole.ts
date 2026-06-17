@@ -36,11 +36,18 @@ const stsAssume = async (
   const stsObject = parseXml(stsXml);
   const stsCredentials =
     stsObject.AssumeRoleWithSAMLResponse.AssumeRoleWithSAMLResult.Credentials;
+  // Date.parse returns NaN for a missing/malformed Expiration. Normalize that to
+  // undefined so downstream consumers treat it as "expiry unknown"
+  const parsedExpiration = Date.parse(stsCredentials.Expiration);
+  const expiresAt = Number.isNaN(parsedExpiration)
+    ? undefined
+    : parsedExpiration;
   return {
     AWS_ACCESS_KEY_ID: stsCredentials.AccessKeyId,
     AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
     AWS_SESSION_TOKEN: stsCredentials.SessionToken,
     AWS_SECURITY_TOKEN: stsCredentials.SessionToken,
+    expiresAt, // epoch ms, or undefined if AWS gave us an unparseable Expiration
   };
 };
 

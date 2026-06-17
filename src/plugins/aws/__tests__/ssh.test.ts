@@ -15,8 +15,16 @@ import {
   AwsSshGenerated,
   AwsSshPermission,
   AwsSshPermissionSpec,
+  AwsSshRequest,
 } from "../types";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Keep the printed app name deterministic; spread the original so the real
+// detectShell/newShellFormatter (which read process.env.SHELL) are used.
+vi.mock("../../../util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../util")>()),
+  getAppName: () => "p0",
+}));
 
 type SshRequest = CliPermissionSpec<AwsSshPermissionSpec, undefined>;
 
@@ -183,5 +191,54 @@ describe("awsSshProvider.requestToSsh", () => {
         "Backend did not provide an AWS account ID for SSH session."
       );
     });
+  });
+});
+
+describe("awsSshProvider.reproCommands", () => {
+  const ROLE_REQUEST: AwsSshRequest = {
+    type: "aws",
+    access: "role",
+    role: "Role1",
+    accountId: "123456789012",
+    region: "us-east-1",
+    id: "i-abc123",
+    linuxUserName: "ec2-user",
+    hostKeys: [],
+  };
+
+  const IDC_REQUEST: AwsSshRequest = {
+    type: "aws",
+    access: "idc",
+    permissionSet: "permset",
+    idc: { id: "idc-1", region: "us-east-1" },
+    accountId: "123456789012",
+    region: "us-east-1",
+    id: "i-abc123",
+    linuxUserName: "ec2-user",
+    hostKeys: [],
+  };
+
+  const originalShell = process.env.SHELL;
+  afterEach(() => {
+    process.env.SHELL = originalShell;
+  });
+
+  it("emits an eval-wrapped command substitution for a role request under bash", () => {
+    process.env.SHELL = "/bin/bash";
+    expect(awsSshProvider.reproCommands(ROLE_REQUEST)).toEqual([
+      'eval "$(p0 aws role assume Role1 --account 123456789012 --no-request)"',
+    ]);
+  });
+
+  it("emits fish-compatible piping for a role request when the login shell is fish", () => {
+    process.env.SHELL = "/usr/bin/fish";
+    expect(awsSshProvider.reproCommands(ROLE_REQUEST)).toEqual([
+      "p0 aws role assume Role1 --account 123456789012 --no-request | source",
+    ]);
+  });
+
+  it("returns undefined for IDC requests regardless of shell", () => {
+    process.env.SHELL = "/usr/bin/fish";
+    expect(awsSshProvider.reproCommands(IDC_REQUEST)).toBeUndefined();
   });
 });

@@ -23,6 +23,7 @@ vi.mock("../../../common/xml", () => ({
           AccessKeyId: "AKIAEXAMPLE",
           SecretAccessKey: "secret",
           SessionToken: "session",
+          Expiration: "2030-01-01T00:00:00Z",
         },
       },
     },
@@ -70,6 +71,12 @@ describe("assumeRoleWithSaml()", () => {
       "arn:aws:iam::123456789012:saml-provider/okta"
     );
     expect(params.SAMLAssertion).toBe("base64-saml");
+  });
+
+  it("converts the STS Expiration ISO string to epoch ms", async () => {
+    const credentials = await assumeRoleWithSaml(baseArgs);
+
+    expect(credentials.expiresAt).toBe(Date.parse("2030-01-01T00:00:00Z"));
   });
 
   it("targets GovCloud STS and emits aws-us-gov ARNs", async () => {

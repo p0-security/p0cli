@@ -13,6 +13,7 @@ import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import {
+  createTransferClient,
   generateTransferUrls,
   provisionTransferRequest,
   signGetUrl,
@@ -30,6 +31,9 @@ export type FileTransferCommandArgs = {
   reason?: string;
   debug?: boolean;
 };
+
+const renderDurationSec = (s: number) =>
+  s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
 
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
@@ -91,14 +95,15 @@ const fileTransferAction = async (
       const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
-      const { s3, deleteUrl, expirySeconds } = await generateTransferUrls(
+      const s3 = createTransferClient(authn, target, args.debug);
+      // TODO probably can move generating delete URL later and rename this method to be clear it only makes delete url now
+      const { deleteUrl, expirySeconds } = await generateTransferUrls(
         authn,
+        s3,
         { ...target, key: uploadKey },
         args.debug
       );
 
-      const renderDurationSec = (s: number) =>
-        s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
       // TODO: remove logging when we remove the launchdarkly file-transfer flag
       if (args.debug) {
         print2(
@@ -175,8 +180,10 @@ const fileTransferAction = async (
       // Re-sign GET URL now so the 5-min TTL starts after approval clears,
       // not before — otherwise long approval waits could expire the URL.
       const { url: freshGetUrl, expirySeconds: getExpiry } = await signGetUrl(
+        authn,
         s3,
-        { bucket: target.bucket, key: uploadKey }
+        { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
+        args.debug
       );
       if (args.debug) {
         print2(`GET    (${renderDurationSec(getExpiry)}): ${freshGetUrl}`);
