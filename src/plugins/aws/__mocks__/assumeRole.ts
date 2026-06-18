@@ -15,4 +15,5 @@ export const assumeRoleWithSaml = async (): Promise<AwsCredentials> => ({
   AWS_SECRET_ACCESS_KEY: "test-secret-access-key",
   AWS_SESSION_TOKEN: "test-session-token",
   AWS_SECURITY_TOKEN: "test-session-token",
+  expiresAt: 1893456000000, // 2030-01-01T00:00:00Z
 });

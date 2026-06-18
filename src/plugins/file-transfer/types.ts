@@ -8,21 +8,30 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-export const AWS_API_VERSION = "2011-06-15";
+import { PermissionSpec } from "../../types/request";
+import { AwsResourcePermissionSpec } from "../aws/types";
 
-export const arnPrefix = (account: string, partition: string = "aws") =>
-  `arn:${partition}:iam::${account}`;
+export type FileTransferPermission = {
+  resource: {
+    accountId: string;
+    instanceId: string;
+    instanceName: string;
+    arn: string;
+    region: string;
+    bucketName: string;
+    bucketRegion: string;
+    objectPrefix: string;
+  };
+  destination: string;
+  type: "resource";
+};
 
-/** Returns a regional STS endpoint for the given AWS partition.
- *
- * Regional endpoints issue v2 tokens valid in all regions of the partition.
- * Falls back to commercial us-east-1 for unknown partitions. */
-export const stsEndpoint = (partition: string): string => {
-  switch (partition) {
-    case "aws-us-gov":
-      return "https://sts.us-gov-east-1.amazonaws.com";
-    case "aws":
-    default:
-      return "https://sts.us-east-1.amazonaws.com";
-  }
+export type FileTransferPermissionSpec = PermissionSpec<
+  "file-transfer",
+  FileTransferPermission,
+  Record<string, never>
+> & {
+  delegation: {
+    aws?: AwsResourcePermissionSpec;
+  };
 };

@@ -11,6 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { isSudoCommand } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
+import { ensureGcloudLogin } from "./auth";
 import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
@@ -57,8 +58,10 @@ export const gcpSshProvider: SshProvider<
   { linuxUserName: string },
   GcpSshRequest
 > = {
-  // TODO support login with Google Cloud
-  cloudProviderLogin: async () => undefined,
+  cloudProviderLogin: async (_authn, _request, debug) => {
+    await ensureGcloudLogin({ debug });
+    return undefined;
+  },
 
   ensureInstall: async () => {
     if (!(await ensureGcpSshInstall())) {

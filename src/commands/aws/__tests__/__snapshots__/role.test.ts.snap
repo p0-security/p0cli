@@ -8,9 +8,9 @@ exports[`aws role > a single installed account > with Okta SAML > assume > shoul
   ],
   [
     "
-Or, populate these environment variables using BASH command substitution:
-  
-  $(p0 aws role assume Role1) ",
+Or, populate these environment variables by evaluating the output of this command:
+
+  eval "$(p0 aws role assume Role1)" ",
   ],
 ]
 `;
@@ -28,6 +28,38 @@ exports[`aws role > a single installed account > with Okta SAML > assume > shoul
   ],
   [
     "  export AWS_SECURITY_TOKEN=session-token",
+  ],
+]
+`;
+
+exports[`aws role > a single installed account > with Okta SAML > assume > should print fish-compatible syntax when the login shell is fish > stderr 1`] = `
+[
+  [
+    "Execute the following commands:
+",
+  ],
+  [
+    "
+Or, populate these environment variables by evaluating the output of this command:
+
+  p0 aws role assume Role1 | source ",
+  ],
+]
+`;
+
+exports[`aws role > a single installed account > with Okta SAML > assume > should print fish-compatible syntax when the login shell is fish > stdout 1`] = `
+[
+  [
+    "  set -gx AWS_ACCESS_KEY_ID test-access-key",
+  ],
+  [
+    "  set -gx AWS_SECRET_ACCESS_KEY secret-access-key",
+  ],
+  [
+    "  set -gx AWS_SESSION_TOKEN session-token",
+  ],
+  [
+    "  set -gx AWS_SECURITY_TOKEN session-token",
   ],
 ]
 `;

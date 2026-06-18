@@ -8,16 +8,17 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { DelegationField } from "../../types/delegation";
 import { AwsResourcePermissionSpec } from "../aws/types";
 
+type AwsRdsDelegate = {
+  delegation: DelegationField<{ aws: AwsResourcePermissionSpec }>;
+  permission: { vpcId: string };
+};
+
 export type DbPermissionSpec = {
-  delegation: {
-    "aws-rds": {
-      delegation: { aws: AwsResourcePermissionSpec };
-      permission: { vpcId: string };
-    };
-  };
+  delegation: DelegationField<{ "aws-rds": AwsRdsDelegate }>;
   generated: object;
   permission: { instanceId: string };
-  type: "mysql" | "pg2";
+  type: "mysql" | "postgres";
 };

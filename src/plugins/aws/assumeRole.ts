@@ -10,14 +10,15 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { validateResponse } from "../../common/fetch";
 import { parseXml } from "../../common/xml";
-import { arnPrefix } from "./api";
+import { arnPrefix, stsEndpoint } from "./api";
 import { AWS_API_VERSION } from "./api";
 import { AwsCredentials } from "./types";
 
-const roleArn = (args: { account: string; role: string }) =>
-  `${arnPrefix(args.account)}:role/${args.role}`;
+const roleArn = (args: { account: string; partition: string; role: string }) =>
+  `${arnPrefix(args.account, args.partition)}:role/${args.role}`;
 
 const stsAssume = async (
+  partition: string,
   params: Record<string, string>
 ): Promise<AwsCredentials> => {
   // Regional endpoints issue version-2 tokens, which are valid in all AWS regions.
@@ -25,7 +26,7 @@ const stsAssume = async (
   // Use the us-east-1 as it should be closer to most users.
   // Calling the global endpoints issues version-1 tokens, which are only valid in default regions.
   // See https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
-  const url = `https://sts.us-east-1.amazonaws.com`;
+  const url = stsEndpoint(partition);
   const response = await fetch(url, {
     method: "POST",
     body: new URLSearchParams(params),
@@ -35,11 +36,18 @@ const stsAssume = async (
   const stsObject = parseXml(stsXml);
   const stsCredentials =
     stsObject.AssumeRoleWithSAMLResponse.AssumeRoleWithSAMLResult.Credentials;
+  // Date.parse returns NaN for a missing/malformed Expiration. Normalize that to
+  // undefined so downstream consumers treat it as "expiry unknown"
+  const parsedExpiration = Date.parse(stsCredentials.Expiration);
+  const expiresAt = Number.isNaN(parsedExpiration)
+    ? undefined
+    : parsedExpiration;
   return {
     AWS_ACCESS_KEY_ID: stsCredentials.AccessKeyId,
     AWS_SECRET_ACCESS_KEY: stsCredentials.SecretAccessKey,
     AWS_SESSION_TOKEN: stsCredentials.SessionToken,
     AWS_SECURITY_TOKEN: stsCredentials.SessionToken,
+    expiresAt, // epoch ms, or undefined if AWS gave us an unparseable Expiration
   };
 };
 
@@ -47,6 +55,8 @@ const stsAssume = async (
 export const assumeRoleWithSaml = async (args: {
   /** An AWS account identifier */
   account: string;
+  /** AWS partition for the role (e.g. "aws", "aws-us-gov", "aws-cn"). Defaults to "aws". */
+  partition?: string;
   /** The account-specific role name requested */
   role: string;
   saml: {
@@ -56,15 +66,16 @@ export const assumeRoleWithSaml = async (args: {
     response: string;
   };
 }): Promise<AwsCredentials> => {
+  const partition = args.partition ?? "aws";
   const params = {
     Version: AWS_API_VERSION,
     Action: "AssumeRoleWithSAML",
-    RoleArn: roleArn(args),
-    PrincipalArn: `${arnPrefix(args.account)}:saml-provider/${
+    RoleArn: roleArn({ ...args, partition }),
+    PrincipalArn: `${arnPrefix(args.account, partition)}:saml-provider/${
       args.saml.providerName
     }`,
     // Note that, despite the name, AWS actually expects a SAML Response
     SAMLAssertion: args.saml.response,
   };
-  return await stsAssume(params);
+  return await stsAssume(partition, params);
 };

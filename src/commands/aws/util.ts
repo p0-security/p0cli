@@ -9,10 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print1, print2 } from "../../drivers/stdio";
-import { AwsCredentials } from "../../plugins/aws/types";
+import { AwsCredentialFields, AwsCredentials } from "../../plugins/aws/types";
+import { newShellFormatter } from "../../util";
 import { sys } from "typescript";
 
-const CREDENTIAL_FIELDS: (keyof AwsCredentials)[] = [
+const CREDENTIAL_FIELDS: (keyof AwsCredentialFields)[] = [
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "AWS_SESSION_TOKEN",
@@ -25,20 +26,21 @@ export const printAwsCredentials = (
 ) => {
   const isTty = sys.writeOutputIsTTY?.();
   const indent = isTty ? "  " : "";
+  const formatter = newShellFormatter();
 
   if (isTty) print2("Execute the following commands:\n");
 
   for (const key of CREDENTIAL_FIELDS) {
     const value = awsCredentials[key];
     if (value) {
-      print1(`${indent}export ${key}=${value}`);
+      print1(`${indent}${formatter.formatEnvAssignment(key, value)}`);
     }
   }
 
   if (isTty) {
     print2(`
-Or, populate these environment variables using BASH command substitution:
-  
-  $(${command}) `);
+Or, populate these environment variables by evaluating the output of this command:
+
+  ${formatter.formatEvalCommand(command)} `);
   }
 };

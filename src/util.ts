@@ -220,6 +220,80 @@ export const getOperatingSystem = (): OperatingSystem => {
   }
 };
 
+export type ShellKind = "fish" | "posix";
+
+export const detectShell = (
+  env: NodeJS.ProcessEnv = process.env
+): ShellKind => {
+  const shellName = path.basename(env.SHELL ?? "").toLowerCase();
+  return shellName === "fish" ? "fish" : "posix";
+};
+
+export type EnvAssignmentOptions = {
+  /**
+   * Wrap the value in double quotes so that whitespace does not cause
+   * word-splitting or globbing (e.g. DB passwords that contain spaces).
+   *
+   * Note: double quotes do NOT escape an embedded `"`, `$`, `` ` ``, or `\`
+   * in POSIX or fish — `$VAR`/`` `cmd` `` still expand. This is intended for
+   * displaying copy-paste instructions for typical generated credentials, not
+   * for safely quoting arbitrary untrusted values.
+   */
+  quote?: boolean;
+};
+
+/**
+ * Formats shell snippets (environment-variable assignments and references,
+ * command evaluation) in the syntax of a particular shell family.
+ *
+ * Use {@link newShellFormatter} to obtain the formatter for the user's detected
+ * shell, e.g. `newShellFormatter().formatEnvAssignment("KEY", "value")`.
+ */
+export type ShellFormatter = {
+  readonly shell: ShellKind;
+
+  formatEnvAssignment: (
+    key: string,
+    value: string,
+    options?: EnvAssignmentOptions
+  ) => string;
+
+  formatEnvReference: (key: string) => string;
+
+  formatEvalCommand: (command: string) => string;
+};
+
+const posixShellFormatter: ShellFormatter = {
+  shell: "posix",
+  formatEnvAssignment: (key, value, options) =>
+    `export ${key}=${options?.quote ? `"${value}"` : value}`,
+  formatEnvReference: (key) => `\${${key}}`,
+  // Use `eval "$(...)"` rather than a bare `$(...)`: the command emits one
+  // `export ...` line per credential, and an unquoted command substitution
+  // collapses those newlines via word-splitting into a single
+  // `export A=v1 export B=v2 ...` line — which exports a stray variable named
+  // `export` and is brittle. Quoting inside `eval` preserves the newlines so
+  // each line runs as its own command, matching fish's `| source` behavior.
+  formatEvalCommand: (command) => `eval "$(${command})"`,
+};
+
+const fishShellFormatter: ShellFormatter = {
+  shell: "fish",
+  formatEnvAssignment: (key, value, options) =>
+    `set -gx ${key} ${options?.quote ? `"${value}"` : value}`,
+  formatEnvReference: (key) => `$${key}`,
+  formatEvalCommand: (command) => `${command} | source`,
+};
+
+const SHELL_FORMATTERS: Record<ShellKind, ShellFormatter> = {
+  fish: fishShellFormatter,
+  posix: posixShellFormatter,
+};
+
+export const newShellFormatter = (
+  shell: ShellKind = detectShell()
+): ShellFormatter => SHELL_FORMATTERS[shell];
+
 /**
  * Wraps a command with the operating-system specific method
  * executing it.
