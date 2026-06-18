@@ -14,9 +14,8 @@ import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import {
   createTransferClient,
-  generateTransferUrls,
+  generateSignedUrl,
   provisionTransferRequest,
-  signGetUrl,
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
 import { prepareRequest } from "./shared/ssh";
@@ -97,17 +96,19 @@ const fileTransferAction = async (
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
       // TODO probably can move generating delete URL later and rename this method to be clear it only makes delete url now
-      const { deleteUrl, expirySeconds } = await generateTransferUrls(
-        authn,
-        s3,
-        { ...target, key: uploadKey },
-        args.debug
-      );
+      const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
+        await generateSignedUrl(
+          authn,
+          s3,
+          { ...target, key: uploadKey },
+          "delete",
+          args.debug
+        );
 
-      // TODO: remove logging when we remove the launchdarkly file-transfer flag
+      // TODO: remove logging actual credential but log expiry when we remove the launchdarkly file-transfer flag
       if (args.debug) {
         print2(
-          `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
+          `DELETE (${renderDurationSec(deleteExpirySeconds)}): ${deleteUrl}`
         );
       }
 
@@ -179,14 +180,16 @@ const fileTransferAction = async (
 
       // Re-sign GET URL now so the 5-min TTL starts after approval clears,
       // not before — otherwise long approval waits could expire the URL.
-      const { url: freshGetUrl, expirySeconds: getExpiry } = await signGetUrl(
-        authn,
-        s3,
-        { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
-        args.debug
-      );
+      const { signedUrl: getUrl, expirySeconds: getExpirySeconds } =
+        await generateSignedUrl(
+          authn,
+          s3,
+          { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
+          "get",
+          args.debug
+        );
       if (args.debug) {
-        print2(`GET    (${renderDurationSec(getExpiry)}): ${freshGetUrl}`);
+        print2(`GET    (${renderDurationSec(getExpirySeconds)}): ${getUrl}`);
       }
 
       const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
@@ -200,7 +203,7 @@ const fileTransferAction = async (
       const downloadCmdArgs = {
         ...sshCmdArgs,
         command: "curl",
-        arguments: ["-sSfL", freshGetUrl, "-o", remotePath],
+        arguments: ["-sSfL", getUrl, "-o", remotePath],
       };
 
       const exitCode = await sshOrScp({

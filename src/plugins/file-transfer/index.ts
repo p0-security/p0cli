@@ -25,8 +25,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const SECONDS_TO_EXPIRE_GET_URL = 60 * 60;
-const SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
+const MAX_SECONDS_TO_EXPIRE_URL = 60 * 60;
 const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
@@ -100,67 +99,23 @@ export const createTransferClient = (
   });
 
 /**
- * Signs the GET (download) and DELETE (cleanup) URLs. Call this AFTER the upload
+ * Signs the GET (download) or DELETE (cleanup) URL. Call this AFTER the upload
  * completes: the GET window is finite, and signing before a large upload would
  * burn that window while the file is still uploading.
  *
  * Each expiry is capped to the credentials' remaining lifetime so a URL can
  * never outlive the credentials that signed it.
  */
-export const generateTransferUrls = async (
+export const generateSignedUrl = async (
   authn: Authn,
   s3: S3Client,
   target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
+  command: "delete" | "get",
   debug?: boolean
 ): Promise<{
-  deleteUrl: string;
-  expirySeconds: { delete: number };
+  signedUrl: string;
+  expirySeconds: number;
 }> => {
-  const secondsToExpireDeleteUrl = Math.min(
-    SECONDS_TO_EXPIRE_DELETE_URL,
-    await calculateRemainingTimeToExpiry(authn, target, debug)
-  );
-
-  const deleteUrl = await getSignedUrl(
-    s3,
-    new DeleteObjectCommand({ Bucket: target.bucket, Key: target.key }),
-    { expiresIn: secondsToExpireDeleteUrl }
-  );
-
-  return {
-    deleteUrl,
-    // Report the ACTUAL (capped) seconds so debug output is honest.
-    expirySeconds: {
-      delete: secondsToExpireDeleteUrl,
-    },
-  };
-};
-
-// GET URL is signed late (after SSH approval clears) so the 5-min TTL covers
-// the actual download window instead of expiring during approval wait.
-export const signGetUrl = async (
-  authn: Authn,
-  s3: S3Client,
-  target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
-  debug?: boolean
-): Promise<{ url: string; expirySeconds: number }> => {
-  const secondsToExpireGetUrl = Math.min(
-    SECONDS_TO_EXPIRE_GET_URL,
-    await calculateRemainingTimeToExpiry(authn, target, debug)
-  );
-  const url = await getSignedUrl(
-    s3,
-    new GetObjectCommand({ Bucket: target.bucket, Key: target.key }),
-    { expiresIn: secondsToExpireGetUrl }
-  );
-  return { url, expirySeconds: secondsToExpireGetUrl };
-};
-
-const calculateRemainingTimeToExpiry = async (
-  authn: Authn,
-  target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
-  debug?: boolean
-): Promise<number> => {
   const { expiresAt } = await awsCloudAuth(authn, target.awsSpec, debug);
   const remaining =
     expiresAt !== undefined
@@ -172,5 +127,19 @@ const calculateRemainingTimeToExpiry = async (
         `Check your system clock or re-run the request.`
     );
   }
-  return remaining;
+  const secondsToExpireUrl = Math.min(MAX_SECONDS_TO_EXPIRE_URL, remaining);
+
+  const s3Command =
+    command === "get"
+      ? new GetObjectCommand({ Bucket: target.bucket, Key: target.key })
+      : new DeleteObjectCommand({ Bucket: target.bucket, Key: target.key });
+  const signedUrl = await getSignedUrl(s3, s3Command, {
+    expiresIn: secondsToExpireUrl,
+  });
+
+  return {
+    signedUrl,
+    // Report the ACTUAL (capped) seconds so debug output is honest.
+    expirySeconds: secondsToExpireUrl,
+  };
 };
