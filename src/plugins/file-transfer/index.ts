@@ -25,7 +25,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const MAX_SECONDS_TO_EXPIRE_URL = 60 * 60;
+const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
+const MAX_SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
 const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
@@ -127,7 +128,11 @@ export const generateSignedUrl = async (
         `Check your system clock or re-run the request.`
     );
   }
-  const secondsToExpireUrl = Math.min(MAX_SECONDS_TO_EXPIRE_URL, remaining);
+  const maxExpiry =
+    command === "get"
+      ? MAX_SECONDS_TO_EXPIRE_GET_URL
+      : MAX_SECONDS_TO_EXPIRE_DELETE_URL;
+  const secondsToExpireUrl = Math.min(maxExpiry, remaining);
 
   const s3Command =
     command === "get"

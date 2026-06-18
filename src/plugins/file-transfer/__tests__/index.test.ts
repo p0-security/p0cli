@@ -24,6 +24,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
   GetObjectCommand: vi.fn(),
 }));
 
+const FIVE_MINUTES = 5 * 60;
 const ONE_HOUR = 60 * 60;
 const NOW = Date.parse("2030-01-01T00:00:00Z");
 const defaultCredentials = {
@@ -81,8 +82,8 @@ describe("generateTransferUrl()", () => {
 
     const result = await generateSignedUrl(authn, s3, target, "get");
 
-    expect(signedExpiries()).toBe(ONE_HOUR);
-    expect(result.expirySeconds).toBe(ONE_HOUR);
+    expect(signedExpiries()).toBe(FIVE_MINUTES);
+    expect(result.expirySeconds).toBe(FIVE_MINUTES);
   });
 
   it("caps the window to the remaining credential lifetime", async () => {
@@ -102,7 +103,7 @@ describe("generateTransferUrl()", () => {
 
     await generateSignedUrl(authn, s3, target, "get");
 
-    expect(signedExpiries()).toBe(ONE_HOUR);
+    expect(signedExpiries()).toBe(FIVE_MINUTES);
   });
 
   it("throws when credentials are already expired", async () => {
@@ -127,16 +128,18 @@ describe("generateTransferUrl()", () => {
     );
   });
 
-  it("correctly generates get signed URL when get command passed in", async () => {
+  it("correctly generates get signed URL and max get expiry time when get command passed in", async () => {
     const result = await generateSignedUrl(authn, s3, target, "get");
     expect(result.signedUrl).toBe("https://signed.example/url");
+    expect(result.expirySeconds).toBe(FIVE_MINUTES);
     expect(GetObjectCommand).toHaveBeenCalledOnce();
     expect(DeleteObjectCommand).not.toHaveBeenCalled();
   });
 
-  it("correctly generates delete signed URL when delete command passed in", async () => {
+  it("correctly generates delete signed URL and max delete expiry time when delete command passed in", async () => {
     const result = await generateSignedUrl(authn, s3, target, "delete");
     expect(result.signedUrl).toBe("https://signed.example/url");
+    expect(result.expirySeconds).toBe(ONE_HOUR);
     expect(DeleteObjectCommand).toHaveBeenCalledOnce();
     expect(GetObjectCommand).not.toHaveBeenCalled();
   });
