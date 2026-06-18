@@ -219,26 +219,37 @@ const provisionServer = async (
   const claudeFile = await getClaudeFile();
   assert(client.secret, "No client secret");
   debug(argv, "Server", server);
+  // Claude Code's `mcp add-json` doesn't accept oauth fields in its JSON
+  // schema (verified against claude 2.1.141). Use `claude mcp add` with
+  // explicit OAuth flags instead — the resulting `~/.claude.json` shape
+  // is the same `{ type: "http", url, oauth: { clientId, callbackPort } }`
+  // that the add-json form would have produced, but assembled by claude
+  // from the flags rather than parsed from the JSON.
+  //
+  // The client secret is delivered via the MCP_CLIENT_SECRET env var (+
+  // the `--client-secret` flag), so it never lands on disk.
+  const callbackPort = Number(client.redirectUri.split(":").at(-1)!);
   const args = [
     "mcp",
-    "add-json",
-    server.id,
-    `'${JSON.stringify({
-      type: "http",
-      url: server.url,
-      oauth: {
-        clientId: client.id,
-        clientSecret: client.secret,
-        callbackPort: Number(client.redirectUri.split(":").at(-1)!),
-      },
-    })}'`,
-    ...(argv.scope ? ["--scope", argv.scope] : []),
+    "add",
+    "--transport",
+    "http",
+    "--client-id",
+    client.id,
+    "--callback-port",
+    String(callbackPort),
     "--client-secret",
+    ...(argv.scope ? ["--scope", argv.scope] : []),
+    server.id,
+    server.url,
   ];
   debug(argv, "Client secret", client.secret);
   debug(argv, ["claude", ...args].join(" "));
+  // Spread process.env so the spawned `claude` inherits PATH / HOME /
+  // NODE_OPTIONS / etc. (`env: { MCP_CLIENT_SECRET }` alone would replace
+  // the whole environment).
   await promisify(spawn)(claudeFile, args, {
-    env: { MCP_CLIENT_SECRET: client.secret },
+    env: { ...process.env, MCP_CLIENT_SECRET: client.secret },
     stdio: "inherit",
   });
 };
