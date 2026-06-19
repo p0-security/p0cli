@@ -192,9 +192,7 @@ const fileTransferAction = async (
         `Downloading to ${request.linuxUserName}@${args.destination}:${remotePath}...`
       );
 
-      // TODO(CUS-68): final download command (curl vs aws s3 cp vs wget) is
-      // being decided in CUS-68. Using curl for now — universally present on
-      // mainstream EC2 AMIs (Amazon Linux, Ubuntu, RHEL, etc.).
+      // TODO decide final downloader to use and maybe add fallback downloaders if not present. Using curl for now — universally present on mainstream EC2 AMIs (Amazon Linux, Ubuntu, RHEL, etc.).
       const downloadCmdArgs = {
         ...sshCmdArgs,
         command: "curl",
@@ -211,8 +209,9 @@ const fileTransferAction = async (
         sshHostKeys,
       });
 
+      // TODO update comment when we add fallback downloader if needed
       if (exitCode === 127) {
-        throw `curl not found on ${args.destination}. The file is in S3 — install curl on the instance and re-run, or wait for CUS-68 to add a fallback downloader.`;
+        throw `curl not found on ${args.destination}. The file is in S3 — install curl on the destination instance and re-run file-transfer command`;
       }
       if (exitCode !== null && exitCode !== 0) {
         throw `Remote download exited with code ${exitCode}`;
