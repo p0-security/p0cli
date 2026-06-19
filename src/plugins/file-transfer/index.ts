@@ -25,8 +25,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
-const MAX_SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
+export const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
+export const MAX_SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
 const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
@@ -107,11 +107,14 @@ export const createTransferClient = (
  * Each expiry is capped to the credentials' remaining lifetime so a URL can
  * never outlive the credentials that signed it.
  */
+
+type SignedUrlCommand = "delete" | "get";
+
 export const generateSignedUrl = async (
   authn: Authn,
   s3: S3Client,
   target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
-  command: "delete" | "get",
+  command: SignedUrlCommand,
   debug?: boolean
 ): Promise<{
   signedUrl: string;
@@ -128,17 +131,32 @@ export const generateSignedUrl = async (
         `Check your system clock or re-run the request.`
     );
   }
-  const maxExpiry =
-    command === "get"
-      ? MAX_SECONDS_TO_EXPIRE_GET_URL
-      : MAX_SECONDS_TO_EXPIRE_DELETE_URL;
-  const secondsToExpireUrl = Math.min(maxExpiry, remaining);
 
-  const s3Command =
-    command === "get"
-      ? new GetObjectCommand({ Bucket: target.bucket, Key: target.key })
-      : new DeleteObjectCommand({ Bucket: target.bucket, Key: target.key });
-  const signedUrl = await getSignedUrl(s3, s3Command, {
+  const URL_CONFIGS: Record<
+    SignedUrlCommand,
+    { maxExpiry: number; s3Command: DeleteObjectCommand | GetObjectCommand }
+  > = {
+    get: {
+      maxExpiry: MAX_SECONDS_TO_EXPIRE_GET_URL,
+      s3Command: new GetObjectCommand({
+        Bucket: target.bucket,
+        Key: target.key,
+      }),
+    },
+    delete: {
+      maxExpiry: MAX_SECONDS_TO_EXPIRE_DELETE_URL,
+      s3Command: new DeleteObjectCommand({
+        Bucket: target.bucket,
+        Key: target.key,
+      }),
+    },
+  };
+
+  const urlConfig = URL_CONFIGS[command];
+
+  const secondsToExpireUrl = Math.min(urlConfig.maxExpiry, remaining);
+
+  const signedUrl = await getSignedUrl(s3, urlConfig.s3Command, {
     expiresIn: secondsToExpireUrl,
   });
 

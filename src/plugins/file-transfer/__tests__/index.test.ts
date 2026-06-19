@@ -10,7 +10,11 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { awsCloudAuth } from "../../aws/auth";
 import type { AwsResourcePermissionSpec } from "../../aws/types";
-import { generateSignedUrl } from "../index";
+import {
+  generateSignedUrl,
+  MAX_SECONDS_TO_EXPIRE_DELETE_URL,
+  MAX_SECONDS_TO_EXPIRE_GET_URL,
+} from "../index";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,10 +23,10 @@ vi.mock("../../aws/auth", () => ({ awsCloudAuth: vi.fn() }));
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: vi.fn().mockResolvedValue("https://signed.example/url"),
 }));
-vi.mock("@aws-sdk/client-s3", () => ({
-  DeleteObjectCommand: vi.fn(),
-  GetObjectCommand: vi.fn(),
-}));
+// vi.mock("@aws-sdk/client-s3", () => ({
+//   DeleteObjectCommand: vi.fn(),
+//   GetObjectCommand: vi.fn(),
+// }));
 
 const FIVE_MINUTES = 5 * 60;
 const ONE_HOUR = 60 * 60;
@@ -132,15 +136,21 @@ describe("generateSignedUrl()", () => {
     const result = await generateSignedUrl(authn, s3, target, "get");
     expect(result.signedUrl).toBe("https://signed.example/url");
     expect(result.expirySeconds).toBe(FIVE_MINUTES);
-    expect(GetObjectCommand).toHaveBeenCalledOnce();
-    expect(DeleteObjectCommand).not.toHaveBeenCalled();
+    expect(getSignedUrl).toHaveBeenCalledWith(
+      s3,
+      expect.any(GetObjectCommand),
+      { expiresIn: MAX_SECONDS_TO_EXPIRE_GET_URL }
+    );
   });
 
   it("correctly generates delete signed URL and max delete expiry time when delete command passed in", async () => {
     const result = await generateSignedUrl(authn, s3, target, "delete");
     expect(result.signedUrl).toBe("https://signed.example/url");
     expect(result.expirySeconds).toBe(ONE_HOUR);
-    expect(DeleteObjectCommand).toHaveBeenCalledOnce();
-    expect(GetObjectCommand).not.toHaveBeenCalled();
+    expect(getSignedUrl).toHaveBeenCalledWith(
+      s3,
+      expect.any(DeleteObjectCommand),
+      { expiresIn: MAX_SECONDS_TO_EXPIRE_DELETE_URL }
+    );
   });
 });
