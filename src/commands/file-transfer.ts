@@ -95,7 +95,6 @@ const fileTransferAction = async (
 
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
-      // TODO probably can move generating delete URL later
       const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
         await generateSignedUrl(
           authn,
