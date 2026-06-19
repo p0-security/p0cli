@@ -89,8 +89,7 @@ const fileTransferAction = async (
       const target = await provisionTransferRequest(authn, args);
       print2(`Access approved for s3://${target.bucket}/${target.prefix}`);
 
-      // target.prefix is the backend-granted prefix (ends in `/`); append the
-      // local file's basename so the S3 object preserves the original filename.
+      // append original basename so the S3 object preserves the original filename.
       const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
@@ -159,14 +158,11 @@ const fileTransferAction = async (
 
       print2("Uploaded.");
 
-      // Step 2: have the destination instance pull the file from S3.
-      // This is a separate approval ticket (SSH provider) — file-transfer
-      // access granted bucket write only, not instance shell access.
+      // TODO we need to remove this second request. it should be included in file transfer delegation. Will be removed in future ticket
       print2(`Requesting download access on ${args.destination}...`);
 
       // Drop `source` (local file path) before passing to SSH plumbing —
-      // `createCommand` uses `"source" in args` to route between scp and ssh,
-      // and we want the ssh branch here.
+      // `createCommand` uses `"source" in args` to branch between scp and ssh path, and we want the ssh branch here.
       const { source: _source, ...sshBaseArgs } = args;
       const sshCmdArgs = {
         ...sshBaseArgs,
@@ -177,7 +173,7 @@ const fileTransferAction = async (
       const { request, requestId, privateKey, sshProvider, sshHostKeys } =
         await prepareRequest(authn, sshCmdArgs, args.destination);
 
-      // Re-sign GET URL now so the 5-min TTL starts after approval clears,
+      // Sign GET URL now so the 5-min TTL starts after approval clears,
       // not before — otherwise long approval waits could expire the URL.
       const { signedUrl: getUrl, expirySeconds: getExpirySeconds } =
         await generateSignedUrl(
