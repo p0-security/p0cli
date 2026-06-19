@@ -34,7 +34,7 @@ const defaultCredentials = {
   AWS_SECURITY_TOKEN: "test",
 };
 
-describe("generateTransferUrl()", () => {
+describe("generateSignedUrl()", () => {
   const target = {
     bucket: "my-bucket",
     key: "uploads/user/abc/file.txt",
