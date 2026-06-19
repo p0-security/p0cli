@@ -15,14 +15,14 @@ export const SupportedPlatforms = ["darwin"] as const;
 const GcpSshItems = ["gcloud"] as const;
 type GcpSshItem = (typeof GcpSshItems)[number];
 
-const GcpSshInstall: Readonly<Record<GcpSshItem, InstallMetadata>> = {
+export const GcpSshInstall: Readonly<Record<GcpSshItem, InstallMetadata>> = {
   gcloud: {
     label: "GCloud CLI",
     commands: {
       darwin: [
         // See https://cloud.google.com/sdk/docs/install-sdk
         "architecture=$(arch)",
-        'package=$([ $architecture = "arm64" ] && echo "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz" || "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-x86_64.tar.gz" )',
+        'package=$([ "$architecture" = "arm64" ] && echo "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz" || echo "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-x86_64.tar.gz" )',
         "wget -O ~/google-cloud-cli.tar.gz $package",
         "tar -xzf ~/google-cloud-cli.tar.gz -C ~", // Extract to home directory
         "~/google-cloud-sdk/install.sh",
