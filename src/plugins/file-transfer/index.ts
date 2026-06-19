@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { FileTransferCommandArgs } from "../../commands/file-transfer";
 import { request } from "../../commands/shared/request";
+import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
 import { awsCloudAuth } from "../aws/auth";
@@ -24,8 +25,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
-const SECONDS_TO_EXPIRE_GET_URL = 60 * 60;
-const SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
+export const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
+export const MAX_SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
 const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
@@ -53,7 +54,7 @@ export const provisionTransferRequest = async (
     throw "Did not receive a response from server";
   }
 
-  const awsSpec = response.request.delegation.aws;
+  const awsSpec = getDelegate(response.request.delegation, "aws");
   if (!awsSpec) {
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
@@ -99,22 +100,25 @@ export const createTransferClient = (
   });
 
 /**
- * Signs the GET (download) and DELETE (cleanup) URLs. Call this AFTER the upload
+ * Signs the GET (download) or DELETE (cleanup) URL. Call this AFTER the upload
  * completes: the GET window is finite, and signing before a large upload would
  * burn that window while the file is still uploading.
  *
  * Each expiry is capped to the credentials' remaining lifetime so a URL can
  * never outlive the credentials that signed it.
  */
-export const generateTransferUrls = async (
+
+type SignedUrlCommand = "delete" | "get";
+
+export const generateSignedUrl = async (
   authn: Authn,
   s3: S3Client,
   target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
+  command: SignedUrlCommand,
   debug?: boolean
 ): Promise<{
-  getUrl: string;
-  deleteUrl: string;
-  expirySeconds: { get: number; delete: number };
+  signedUrl: string;
+  expirySeconds: number;
 }> => {
   const { expiresAt } = await awsCloudAuth(authn, target.awsSpec, debug);
   const remaining =
@@ -127,29 +131,38 @@ export const generateTransferUrls = async (
         `Check your system clock or re-run the request.`
     );
   }
-  const secondsToExpireGetUrl = Math.min(SECONDS_TO_EXPIRE_GET_URL, remaining);
-  const secondsToExpireDeleteUrl = Math.min(
-    SECONDS_TO_EXPIRE_DELETE_URL,
-    remaining
-  );
 
-  const objectArgs = { Bucket: target.bucket, Key: target.key };
-  const [getUrl, deleteUrl] = await Promise.all([
-    getSignedUrl(s3, new GetObjectCommand(objectArgs), {
-      expiresIn: secondsToExpireGetUrl,
-    }),
-    getSignedUrl(s3, new DeleteObjectCommand(objectArgs), {
-      expiresIn: secondsToExpireDeleteUrl,
-    }),
-  ]);
+  const URL_CONFIGS: Record<
+    SignedUrlCommand,
+    { maxExpiry: number; s3Command: DeleteObjectCommand | GetObjectCommand }
+  > = {
+    get: {
+      maxExpiry: MAX_SECONDS_TO_EXPIRE_GET_URL,
+      s3Command: new GetObjectCommand({
+        Bucket: target.bucket,
+        Key: target.key,
+      }),
+    },
+    delete: {
+      maxExpiry: MAX_SECONDS_TO_EXPIRE_DELETE_URL,
+      s3Command: new DeleteObjectCommand({
+        Bucket: target.bucket,
+        Key: target.key,
+      }),
+    },
+  };
+
+  const urlConfig = URL_CONFIGS[command];
+
+  const secondsToExpireUrl = Math.min(urlConfig.maxExpiry, remaining);
+
+  const signedUrl = await getSignedUrl(s3, urlConfig.s3Command, {
+    expiresIn: secondsToExpireUrl,
+  });
 
   return {
-    getUrl,
-    deleteUrl,
+    signedUrl,
     // Report the ACTUAL (capped) seconds so debug output is honest.
-    expirySeconds: {
-      get: secondsToExpireGetUrl,
-      delete: secondsToExpireDeleteUrl,
-    },
+    expirySeconds: secondsToExpireUrl,
   };
 };

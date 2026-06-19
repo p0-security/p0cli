@@ -11,12 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
-import { traceSpan } from "../opentelemetry/otel-helpers";
+import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import {
   createTransferClient,
-  generateTransferUrls,
+  generateSignedUrl,
   provisionTransferRequest,
 } from "../plugins/file-transfer";
+import { sshOrScp } from "../plugins/ssh";
+import { prepareRequest } from "./shared/ssh";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -87,12 +89,26 @@ const fileTransferAction = async (
       const target = await provisionTransferRequest(authn, args);
       print2(`Access approved for s3://${target.bucket}/${target.prefix}`);
 
-      // target.prefix is the backend-granted prefix (ends in `/`); append the
-      // local file's basename so the S3 object preserves the original filename.
+      // append original basename so the S3 object preserves the original filename.
       const uploadKey = `${target.prefix}${basename(args.source)}`;
 
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
+      const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
+        await generateSignedUrl(
+          authn,
+          s3,
+          { ...target, key: uploadKey },
+          "delete",
+          args.debug
+        );
+
+      // TODO: remove logging actual credential but log expiry when we remove the launchdarkly file-transfer flag
+      if (args.debug) {
+        print2(
+          `DELETE (${renderDurationSec(deleteExpirySeconds)}): ${deleteUrl}`
+        );
+      }
 
       print2(`Uploading ${args.source}...`);
 
@@ -142,21 +158,72 @@ const fileTransferAction = async (
 
       print2("Uploaded.");
 
-      // Sign the download/cleanup URLs only now that the file is uploaded — the
-      // GET window is finite, so we don't want it ticking during the upload.
-      const { getUrl, deleteUrl, expirySeconds } = await generateTransferUrls(
-        authn,
-        s3,
-        { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
-        args.debug
+      // TODO we need to remove this second request. it should be included in file transfer delegation. Will be removed in future ticket
+      print2(`Requesting download access on ${args.destination}...`);
+
+      // Drop `source` (local file path) before passing to SSH plumbing —
+      // `createCommand` uses `"source" in args` to branch between scp and ssh path, and we want the ssh branch here.
+      const { source: _source, ...sshBaseArgs } = args;
+      const sshCmdArgs = {
+        ...sshBaseArgs,
+        arguments: [],
+        sshOptions: [],
+      };
+
+      const { request, requestId, privateKey, sshProvider, sshHostKeys } =
+        await prepareRequest(authn, sshCmdArgs, args.destination);
+
+      // Sign GET URL now so the 5-min TTL starts after approval clears,
+      // not before — otherwise long approval waits could expire the URL.
+      const { signedUrl: getUrl, expirySeconds: getExpirySeconds } =
+        await generateSignedUrl(
+          authn,
+          s3,
+          { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
+          "get",
+          args.debug
+        );
+      if (args.debug) {
+        print2(`GET    (${renderDurationSec(getExpirySeconds)}): ${getUrl}`);
+      }
+
+      const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
+      print2(
+        `Downloading to ${request.linuxUserName}@${args.destination}:${remotePath}...`
       );
 
-      // TODO: remove logging when we remove the launchdarkly file-transfer flag
-      if (args.debug) {
-        print2(`GET    (${renderDurationSec(expirySeconds.get)}): ${getUrl}`);
-        print2(
-          `DELETE (${renderDurationSec(expirySeconds.delete)}): ${deleteUrl}`
-        );
+      // TODO decide final downloader to use and maybe add fallback downloaders if not present. Using curl for now — universally present on mainstream EC2 AMIs (Amazon Linux, Ubuntu, RHEL, etc.).
+      const downloadCmdArgs = {
+        ...sshCmdArgs,
+        command: "curl",
+        arguments: ["-sSfL", getUrl, "-o", remotePath],
+      };
+
+      const exitCode = await sshOrScp({
+        authn,
+        request,
+        requestId,
+        cmdArgs: downloadCmdArgs,
+        privateKey,
+        sshProvider,
+        sshHostKeys,
+      });
+
+      // TODO update comment when we add fallback downloader if needed
+      if (exitCode === 127) {
+        throw `curl not found on ${args.destination}. The file is in S3 — install curl on the destination instance and re-run file-transfer command`;
+      }
+      if (exitCode !== null && exitCode !== 0) {
+        throw `Remote download exited with code ${exitCode}`;
+      }
+
+      print2(`Downloaded to ${remotePath}.`);
+
+      // Force exit to prevent hanging due to orphaned child processes (e.g.,
+      // session-manager-plugin) holding open file descriptors. See:
+      // https://github.com/aws/amazon-ssm-agent/issues/173
+      if (process.env.NODE_ENV !== "unit") {
+        exitProcess(0);
       }
     },
     {
