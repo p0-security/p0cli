@@ -166,8 +166,8 @@ const fileTransferAction = async (
       const { source: _source, ...sshBaseArgs } = args;
       const sshCmdArgs = {
         ...sshBaseArgs,
-        arguments: [] as string[],
-        sshOptions: [] as string[],
+        arguments: [],
+        sshOptions: [],
       };
 
       const { request, requestId, privateKey, sshProvider, sshHostKeys } =
