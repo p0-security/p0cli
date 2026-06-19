@@ -292,8 +292,9 @@ async function spawnSshNode(
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
         if (options.endTime < Date.now()) {
+          const knownError = connectionErrorMessage();
           reject(
-            connectionErrorMessage() ??
+            knownError ??
               `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
           );
           return;
