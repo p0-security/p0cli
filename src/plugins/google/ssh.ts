@@ -12,6 +12,7 @@ import { isSudoCommand } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
 import { ensureGcloudLogin } from "./auth";
+import { classifyGcpConnectionError } from "./connection-error";
 import { ensureGcpSshInstall } from "./install";
 import { importSshKey } from "./ssh-key";
 import { GcpSshPermissionSpec, GcpSshRequest } from "./types";
@@ -62,6 +63,9 @@ export const gcpSshProvider: SshProvider<
     await ensureGcloudLogin({ debug });
     return undefined;
   },
+
+  connectionErrorMessage: (stderr, request) =>
+    classifyGcpConnectionError(stderr, request),
 
   ensureInstall: async () => {
     if (!(await ensureGcpSshInstall())) {

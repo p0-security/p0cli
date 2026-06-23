@@ -160,6 +160,13 @@ export type SshProvider<
   /** Unwraps this provider's types */
   requestToSsh: (request: CliPermissionSpec<PR, O>) => SR;
 
+  /** Inspect the captured stderr of a failed connection attempt and, when the
+   * failure matches a known root cause (e.g. a missing cloud prerequisite),
+   * return an actionable message to surface in place of the raw error. Returns
+   * undefined to fall through to the raw error. Called only at terminal
+   * connection failure; the unmodified output remains available via --debug. */
+  connectionErrorMessage?: (stderr: string, request: SR) => string | undefined;
+
   /** Regex matches for error strings indicating that the provider has not yet fully provisioned node access */
   unprovisionedAccessPatterns: readonly AccessPattern[];
 

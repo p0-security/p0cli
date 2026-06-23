@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../../../drivers/stdio";
 import { sshProxy } from "../index";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
@@ -38,6 +39,20 @@ const makeFakeChild = () => {
   child.kill = vi.fn();
   child.unref = vi.fn();
   setImmediate(() => child.emit("exit", 0));
+  return child;
+};
+
+/** A fake child that writes `stderr` to its stderr stream and then exits with
+ * `code`, mimicking a process that fails after emitting diagnostic output. */
+const makeFailingChild = (stderr: string, code: number) => {
+  const child = new EventEmitter() as any;
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn();
+  child.unref = vi.fn();
+  setImmediate(() => {
+    child.stderr.emit("data", Buffer.from(stderr));
+    child.emit("exit", code);
+  });
   return child;
 };
 
@@ -130,5 +145,82 @@ describe("sshProxy credential handoff stays shell-agnostic", () => {
     // anything — proving the credential handoff does not depend on it.
     expect(fishOpts.env.SHELL).toBe("/usr/bin/fish");
     expect(bashOpts.env.SHELL).toBe("/bin/bash");
+  });
+});
+
+describe("GCP connection failure diagnostics", () => {
+  // spawnSshNode resolves the provider (and thus its connectionErrorMessage and
+  // unprovisionedAccessPatterns) from the SSH_PROVIDERS registry keyed by
+  // request.type, so a `gcloud` request exercises the real GCP classifier. The
+  // passed sshProvider only supplies the hooks sshProxy itself calls; stub the
+  // gcloud login so the test never shells out.
+  const gcpProviderWith = (propagationTimeoutMs: number) =>
+    ({
+      cloudProviderLogin: vi.fn(async () => undefined),
+      proxyCommand: () => [
+        "gcloud",
+        "compute",
+        "start-iap-tunnel",
+        "my-instance",
+        "22",
+      ],
+      propagationTimeoutMs,
+    }) as any;
+
+  const runGcpProxy = (sshProvider: any) =>
+    sshProxy({
+      authn: {} as any,
+      request: {
+        type: "gcloud",
+        id: "my-instance",
+        projectId: "my-project",
+        zone: "us-central1-a",
+        linuxUserName: "user",
+      } as any,
+      requestId: "req-1",
+      cmdArgs: {} as any,
+      privateKey: "pk",
+      sshProvider,
+      debug: false,
+      port: "22",
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("surfaces the OS Login hint when SSH auth is rejected (publickey)", async () => {
+    mockSpawn.mockImplementation(() =>
+      makeFailingChild(
+        "my-user@my-instance: Permission denied (publickey).\n",
+        255
+      )
+    );
+
+    // A negative propagation timeout puts endTime in the past, so the first
+    // publickey rejection is terminal (no propagation wait) and the classifier
+    // replaces the generic "did not propagate" message.
+    const error = await runGcpProxy(gcpProviderWith(-1)).catch((e) => e);
+
+    expect(error).toContain("Connected to my-instance");
+    expect(error).toContain("most common cause is OS Login");
+    expect(error).toContain("enable-oslogin=TRUE");
+  });
+
+  it("passes an IAP / tunnel-establishment failure through unchanged", async () => {
+    mockSpawn.mockImplementation(() =>
+      makeFailingChild(
+        "ERROR: (gcloud.compute.start-iap-tunnel) Error while connecting [4003: 'failed to connect to backend'].\n",
+        1
+      )
+    );
+
+    const exitCode = await runGcpProxy(gcpProviderWith(1000));
+
+    // Tunnel failures are intentionally not classified: the original exit code is
+    // returned and no OS Login hint is emitted.
+    expect(exitCode).toBe(1);
+    const printed = (print2 as Mock).mock.calls.map((call) => String(call[0]));
+    expect(printed.some((line) => line.includes("OS Login"))).toBe(false);
   });
 });

@@ -41,6 +41,11 @@ import { Readable } from "node:stream";
 
 const RETRY_DELAY_MS = 5000;
 
+/** Upper bound on the stderr we retain per connection attempt for failure
+ * classification. The decisive error (e.g. an IAP backend-connect failure or a
+ * publickey rejection) appears near the end, so we keep the trailing bytes. */
+const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
+
 const HOST_KEY_MISMATCH_PATTERN =
   /WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed/;
 
@@ -81,9 +86,16 @@ const accessPropagationGuard = (
   let isLoginException = false;
   let isValidError = false;
   let isHostKeyMismatch = false;
+  // Retain the (bounded) raw stderr of this attempt so a terminal failure can be
+  // classified into an actionable message. We keep the trailing bytes because
+  // the decisive error appears at the end of the stream.
+  let capturedStderr = "";
 
   const stderrHandler = (chunk: Buffer) => {
     const chunkString: string = chunk.toString("utf-8");
+    capturedStderr = (capturedStderr + chunkString).slice(
+      -MAX_CAPTURED_STDERR_BYTES
+    );
     parseAndPrintSshOutputToStderr(chunkString, options);
 
     if (HOST_KEY_MISMATCH_PATTERN.test(chunkString)) {
@@ -124,6 +136,7 @@ const accessPropagationGuard = (
       (!validAccessPatterns || isValidError),
     isHostKeyMismatch: () => isHostKeyMismatch,
     isLoginException: () => isLoginException,
+    capturedStderr: () => capturedStderr,
     cleanup: () => {
       child.stderr.removeListener("data", stderrHandler);
     },
@@ -181,6 +194,7 @@ type SpawnSshNodeOptions = {
   abortController?: AbortController;
   stdio: [StdioNull, StdioNull, StdioPipe];
   provider: SupportedSshProvider;
+  request: SshRequest;
   debug?: boolean;
   isAccessPropagationPreTest?: boolean;
   audit?: (action: "end" | "start") => void;
@@ -236,6 +250,7 @@ async function spawnSshNode(
       isAccessPropagated,
       isHostKeyMismatch,
       isLoginException,
+      capturedStderr,
       cleanup: cleanupStderr,
     } = accessPropagationGuard(
       provider.unprovisionedAccessPatterns,
@@ -246,6 +261,12 @@ async function spawnSshNode(
       child,
       options
     );
+
+    // Classify a terminal connection failure (e.g. OS Login not being enabled)
+    // into an actionable message, or undefined to keep the raw error. The
+    // unmodified output remains available via --debug.
+    const connectionErrorMessage = () =>
+      provider.connectionErrorMessage?.(capturedStderr(), options.request);
 
     const onAbort = () =>
       reject(options.abortController?.signal.reason ?? "SSH session aborted");
@@ -271,8 +292,10 @@ async function spawnSshNode(
       // permissions, continually retry access until success
       if (!isAccessPropagated()) {
         if (options.endTime < Date.now()) {
+          const knownError = connectionErrorMessage();
           reject(
-            `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
+            knownError ??
+              `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
           );
           return;
         }
@@ -540,6 +563,7 @@ const preTestAccessPropagationIfNeeded = async <
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
       provider: request.type,
+      request,
       endTime: endTime,
       isAccessPropagationPreTest: true,
     });
@@ -669,6 +693,7 @@ export const sshOrScp = async (args: {
         stdio: ["inherit", "inherit", "pipe"],
         debug,
         provider: request.type,
+        request,
         endTime: endTime,
         onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
       });
@@ -749,6 +774,7 @@ export const sshProxy = async (args: {
       stdio: ["inherit", "inherit", "pipe"],
       debug,
       provider: request.type,
+      request,
       endTime: endTime,
     });
   } finally {
