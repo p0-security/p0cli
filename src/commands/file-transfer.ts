@@ -12,13 +12,16 @@ import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
+import { AwsResourcePermissionSpec } from "../plugins/aws/types";
 import {
   createTransferClient,
   generateSignedUrl,
   provisionTransferRequest,
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
+import { Authn } from "../types/identity";
 import { prepareRequest } from "./shared/ssh";
+import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -33,6 +36,53 @@ export type FileTransferCommandArgs = {
 
 const renderDurationSec = (s: number) =>
   s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+
+// Standard POSIX shell exit code for "command not found".
+const COMMAND_NOT_FOUND_EXIT_CODE = 127;
+const SUCCESS_EXIT_CODE = 0;
+
+/**
+ * Best-effort cleanup of the uploaded S3 object via a presigned DELETE URL.
+ * Call this only after a confirmed-successful download.
+ *
+ * The DELETE URL is signed here, at the point of use, rather than up front — a
+ * long approval wait would otherwise burn its TTL before we ever issue it.
+ *
+ * This must never fail an otherwise-successful transfer: the object still
+ * expires via the bucket's lifecycle policy, so a failed delete is harmless.
+ * The result therefore defaults to success — errors are only surfaced under
+ * --debug.
+ */
+const deleteUploadedObject = async (
+  authn: Authn,
+  s3: S3Client,
+  target: { bucket: string; awsSpec: AwsResourcePermissionSpec },
+  key: string,
+  debug?: boolean
+) => {
+  try {
+    const { signedUrl, expirySeconds } = await generateSignedUrl(
+      authn,
+      s3,
+      { bucket: target.bucket, key, awsSpec: target.awsSpec },
+      "delete",
+      debug
+    );
+    if (debug) {
+      print2(`DELETE (${renderDurationSec(expirySeconds)}): ${signedUrl}`);
+    }
+    const response = await fetch(signedUrl, { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(`S3 returned ${response.status} ${response.statusText}`);
+    }
+    print2(`Deleted s3://${target.bucket}/${key} from the bucket.`);
+  } catch (err) {
+    if (debug) {
+      const message = err instanceof Error ? err.message : String(err);
+      print2(`Warning: failed to delete S3 object: ${message}`);
+    }
+  }
+};
 
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
@@ -94,21 +144,6 @@ const fileTransferAction = async (
 
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
-      const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
-        await generateSignedUrl(
-          authn,
-          s3,
-          { ...target, key: uploadKey },
-          "delete",
-          args.debug
-        );
-
-      // TODO: remove logging actual credential but log expiry when we remove the launchdarkly file-transfer flag
-      if (args.debug) {
-        print2(
-          `DELETE (${renderDurationSec(deleteExpirySeconds)}): ${deleteUrl}`
-        );
-      }
 
       print2(`Uploading ${args.source}...`);
 
@@ -209,15 +244,26 @@ const fileTransferAction = async (
         sshHostKeys,
       });
 
-      // TODO update comment when we add fallback downloader if needed
-      if (exitCode === 127) {
+      // curl is the only downloader today; revisit this branch if we add fallbacks
+      if (exitCode === COMMAND_NOT_FOUND_EXIT_CODE) {
         throw `curl not found on ${args.destination}. The file is in S3 — install curl on the destination instance and re-run file-transfer command`;
       }
-      if (exitCode !== null && exitCode !== 0) {
+
+      if (exitCode === SUCCESS_EXIT_CODE) {
+        // Success path: the file is on the instance, so clean it from the bucket.
+        print2(`Downloaded to ${remotePath}.`);
+        await deleteUploadedObject(
+          authn,
+          s3,
+          { bucket: target.bucket, awsSpec: target.awsSpec },
+          uploadKey,
+          args.debug
+        );
+      } else if (exitCode === null) {
+        throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
+      } else {
         throw `Remote download exited with code ${exitCode}`;
       }
-
-      print2(`Downloaded to ${remotePath}.`);
 
       // Force exit to prevent hanging due to orphaned child processes (e.g.,
       // session-manager-plugin) holding open file descriptors. See:
