@@ -12,16 +12,14 @@ import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
-import { AwsResourcePermissionSpec } from "../plugins/aws/types";
 import {
   createTransferClient,
   generateSignedUrl,
   provisionTransferRequest,
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
-import { Authn } from "../types/identity";
 import { prepareRequest } from "./shared/ssh";
-import { S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -42,11 +40,9 @@ const COMMAND_NOT_FOUND_EXIT_CODE = 127;
 const SUCCESS_EXIT_CODE = 0;
 
 /**
- * Best-effort cleanup of the uploaded S3 object via a presigned DELETE URL.
- * Call this only after a confirmed-successful download.
- *
- * The DELETE URL is signed here, at the point of use, rather than up front — a
- * long approval wait would otherwise burn its TTL before we ever issue it.
+ * Best-effort cleanup of the uploaded S3 object. The CLI already holds an
+ * authenticated S3 client, so it deletes directly and the client also
+ * auto-refreshes credentials.
  *
  * This must never fail an otherwise-successful transfer: the object still
  * expires via the bucket's lifecycle policy, so a failed delete is harmless.
@@ -54,32 +50,27 @@ const SUCCESS_EXIT_CODE = 0;
  * --debug.
  */
 const deleteUploadedObject = async (
-  authn: Authn,
   s3: S3Client,
-  target: { bucket: string; awsSpec: AwsResourcePermissionSpec },
+  bucket: string,
   key: string,
   debug?: boolean
 ) => {
   try {
-    const { signedUrl, expirySeconds } = await generateSignedUrl(
-      authn,
-      s3,
-      { bucket: target.bucket, key, awsSpec: target.awsSpec },
-      "delete",
-      debug
-    );
+    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     if (debug) {
-      print2(`DELETE (${renderDurationSec(expirySeconds)}): ${signedUrl}`);
+      print2(`Deleted s3://${bucket}/${key} from the bucket.`);
     }
-    const response = await fetch(signedUrl, { method: "DELETE" });
-    if (!response.ok) {
-      throw new Error(`S3 returned ${response.status} ${response.statusText}`);
-    }
-    print2(`Deleted s3://${target.bucket}/${key} from the bucket.`);
   } catch (err) {
+    print2(
+      `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, 
+      so this is safe to ignore. You may delete this object manually, or it will be 
+      removed automatically by the file-transfer bucket's lifecycle expiration 
+      rule.`
+    );
+    // The raw error is debugging detail, not outcome info.
     if (debug) {
       const message = err instanceof Error ? err.message : String(err);
-      print2(`Warning: failed to delete S3 object: ${message}`);
+      print2(`Delete error: ${message}`);
     }
   }
 };
@@ -252,13 +243,7 @@ const fileTransferAction = async (
       if (exitCode === SUCCESS_EXIT_CODE) {
         // Success path: the file is on the instance, so clean it from the bucket.
         print2(`Downloaded to ${remotePath}.`);
-        await deleteUploadedObject(
-          authn,
-          s3,
-          { bucket: target.bucket, awsSpec: target.awsSpec },
-          uploadKey,
-          args.debug
-        );
+        await deleteUploadedObject(s3, target.bucket, uploadKey, args.debug);
       } else if (exitCode === null) {
         throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
       } else {
