@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { PermissionSpec } from "../../types/request";
-import { AwsResourcePermissionSpec } from "../aws/types";
+import { AwsResourcePermissionSpec, AwsSshPermissionSpec } from "../aws/types";
 
 export type FileTransferPermission = {
   resource: {
@@ -30,5 +30,5 @@ export type FileTransferPermissionSpec = PermissionSpec<
   "file-transfer",
   FileTransferPermission,
   Record<string, never>,
-  { aws?: AwsResourcePermissionSpec }
+  { aws?: AwsResourcePermissionSpec; ssh?: AwsSshPermissionSpec }
 >;
