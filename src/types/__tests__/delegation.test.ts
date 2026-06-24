@@ -27,37 +27,15 @@ const AWS_DELEGATE: AwsDelegate = {
 };
 
 describe("getDelegate", () => {
-  describe("legacy record form", () => {
-    it("returns the delegate value when the key is present", () => {
-      const delegation: DelegationField<{ aws: AwsDelegate }> = {
-        aws: AWS_DELEGATE,
-      };
-      expect(getDelegate(delegation, "aws")).toEqual(AWS_DELEGATE);
-    });
-
-    it("returns undefined when the key is absent on an optional field", () => {
-      const delegation: DelegationField<{ aws?: AwsDelegate }> = {};
-      expect(getDelegate(delegation, "aws")).toBeUndefined();
-    });
-
-    it("handles nested delegation by chaining calls", () => {
-      const delegation: DelegationField<{ "aws-rds": AwsRdsDelegate }> = {
-        "aws-rds": {
-          permission: { vpcId: "vpc-1" },
-          delegation: { aws: AWS_DELEGATE },
-        },
-      };
-      const rds = getDelegate(delegation, "aws-rds");
-      expect(getDelegate(rds?.delegation, "aws")).toEqual(AWS_DELEGATE);
-    });
-  });
-
-  describe("new array form", () => {
-    it("returns the request payload of the matching entry", () => {
+  describe("array form", () => {
+    it("returns the matching entry's request, stamped with its key as `type`", () => {
       const delegation: DelegationField<{ aws: AwsDelegate }> = [
         { key: "aws", request: AWS_DELEGATE },
       ];
-      expect(getDelegate(delegation, "aws")).toEqual(AWS_DELEGATE);
+      expect(getDelegate(delegation, "aws")).toEqual({
+        ...AWS_DELEGATE,
+        type: "aws",
+      });
     });
 
     it("returns undefined when no entry matches the key", () => {
@@ -75,7 +53,10 @@ describe("getDelegate", () => {
         { key: "gcp", request: other },
         { key: "aws", request: AWS_DELEGATE },
       ];
-      expect(getDelegate(delegation, "aws")).toEqual(AWS_DELEGATE);
+      expect(getDelegate(delegation, "aws")).toEqual({
+        ...AWS_DELEGATE,
+        type: "aws",
+      });
     });
 
     it("returns the first matching entry when keys are duplicated", () => {
@@ -91,7 +72,7 @@ describe("getDelegate", () => {
         { key: "aws", request: first },
         { key: "aws", request: second },
       ];
-      expect(getDelegate(delegation, "aws")).toEqual(first);
+      expect(getDelegate(delegation, "aws")).toEqual({ ...first, type: "aws" });
     });
 
     it("handles nested array-form delegation by chaining calls", () => {
@@ -105,21 +86,10 @@ describe("getDelegate", () => {
         },
       ];
       const rds = getDelegate(delegation, "aws-rds");
-      expect(getDelegate(rds?.delegation, "aws")).toEqual(AWS_DELEGATE);
-    });
-
-    it("handles a mixed nesting (array outside, record inside)", () => {
-      const delegation: DelegationField<{ "aws-rds": AwsRdsDelegate }> = [
-        {
-          key: "aws-rds",
-          request: {
-            permission: { vpcId: "vpc-1" },
-            delegation: { aws: AWS_DELEGATE },
-          },
-        },
-      ];
-      const rds = getDelegate(delegation, "aws-rds");
-      expect(getDelegate(rds?.delegation, "aws")).toEqual(AWS_DELEGATE);
+      expect(getDelegate(rds?.delegation, "aws")).toEqual({
+        ...AWS_DELEGATE,
+        type: "aws",
+      });
     });
 
     it("ignores malformed entries (missing key) without throwing", () => {
@@ -128,7 +98,10 @@ describe("getDelegate", () => {
         undefined,
         { key: "aws", request: AWS_DELEGATE },
       ] as any;
-      expect(getDelegate(delegation, "aws")).toEqual(AWS_DELEGATE);
+      expect(getDelegate(delegation, "aws")).toEqual({
+        ...AWS_DELEGATE,
+        type: "aws",
+      });
     });
   });
 
