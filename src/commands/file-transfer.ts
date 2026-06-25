@@ -195,8 +195,6 @@ const fileTransferAction = async (
 
       print2("Uploaded.");
 
-      // TODO we need to remove this second request. it should be included in file transfer delegation. Will be removed in future ticket
-      print2(`Requesting download access on ${args.destination}...`);
       print2(`Preparing to ssh into ${args.destination}...`);
 
       await cleanupStaleSshConfigs(args.debug);
@@ -228,7 +226,9 @@ const fileTransferAction = async (
           args.debug
         );
       if (args.debug) {
-        print2(`GET    (${renderDurationSec(getExpirySeconds)}): ${getUrl}`);
+        print2(
+          `GET URL created. Expiry:${renderDurationSec(getExpirySeconds)}`
+        );
       }
 
       const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
@@ -260,7 +260,7 @@ const fileTransferAction = async (
 
       if (exitCode === SUCCESS_EXIT_CODE) {
         // Success path: the file is on the instance, so clean it from the bucket.
-        print2(`Downloaded to ${remotePath}.`);
+        print2(`Downloaded to ${remotePath}. File transfer succeeded.`);
         await deleteUploadedObject(s3, target.bucket, uploadKey, args.debug);
       } else if (exitCode === null) {
         throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
