@@ -53,7 +53,7 @@ describe("generateSignedUrl()", () => {
         idcRegion: undefined,
       },
       generated: { name: "test-role" },
-      delegation: {},
+      delegation: [],
     } satisfies AwsResourcePermissionSpec,
   };
 

@@ -9,46 +9,44 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 
-/** An entry in the new array-form delegation shape.
- *
- * The backend used to send delegation as a record (`{ aws: { ... } }`); it now
- * sends it as an array of `{ key, request }` entries. The `request` field holds
- * what used to be the record's value (permission, generated, nested delegation).
+/** An entry in the array-form delegation shape: an array of `{ key, request }`
+ * entries, where `request` holds the delegate value (permission, generated,
+ * nested delegation) and key is what type i.e 'aws.
  */
 export type DelegationEntry<K extends string, R> = {
   key: K;
   request: R;
 };
 
-/** Delegation field that tolerates both the legacy record form and the new
- * array form. Callers should not read this directly — use {@link getDelegate}.
+/** Array-form delegation. Callers should not read this directly — use
+ * {@link getDelegate}.
  */
-export type DelegationField<Spec extends Record<string, any>> =
-  | {
-      [K in keyof Spec & string]: DelegationEntry<K, Spec[K]>;
-    }[keyof Spec & string][]
-  | Spec;
+export type DelegationField<Spec extends Record<string, any>> = {
+  [K in keyof Spec & string]: DelegationEntry<K, Spec[K]>;
+}[keyof Spec & string][];
 
-/** Resolve a delegate by key, accepting either the legacy record-form
- * delegation or the new array-form delegation.
+/** Resolve a delegate by key from array-form delegation.
  *
  * Returns the underlying delegate value (with `permission`, `generated`,
  * and nested `delegation` fields), or `undefined` if no entry matches.
  *
- * The generic shape (`K`, `V` rather than the full `Spec` record) is
- * deliberate: matching the union `DelegationField<Spec>` bidirectionally
- * confuses TS's inference and can lock `Spec` onto the array branch.
- * Pinning `K` to the key argument and inferring `V` from the value avoids
- * that.
+ * Keyed on the whole `Spec` and indexed by `key`, so `getDelegate(d, "aws")`
+ * returns exactly `Spec["aws"]` — no union, no caller-side narrowing, even for
+ * multi-key delegations. The type-guard `find` asserts that the entry matching
+ * `key` carries `Spec[K]` (the runtime key check is the proof). The `Spec`
+ * default keeps nullish-input calls compiling when there is nothing to infer.
  */
-export const getDelegate = <K extends string, V>(
-  delegation: DelegationEntry<K, V>[] | { [P in K]?: V } | null | undefined,
+export const getDelegate = <
+  Spec extends Record<string, any> = Record<string, any>,
+  K extends keyof Spec & string = keyof Spec & string,
+>(
+  delegation: DelegationField<Spec> | null | undefined,
   key: K
-): V | undefined => {
-  if (delegation == null) return undefined;
-  if (Array.isArray(delegation)) {
-    const entry = delegation.find((e) => e?.key === key);
-    return entry?.request;
-  }
-  return delegation[key];
+): (Spec[K] & { type: K }) | undefined => {
+  const request = delegation?.find(
+    (e): e is DelegationEntry<K, Spec[K]> => e?.key === key
+  )?.request;
+  if (!request) return undefined;
+
+  return { ...request, type: key };
 };
