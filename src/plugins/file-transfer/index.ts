@@ -16,17 +16,12 @@ import { PermissionRequest } from "../../types/request";
 import { awsCloudAuth } from "../aws/auth";
 import { AwsResourcePermissionSpec } from "../aws/types";
 import { FileTransferPermissionSpec } from "./types";
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
 import yargs from "yargs";
 
 export const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
-export const MAX_SECONDS_TO_EXPIRE_DELETE_URL = 60 * 60;
 const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
@@ -100,21 +95,17 @@ export const createTransferClient = (
   });
 
 /**
- * Signs the GET (download) or DELETE (cleanup) URL. Call this AFTER the upload
- * completes: the GET window is finite, and signing before a large upload would
- * burn that window while the file is still uploading.
+ * Signs the GET (download) URL. Call this AFTER the upload completes: the GET
+ * window is finite, and signing before a large upload would burn that window
+ * while the file is still uploading.
  *
- * Each expiry is capped to the credentials' remaining lifetime so a URL can
+ * The expiry is capped to the credentials' remaining lifetime so the URL can
  * never outlive the credentials that signed it.
  */
-
-type SignedUrlCommand = "delete" | "get";
-
 export const generateSignedUrl = async (
   authn: Authn,
   s3: S3Client,
   target: { bucket: string; key: string; awsSpec: AwsResourcePermissionSpec },
-  command: SignedUrlCommand,
   debug?: boolean
 ): Promise<{
   signedUrl: string;
@@ -132,33 +123,13 @@ export const generateSignedUrl = async (
     );
   }
 
-  const URL_CONFIGS: Record<
-    SignedUrlCommand,
-    { maxExpiry: number; s3Command: DeleteObjectCommand | GetObjectCommand }
-  > = {
-    get: {
-      maxExpiry: MAX_SECONDS_TO_EXPIRE_GET_URL,
-      s3Command: new GetObjectCommand({
-        Bucket: target.bucket,
-        Key: target.key,
-      }),
-    },
-    delete: {
-      maxExpiry: MAX_SECONDS_TO_EXPIRE_DELETE_URL,
-      s3Command: new DeleteObjectCommand({
-        Bucket: target.bucket,
-        Key: target.key,
-      }),
-    },
-  };
+  const secondsToExpireUrl = Math.min(MAX_SECONDS_TO_EXPIRE_GET_URL, remaining);
 
-  const urlConfig = URL_CONFIGS[command];
-
-  const secondsToExpireUrl = Math.min(urlConfig.maxExpiry, remaining);
-
-  const signedUrl = await getSignedUrl(s3, urlConfig.s3Command, {
-    expiresIn: secondsToExpireUrl,
-  });
+  const signedUrl = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: target.bucket, Key: target.key }),
+    { expiresIn: secondsToExpireUrl }
+  );
 
   return {
     signedUrl,

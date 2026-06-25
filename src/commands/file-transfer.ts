@@ -62,10 +62,7 @@ const deleteUploadedObject = async (
     }
   } catch (err) {
     print2(
-      `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, 
-      so this is safe to ignore. You may delete this object manually, or it will be 
-      removed automatically by the file-transfer bucket's lifecycle expiration 
-      rule.`
+      `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, so this is safe to ignore. You may delete this object manually, or it will be removed automatically by the file-transfer bucket's lifecycle expiration rule.`
     );
     // The raw error is debugging detail, not outcome info.
     if (debug) {
@@ -206,7 +203,6 @@ const fileTransferAction = async (
           authn,
           s3,
           { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
-          "get",
           args.debug
         );
       if (args.debug) {
