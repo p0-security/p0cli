@@ -18,5 +18,7 @@ export default defineConfig({
     include: ["**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/build/**"],
     globals: true,
+    // Mirrors the `test:unit` npm script so tests run with NODE_ENV=unit no matter how they're launched (CLI, IDE/Vitest extension). Code under test (e.g. ssh.ts) skips process-exiting side effects when NODE_ENV === "unit".
+    env: { NODE_ENV: "unit" },
   },
 });
