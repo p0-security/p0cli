@@ -67,12 +67,13 @@ export const provisionTransferRequest = async (
   const { status, principal } = response.request;
 
   const awsSpec = getDelegate(response.request.delegation, "aws");
-  if (!awsSpec || awsSpec.type !== "aws") {
+  if (!awsSpec) {
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
 
   const sshSpec = getDelegate(response.request.delegation, "ssh");
-  if (!sshSpec || sshSpec.type !== "ssh") {
+
+  if (!sshSpec) {
     throw "Backend granted file-transfer access, but there was an error getting SSH access details";
   }
 
