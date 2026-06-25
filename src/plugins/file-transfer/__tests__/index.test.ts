@@ -10,12 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { awsCloudAuth } from "../../aws/auth";
 import type { AwsResourcePermissionSpec } from "../../aws/types";
-import {
-  generateSignedUrl,
-  MAX_SECONDS_TO_EXPIRE_DELETE_URL,
-  MAX_SECONDS_TO_EXPIRE_GET_URL,
-} from "../index";
-import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { generateSignedUrl, MAX_SECONDS_TO_EXPIRE_GET_URL } from "../index";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,7 +80,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 2 * ONE_HOUR * 1000,
     });
 
-    const result = await generateSignedUrl(authn, s3, target, "get");
+    const result = await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(FIVE_MINUTES);
     expect(result.expirySeconds).toBe(FIVE_MINUTES);
@@ -96,7 +92,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 300 * 1000, // 5 minutes left
     });
 
-    const result = await generateSignedUrl(authn, s3, target, "get");
+    const result = await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(300);
     expect(result.expirySeconds).toBe(300);
@@ -105,7 +101,7 @@ describe("generateSignedUrl()", () => {
   it("falls back to the configured window when expiry is unknown", async () => {
     vi.mocked(awsCloudAuth).mockResolvedValue({ ...defaultCredentials });
 
-    await generateSignedUrl(authn, s3, target, "get");
+    await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(FIVE_MINUTES);
   });
@@ -116,7 +112,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW - 1000,
     });
 
-    await expect(generateSignedUrl(authn, s3, target, "get")).rejects.toThrow(
+    await expect(generateSignedUrl(authn, s3, target)).rejects.toThrow(
       /too soon to sign usable URLs/
     );
   });
@@ -127,30 +123,19 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 30 * 1000, // 30s left, below 60s threshold
     });
 
-    await expect(generateSignedUrl(authn, s3, target, "get")).rejects.toThrow(
+    await expect(generateSignedUrl(authn, s3, target)).rejects.toThrow(
       /too soon to sign usable URLs/
     );
   });
 
-  it("correctly generates get signed URL and max get expiry time when get command passed in", async () => {
-    const result = await generateSignedUrl(authn, s3, target, "get");
+  it("correctly generates get signed URL and max get expiry time", async () => {
+    const result = await generateSignedUrl(authn, s3, target);
     expect(result.signedUrl).toBe("https://signed.example/url");
     expect(result.expirySeconds).toBe(FIVE_MINUTES);
     expect(getSignedUrl).toHaveBeenCalledWith(
       s3,
       expect.any(GetObjectCommand),
       { expiresIn: MAX_SECONDS_TO_EXPIRE_GET_URL }
-    );
-  });
-
-  it("correctly generates delete signed URL and max delete expiry time when delete command passed in", async () => {
-    const result = await generateSignedUrl(authn, s3, target, "delete");
-    expect(result.signedUrl).toBe("https://signed.example/url");
-    expect(result.expirySeconds).toBe(ONE_HOUR);
-    expect(getSignedUrl).toHaveBeenCalledWith(
-      s3,
-      expect.any(DeleteObjectCommand),
-      { expiresIn: MAX_SECONDS_TO_EXPIRE_DELETE_URL }
     );
   });
 });

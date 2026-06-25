@@ -19,6 +19,7 @@ import {
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
 import { prepareRequest } from "./shared/ssh";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -33,6 +34,43 @@ export type FileTransferCommandArgs = {
 
 const renderDurationSec = (s: number) =>
   s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+
+// Standard POSIX shell exit code for "command not found".
+const COMMAND_NOT_FOUND_EXIT_CODE = 127;
+const SUCCESS_EXIT_CODE = 0;
+
+/**
+ * Best-effort cleanup of the uploaded S3 object. The CLI already holds an
+ * authenticated S3 client, so it deletes directly and the client also
+ * auto-refreshes credentials.
+ *
+ * This must never fail an otherwise-successful transfer: the object still
+ * expires via the bucket's lifecycle policy, so a failed delete is harmless.
+ * The result therefore defaults to success — errors are only surfaced under
+ * --debug.
+ */
+const deleteUploadedObject = async (
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  debug?: boolean
+) => {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    if (debug) {
+      print2(`Deleted s3://${bucket}/${key} from the bucket.`);
+    }
+  } catch (err) {
+    print2(
+      `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, so this is safe to ignore. You may delete this object manually, or it will be removed automatically by the file-transfer bucket's lifecycle expiration rule.`
+    );
+    // The raw error is debugging detail, not outcome info.
+    if (debug) {
+      const message = err instanceof Error ? err.message : String(err);
+      print2(`Delete error: ${message}`);
+    }
+  }
+};
 
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
@@ -94,21 +132,6 @@ const fileTransferAction = async (
 
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
-      const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
-        await generateSignedUrl(
-          authn,
-          s3,
-          { ...target, key: uploadKey },
-          "delete",
-          args.debug
-        );
-
-      // TODO: remove logging actual credential but log expiry when we remove the launchdarkly file-transfer flag
-      if (args.debug) {
-        print2(
-          `DELETE (${renderDurationSec(deleteExpirySeconds)}): ${deleteUrl}`
-        );
-      }
 
       print2(`Uploading ${args.source}...`);
 
@@ -180,7 +203,6 @@ const fileTransferAction = async (
           authn,
           s3,
           { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
-          "get",
           args.debug
         );
       if (args.debug) {
@@ -209,15 +231,20 @@ const fileTransferAction = async (
         sshHostKeys,
       });
 
-      // TODO update comment when we add fallback downloader if needed
-      if (exitCode === 127) {
+      // curl is the only downloader today; revisit this branch if we add fallbacks
+      if (exitCode === COMMAND_NOT_FOUND_EXIT_CODE) {
         throw `curl not found on ${args.destination}. The file is in S3 — install curl on the destination instance and re-run file-transfer command`;
       }
-      if (exitCode !== null && exitCode !== 0) {
+
+      if (exitCode === SUCCESS_EXIT_CODE) {
+        // Success path: the file is on the instance, so clean it from the bucket.
+        print2(`Downloaded to ${remotePath}.`);
+        await deleteUploadedObject(s3, target.bucket, uploadKey, args.debug);
+      } else if (exitCode === null) {
+        throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
+      } else {
         throw `Remote download exited with code ${exitCode}`;
       }
-
-      print2(`Downloaded to ${remotePath}.`);
 
       // Force exit to prevent hanging due to orphaned child processes (e.g.,
       // session-manager-plugin) holding open file descriptors. See:
