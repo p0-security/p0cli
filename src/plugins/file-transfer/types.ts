@@ -23,7 +23,6 @@ export type FileTransferPermission = {
     objectPrefix: string;
   };
   destination: string;
-  publicKey: string;
   type: "resource";
 };
 
