@@ -96,7 +96,7 @@ export const fileTransferCommand = (yargs: yargs.Argv) =>
         })
         .option("debug", {
           type: "boolean",
-          describe: "Print debug information, including signed URLs.",
+          describe: "Print debug information.",
         }),
     fileTransferAction
   );
@@ -120,7 +120,7 @@ const fileTransferAction = async (
       await validateSshInstall(authn, args);
       const { publicKey, privateKey } = await createKeyPair();
 
-      // TODO need to add file transfer verify it's installed
+      // TODO need to add verify file transfer installed?
 
       // Fail before requesting backend approval if the source can't be uploaded —
       // a missing path or directory would otherwise only surface mid-upload, after

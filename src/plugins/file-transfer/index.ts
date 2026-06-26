@@ -92,7 +92,6 @@ export const provisionTransferRequest = async (
       prefix: objectPrefix,
       region: bucketRegion,
       awsSpec,
-      sshSpec,
     },
     // needed for further delegate ssh request processing within file-transfer command
     delegatedSshRequest,
