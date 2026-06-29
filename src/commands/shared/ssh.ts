@@ -99,7 +99,7 @@ export const SSH_PROVIDERS: Record<
   "self-hosted": selfHostedSshProvider,
 };
 
-const validateSshInstall = async (
+export const validateSshInstall = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>
 ) => {
@@ -172,21 +172,7 @@ export const provisionRequest = async (
     );
   };
 
-  // Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
-  const requestErrorHandler = (err: any) => {
-    if (typeof err === "string") {
-      print2(err);
-      if (
-        err.startsWith("Could not find any instances matching") &&
-        destination.includes("@")
-      ) {
-        print2(
-          "Hint: The instance name appears to include a username. The username should be omitted."
-        );
-      }
-    }
-    sys.exit(1);
-  };
+  const requestErrorHandler = newSshRequestErrorHandler(destination);
 
   let response;
   if (options?.approvedOnly) {
@@ -238,7 +224,7 @@ const pluginToCliRequest = async (
   options: { debug?: boolean; publicKey: string }
 ): Promise<PermissionRequest<CliSshRequest>> =>
   await SSH_PROVIDERS[request.permission.provider].toCliRequest(
-    request as any,
+    request,
     options
   );
 
@@ -258,36 +244,68 @@ export const prepareRequest = async (
 
     const { requestId, publicKey, provisionedRequest } = result;
 
-    const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
-
     span.setAttribute("provider", provisionedRequest.permission.provider);
     span.setAttribute("requestId", requestId);
-
-    await sshProvider.ensureInstall({ debug: args.debug });
-
-    await sshProvider.submitPublicKey?.(
+    const { request, sshProvider, sshHostKeys } = await setupSshConnection(
       authn,
-      provisionedRequest,
+      args,
       requestId,
       publicKey,
-      args.debug
+      provisionedRequest
     );
-
-    await sshProvider.ensureInstall();
-
-    const cliRequest = await pluginToCliRequest(provisionedRequest, {
-      ...args,
-      publicKey,
-    });
-
-    const request = sshProvider.requestToSsh(cliRequest);
-
-    const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
-      ...args,
-      authn,
-      requestId,
-    });
 
     return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
   });
+};
+
+// Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
+export const newSshRequestErrorHandler =
+  (destination: string) => (err: any) => {
+    if (typeof err === "string") {
+      print2(err);
+      if (
+        err.startsWith("Could not find any instances matching") &&
+        destination.includes("@")
+      ) {
+        print2(
+          "Hint: The instance name appears to include a username. The username should be omitted."
+        );
+      }
+    }
+    sys.exit(1);
+  };
+
+export const setupSshConnection = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
+  requestId: string,
+  publicKey: string,
+  provisionedRequest: PermissionRequest<PluginSshRequest>
+) => {
+  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+
+  await sshProvider.ensureInstall({ debug: args.debug });
+
+  await sshProvider.submitPublicKey?.(
+    authn,
+    provisionedRequest,
+    requestId,
+    publicKey,
+    args.debug
+  );
+
+  const cliRequest = await pluginToCliRequest(provisionedRequest, {
+    ...args,
+    publicKey,
+  });
+
+  const request = sshProvider.requestToSsh(cliRequest);
+
+  const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
+    ...args,
+    authn,
+    requestId,
+  });
+
+  return { request, sshProvider, sshHostKeys };
 };

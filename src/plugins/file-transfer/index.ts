@@ -9,7 +9,9 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { FileTransferCommandArgs } from "../../commands/file-transfer";
+import { decodeProvisionStatus } from "../../commands/shared";
 import { request } from "../../commands/shared/request";
+import { newSshRequestErrorHandler } from "../../commands/shared/ssh";
 import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
@@ -19,6 +21,7 @@ import { FileTransferPermissionSpec } from "./types";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
+import { sys } from "typescript";
 import yargs from "yargs";
 
 export const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
@@ -26,8 +29,12 @@ const MIN_URL_EXPIRY_THRESHOLD_SECONDS = 60;
 
 export const provisionTransferRequest = async (
   authn: Authn,
-  args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>
+  args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>,
+  publicKey: string
 ) => {
+  // Always prints the error, but adds a hint if we think a username was included in the destination instance name by mistake.
+  const requestErrorHandler = newSshRequestErrorHandler(args.destination);
+
   const response = await request("request")<
     PermissionRequest<FileTransferPermissionSpec>
   >(
@@ -37,31 +44,58 @@ export const provisionTransferRequest = async (
         "file-transfer",
         "session",
         args.destination,
+        "--public-key",
+        publicKey,
         ...(args.reason ? ["--reason", args.reason] : []),
       ],
       wait: true,
     },
     authn,
     { message: "approval-required" }
-  );
+  ).catch(requestErrorHandler);
 
   if (!response) {
     throw "Did not receive a response from server";
   }
+
+  const result = await decodeProvisionStatus<FileTransferPermissionSpec>(
+    response.request
+  );
+  if (!result) sys.exit(1);
+
+  const { id: requestId } = response;
+  const { status, principal } = response.request;
 
   const awsSpec = getDelegate(response.request.delegation, "aws");
   if (!awsSpec) {
     throw "Backend granted file-transfer access, but there was an error getting AWS access details";
   }
 
+  const sshSpec = getDelegate(response.request.delegation, "ssh");
+
+  if (!sshSpec) {
+    throw "Backend granted file-transfer access, but there was an error getting SSH access details";
+  }
+
+  const delegatedSshRequest = {
+    ...sshSpec,
+    status,
+    principal,
+  };
+
   const { bucketName, bucketRegion, objectPrefix } =
     response.request.permission.resource;
 
   return {
-    bucket: bucketName,
-    prefix: objectPrefix,
-    region: bucketRegion,
-    awsSpec,
+    target: {
+      bucket: bucketName,
+      prefix: objectPrefix,
+      region: bucketRegion,
+      awsSpec,
+    },
+    // needed for further delegate ssh request processing within file-transfer command
+    delegatedSshRequest,
+    requestId,
   };
 };
 

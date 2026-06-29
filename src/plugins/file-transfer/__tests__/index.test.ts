@@ -8,21 +8,31 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { FileTransferCommandArgs } from "../../../commands/file-transfer";
+import { decodeProvisionStatus } from "../../../commands/shared";
+import { request } from "../../../commands/shared/request";
+import { Authn } from "../../../types/identity";
 import { awsCloudAuth } from "../../aws/auth";
 import type { AwsResourcePermissionSpec } from "../../aws/types";
-import { generateSignedUrl, MAX_SECONDS_TO_EXPIRE_GET_URL } from "../index";
+import {
+  generateSignedUrl,
+  MAX_SECONDS_TO_EXPIRE_GET_URL,
+  provisionTransferRequest,
+} from "../index";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import yargs from "yargs";
 
 vi.mock("../../aws/auth", () => ({ awsCloudAuth: vi.fn() }));
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: vi.fn().mockResolvedValue("https://signed.example/url"),
 }));
-// vi.mock("@aws-sdk/client-s3", () => ({
-//   DeleteObjectCommand: vi.fn(),
-//   GetObjectCommand: vi.fn(),
-// }));
+vi.mock("../../../commands/shared/request", () => ({ request: vi.fn() }));
+vi.mock("../../../commands/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../commands/shared")>()),
+  decodeProvisionStatus: vi.fn(),
+}));
 
 const FIVE_MINUTES = 5 * 60;
 const ONE_HOUR = 60 * 60;
@@ -137,5 +147,65 @@ describe("generateSignedUrl()", () => {
       expect.any(GetObjectCommand),
       { expiresIn: MAX_SECONDS_TO_EXPIRE_GET_URL }
     );
+  });
+});
+
+describe("provisionTransferRequest()", () => {
+  // `request` is curried: request("request") returns the inner fn that calls the API, so we mock both layers.
+  const mockRequest = vi.mocked(request);
+  const mockInnerRequest = vi.fn();
+  const mockDecodeProvisionStatus = vi.mocked(decodeProvisionStatus);
+  const mockAuthn = {} as unknown as Authn;
+  const publicKey = "ssh-ed25519 AAAA...";
+  const args = {
+    $0: "p0",
+    _: ["file-transfer"],
+    source: "file.txt",
+    destination: "i-0123456789",
+  } satisfies yargs.ArgumentsCamelCase<FileTransferCommandArgs>;
+
+  // Backend strips `type` from delegate entries (the array key is the discriminant); getDelegate reattaches it.
+  const awsDelegate = {
+    key: "aws",
+    request: { permission: {}, generated: {} },
+  };
+  const sshDelegate = {
+    key: "ssh",
+    request: { permission: {}, generated: {} },
+  };
+  const backendRequestResponse = {
+    id: "req-abc",
+    request: {
+      status: "DONE",
+      principal: "user@example.com",
+      delegation: [] as { key: string; request: object }[],
+    },
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequest.mockReturnValue(mockInnerRequest);
+    mockDecodeProvisionStatus.mockResolvedValue(true);
+    backendRequestResponse.request.delegation = [];
+  });
+
+  it("throws when the aws delegate is missing", async () => {
+    // only has ssh delegate, should have both ssh and aws
+    backendRequestResponse.request.delegation = [sshDelegate];
+    mockInnerRequest.mockResolvedValue(backendRequestResponse);
+
+    await expect(
+      provisionTransferRequest(mockAuthn, args, publicKey)
+    ).rejects.toMatch(/AWS access details/);
+  });
+
+  it("throws when the ssh delegate is missing", async () => {
+    // only has aws delegate, should have both ssh and aws
+    backendRequestResponse.request.delegation = [awsDelegate];
+
+    mockInnerRequest.mockResolvedValue(backendRequestResponse);
+
+    await expect(
+      provisionTransferRequest(mockAuthn, args, publicKey)
+    ).rejects.toMatch(/SSH access details/);
   });
 });

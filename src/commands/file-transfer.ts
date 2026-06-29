@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { createKeyPair } from "../common/keys";
 import { retryWithSleep } from "../common/retry";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
@@ -18,7 +19,8 @@ import {
   provisionTransferRequest,
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
-import { prepareRequest } from "./shared/ssh";
+import { setupSshConnection, validateSshInstall } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
@@ -94,11 +96,15 @@ export const fileTransferCommand = (yargs: yargs.Argv) =>
         })
         .option("debug", {
           type: "boolean",
-          describe: "Print debug information, including signed URLs.",
+          describe: "Print debug information.",
         }),
     fileTransferAction
   );
 
+/** Transfers files between a local and AWS remote host using s3. Allows for faster transfer speeds than scp.
+ *
+ * Implicitly gains access to the SSH resource.
+ */
 const fileTransferAction = async (
   args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>
 ) => {
@@ -107,6 +113,14 @@ const fileTransferAction = async (
     async (span) => {
       span.setAttribute("source", args.source);
       span.setAttribute("destination", args.destination);
+
+      const authn = await authenticate(args);
+
+      // file transfer requires ssh to be installed
+      await validateSshInstall(authn, args);
+      const { publicKey, privateKey } = await createKeyPair();
+
+      // TODO need to add verify file transfer installed?
 
       // Fail before requesting backend approval if the source can't be uploaded —
       // a missing path or directory would otherwise only surface mid-upload, after
@@ -121,10 +135,10 @@ const fileTransferAction = async (
         throw `Source path is not a regular file: ${args.source}`;
       }
 
-      const authn = await authenticate(args);
-
       print2("Requesting file-transfer access...");
-      const target = await provisionTransferRequest(authn, args);
+
+      const { target, delegatedSshRequest, requestId } =
+        await provisionTransferRequest(authn, args, publicKey);
       print2(`Access approved for s3://${target.bucket}/${target.prefix}`);
 
       // append original basename so the S3 object preserves the original filename.
@@ -181,8 +195,17 @@ const fileTransferAction = async (
 
       print2("Uploaded.");
 
-      // TODO we need to remove this second request. it should be included in file transfer delegation. Will be removed in future ticket
-      print2(`Requesting download access on ${args.destination}...`);
+      print2(`Preparing to ssh into ${args.destination}...`);
+
+      await cleanupStaleSshConfigs(args.debug);
+
+      const { request, sshProvider, sshHostKeys } = await setupSshConnection(
+        authn,
+        args,
+        requestId,
+        publicKey,
+        delegatedSshRequest
+      );
 
       // Drop `source` (local file path) before passing to SSH plumbing —
       // `createCommand` uses `"source" in args` to branch between scp and ssh path, and we want the ssh branch here.
@@ -192,9 +215,6 @@ const fileTransferAction = async (
         arguments: [],
         sshOptions: [],
       };
-
-      const { request, requestId, privateKey, sshProvider, sshHostKeys } =
-        await prepareRequest(authn, sshCmdArgs, args.destination);
 
       // Sign GET URL now so the 5-min TTL starts after approval clears,
       // not before — otherwise long approval waits could expire the URL.
@@ -206,7 +226,9 @@ const fileTransferAction = async (
           args.debug
         );
       if (args.debug) {
-        print2(`GET    (${renderDurationSec(getExpirySeconds)}): ${getUrl}`);
+        print2(
+          `GET URL created. Expiry:${renderDurationSec(getExpirySeconds)}`
+        );
       }
 
       const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
@@ -238,7 +260,7 @@ const fileTransferAction = async (
 
       if (exitCode === SUCCESS_EXIT_CODE) {
         // Success path: the file is on the instance, so clean it from the bucket.
-        print2(`Downloaded to ${remotePath}.`);
+        print2(`Downloaded to ${remotePath}. File transfer succeeded.`);
         await deleteUploadedObject(s3, target.bucket, uploadKey, args.debug);
       } else if (exitCode === null) {
         throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
