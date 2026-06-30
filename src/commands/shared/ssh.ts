@@ -15,7 +15,8 @@ import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
-import { azureSshProvider } from "../../plugins/azure/ssh";
+import { azureBastionSshProvider } from "../../plugins/azure/ssh-bastion";
+import { newAzureJumpHostSshProvider } from "../../plugins/azure/ssh-jump-host";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
@@ -25,6 +26,7 @@ import {
   CliSshRequest,
   PluginSshRequest,
   SshProvider,
+  SshRequest,
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
@@ -89,14 +91,38 @@ export type SshAdditionalSetup = {
   teardown: () => Promise<void>;
 };
 
-export const SSH_PROVIDERS: Record<
-  SupportedSshProvider,
-  SshProvider<any, any, any, any>
-> = {
-  aws: awsSshProvider,
-  azure: azureSshProvider,
-  gcloud: gcpSshProvider,
-  "self-hosted": selfHostedSshProvider,
+/** Returns the SSH provider implementation for a request.
+ *
+ * Accepts both shapes the CLI holds a request in: the backend permission shape
+ * and the CLI request shape (e.g. the request JSON handed to ssh-proxy).
+ *
+ * Most providers have a single implementation; Azure has one per connection
+ * method (Azure Bastion tunnel vs. SSH jump host), so selection depends on the
+ * request, not just the provider name. Some implementations are stateful
+ * (they carry locally generated credentials), so use the same returned
+ * instance for all of a request's provider calls. */
+export const newSshProvider = (
+  request: PermissionRequest<PluginSshRequest> | SshRequest
+): SshProvider<any, any, any, any> => {
+  const provider =
+    "permission" in request ? request.permission.provider : request.type;
+
+  switch (provider) {
+    case "aws":
+      return awsSshProvider;
+    case "gcloud":
+      return gcpSshProvider;
+    case "self-hosted":
+      return selfHostedSshProvider;
+    case "azure": {
+      const jumpHost =
+        "permission" in request
+          ? request.permission.provider === "azure" &&
+            request.permission.jumpHost
+          : request.type === "azure" && request.jumpHost;
+      return jumpHost ? newAzureJumpHostSshProvider() : azureBastionSshProvider;
+    }
+  }
 };
 
 const validateSshInstall = async (
@@ -237,10 +263,7 @@ const pluginToCliRequest = async (
   request: PermissionRequest<PluginSshRequest>,
   options: { debug?: boolean; publicKey: string }
 ): Promise<PermissionRequest<CliSshRequest>> =>
-  await SSH_PROVIDERS[request.permission.provider].toCliRequest(
-    request as any,
-    options
-  );
+  await newSshProvider(request).toCliRequest(request as any, options);
 
 export const prepareRequest = async (
   authn: Authn,
@@ -258,7 +281,7 @@ export const prepareRequest = async (
 
     const { requestId, publicKey, provisionedRequest } = result;
 
-    const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+    const sshProvider = newSshProvider(provisionedRequest);
 
     span.setAttribute("provider", provisionedRequest.permission.provider);
     span.setAttribute("requestId", requestId);

@@ -10,8 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import {
   CommandArgs,
+  newSshProvider,
   ScpCommandArgs,
-  SSH_PROVIDERS,
   SshAdditionalSetup,
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
@@ -26,7 +26,6 @@ import {
   SshHostKeyInfo,
   SshProvider,
   SshRequest,
-  SupportedSshProvider,
 } from "../../types/ssh";
 import { delay, createCleanChildEnv, getOperatingSystem } from "../../util";
 import { AwsCredentials } from "../aws/types";
@@ -193,7 +192,6 @@ type SpawnSshNodeOptions = {
   endTime: number;
   abortController?: AbortController;
   stdio: [StdioNull, StdioNull, StdioPipe];
-  provider: SupportedSshProvider;
   request: SshRequest;
   debug?: boolean;
   isAccessPropagationPreTest?: boolean;
@@ -205,7 +203,7 @@ async function spawnSshNode(
   options: SpawnSshNodeOptions
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const provider = SSH_PROVIDERS[options.provider];
+    const provider = newSshProvider(options.request);
 
     if (options.debug) {
       const gerund = options.isAccessPropagationPreTest
@@ -562,7 +560,6 @@ const preTestAccessPropagationIfNeeded = async <
       args,
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
-      provider: request.type,
       request,
       endTime: endTime,
       isAccessPropagationPreTest: true,
@@ -692,7 +689,6 @@ export const sshOrScp = async (args: {
         args: commandArgs,
         stdio: ["inherit", "inherit", "pipe"],
         debug,
-        provider: request.type,
         request,
         endTime: endTime,
         onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
@@ -728,7 +724,8 @@ export const sshProxy = async (args: {
 
   const abortController = new AbortController();
 
-  const setupData = await sshProvider.setupProxy?.(request, {
+  const setupData = await sshProvider.setupProxy?.(authn, request, {
+    requestId,
     debug,
     abortController,
   });
@@ -773,7 +770,6 @@ export const sshProxy = async (args: {
       args: proxyArgs,
       stdio: ["inherit", "inherit", "pipe"],
       debug,
-      provider: request.type,
       request,
       endTime: endTime,
     });

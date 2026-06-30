@@ -19,11 +19,7 @@ import {
   getAppName,
   P0_PATH,
 } from "../util";
-import {
-  prepareRequest,
-  SshResolveCommandArgs,
-  SSH_PROVIDERS,
-} from "./shared/ssh";
+import { prepareRequest, SshResolveCommandArgs } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import fs from "fs";
 import path from "path";
@@ -115,25 +111,19 @@ export const sshResolveAction = async (
     debug: args.debug,
   }).catch(silentlyExit);
 
-  const { request, requestId, provisionedRequest, sshHostKeys } =
+  const { request, requestId, provisionedRequest, sshHostKeys, sshProvider } =
     await prepareRequest(authn, args, args.destination, {
       approvedOnly: true,
       quiet: args.quiet,
     }).catch(requestErrorHandler);
 
-  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
-
   if (args.debug) {
     print2("Generating Keys");
   }
-  const keys = await sshProvider?.generateKeys?.(
-    authn,
-    provisionedRequest.permission.resource,
-    {
-      requestId,
-      debug: args.debug,
-    }
-  );
+  const keys = await sshProvider.generateKeys?.(authn, request, {
+    requestId,
+    debug: args.debug,
+  });
 
   const tmpFile = tmp.fileSync();
 
@@ -151,6 +141,12 @@ export const sshResolveAction = async (
     : "";
   const hostKeysInfo = sshHostKeys
     ? `UserKnownHostsFile ${sshHostKeys.path}`
+    : "";
+
+  // Bound the ssh handshake for providers that request it (e.g. Azure jump hosts), so an offline/unreachable
+  // target VM surfaces a prompt error instead of hanging indefinitely.
+  const connectTimeoutInfo = sshProvider.sshConnectTimeoutSeconds
+    ? `ConnectTimeout ${sshProvider.sshConnectTimeoutSeconds}`
     : "";
 
   const alias = sshHostKeys?.alias ?? request?.id;
@@ -177,6 +173,7 @@ export const sshResolveAction = async (
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
+  ${connectTimeoutInfo}
   PasswordAuthentication no
   ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name}${orgFlag}${debugFlag}
   ${hostKeysInfo}

@@ -10,6 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { print2 } from "../../drivers/stdio";
 import { exec, osSafeCommand } from "../../util";
+import { createTempDirectoryForKeys } from "../ssh/shared";
+import { azSetSubscription } from "./auth";
+import { AzureSshRequest } from "./types";
 import path from "node:path";
 
 // We pass in the name of the certificate file to generate
@@ -25,6 +28,47 @@ export const azSshCertCommand = (keyPath: string) =>
     "--file",
     path.join(keyPath, AD_CERT_FILENAME),
   ]);
+
+export type AzureSshKeys = {
+  privateKeyPath: string;
+  certificatePath: string;
+  cleanup: () => Promise<void>;
+};
+
+/** Mints a fresh SSH key pair and Azure AD certificate in a temporary directory.
+ *
+ * This is the single entry point for creating any Azure SSH credential the CLI
+ * needs, whether for the target hop or for an intermediate jump-host hop. The
+ * caller owns the returned `cleanup`.
+ */
+export const generateAzureSshKeys = async (
+  request: AzureSshRequest,
+  options: { debug?: boolean } = {}
+): Promise<AzureSshKeys> => {
+  // The subscription ID here is used to ensure that the user is logged in to the correct tenant/directory.
+  // As long as a subscription ID in the correct tenant is provided, this will work; it need not be the same
+  // subscription as which contains the Bastion host or the target VM.
+  const linuxUserName = await azSetSubscription(request, options);
+
+  if (linuxUserName !== request.linuxUserName) {
+    throw `Azure CLI login returned a different user name than expected. Expected: ${request.linuxUserName}, Actual: ${linuxUserName}`;
+  }
+
+  const { path: keyPath, cleanup } = await createTempDirectoryForKeys();
+
+  try {
+    await generateSshKeyAndAzureAdCert(keyPath, options);
+  } catch (error: any) {
+    await cleanup();
+    throw error;
+  }
+
+  return {
+    privateKeyPath: path.join(keyPath, AD_SSH_KEY_PRIVATE),
+    certificatePath: path.join(keyPath, AD_CERT_FILENAME),
+    cleanup,
+  };
+};
 
 export const generateSshKeyAndAzureAdCert = async (
   keyPath: string,

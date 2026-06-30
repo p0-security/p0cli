@@ -28,21 +28,42 @@ export type AzureSsh = CliPermissionSpec<
   AzureLocalData
 >;
 
+/** A jump host (a regular VM acting as an SSH bastion) that the target VM is
+ * reached through via a plain SSH ProxyCommand (`ssh -W`). */
+export type AzureSshJumpHost = {
+  id: string;
+  roleId: string;
+  ip: string | undefined;
+};
+
 export type AzureSshPermission = CommonSshPermissionSpec & {
   provider: "azure";
   destination: string;
   parent: string | undefined;
+  alias: string | undefined;
   group: string | undefined;
-  bastionHostId: string;
-  principal: string;
+  sudo: boolean | undefined;
+  region: string | undefined;
+  publicKey: string | undefined;
+  zone: string | undefined;
+  // Exactly one of `bastionHost` (Azure Bastion tunnel) or `jumpHost` (SSH
+  // ProxyCommand) is expected to be present for a connectable target.
+  bastionHost: { id: string } | undefined;
+  jumpHost: AzureSshJumpHost | undefined;
+  accessRoleId: string;
   resource: {
-    instanceId: string;
     instanceName: string;
+    instanceId: string;
+    subscriptionId: string;
     subscriptionName: string;
     resourceGroupId: string;
-    subscriptionId: string;
+    groupTag: { key: string; value: string } | undefined;
     region: string;
-    networkInterfaceIds: string[];
+    networkInterface: {
+      id: string;
+      subnetId: string;
+      privateIp: string | undefined;
+    };
   };
 };
 
@@ -51,17 +72,20 @@ export type AzureNodeSpec = {
   sudo?: boolean;
 };
 
-export type AzureBastionSpec = {
-  bastionId: string;
-};
-
 export type AzureSshRequest = AzureNodeSpec &
-  AzureBastionSpec &
   AzureLocalData & {
     type: "azure";
-    id: "localhost"; // Azure SSH always connects to the local tunnel
+    // "localhost" for the Azure Bastion tunnel flow; the target VM's private IP
+    // for the jump host flow.
+    id: string;
     subscriptionId: string;
     directoryId: string;
+    // Present for the Azure Bastion flow.
+    bastionId: string | undefined;
+    // Present for the jump host flow.
+    jumpHost: AzureSshJumpHost | undefined;
+    // The target VM's private IP (used as `id` for the jump host flow).
+    privateIp: string | undefined;
   };
 
 export type AzureLocalData = {

@@ -118,8 +118,13 @@ export type SshProvider<
   ) => Promise<SshAdditionalSetup>;
 
   setupProxy?: (
+    authn: Authn,
     request: SR,
-    options: { debug?: boolean; abortController: AbortController }
+    options: {
+      requestId: string;
+      debug?: boolean;
+      abortController: AbortController;
+    }
   ) => Promise<{
     teardown: () => Promise<void>;
     port: string;
@@ -149,6 +154,11 @@ export type SshProvider<
 
   /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
   proxyCommand: (request: SR, port?: string) => string[];
+
+  /** When set, generated SSH configs bound the handshake with this timeout so an unreachable target surfaces a
+   * prompt, retryable error instead of hanging indefinitely. Used by providers whose ProxyCommand cannot itself
+   * bound the full path to the target (e.g. Azure jump hosts). */
+  sshConnectTimeoutSeconds?: number;
 
   /** Each element in the returned array is a command that can be run to reproduce the
    * steps of logging in the user to the ssh session. */
