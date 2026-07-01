@@ -295,7 +295,7 @@ async function spawnSshNode(
           const knownError = connectionErrorMessage();
           reject(
             knownError ??
-              `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
+              `Access did not propagate through ${provider.friendlyName} in time. If you had existing access, try revoking it and re-running the command to request fresh access. ${getContactMessage()}`
           );
           return;
         }
