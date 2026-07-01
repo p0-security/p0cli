@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../../../drivers/stdio";
-import { sshProxy } from "../index";
+import { redactPresignedUrls, sshProxy } from "../index";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
@@ -222,5 +222,38 @@ describe("GCP connection failure diagnostics", () => {
     expect(exitCode).toBe(1);
     const printed = (print2 as Mock).mock.calls.map((call) => String(call[0]));
     expect(printed.some((line) => line.includes("OS Login"))).toBe(false);
+  });
+});
+
+describe("redactPresignedUrls", () => {
+  const presigned =
+    "https://bucket.s3.amazonaws.com/path/to/key?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIA%2F20260701&X-Amz-Signature=deadbeefcafe&X-Amz-Security-Token=abc123";
+
+  it("strips the query string of a presigned URL, keeping host and key visible", () => {
+    expect(
+      redactPresignedUrls(["-sSfL", presigned, "-o", "/home/u/file"])
+    ).toEqual([
+      "-sSfL",
+      "https://bucket.s3.amazonaws.com/path/to/key?<redacted-presigned-query>",
+      "-o",
+      "/home/u/file",
+    ]);
+  });
+
+  it("redacts even when the arg is wrapped in the shell-escaping quotes createCommand adds", () => {
+    const [redacted] = redactPresignedUrls([`"${presigned}"`]);
+    expect(redacted).not.toContain("deadbeefcafe");
+    expect(redacted).not.toContain("X-Amz-Security-Token");
+  });
+
+  it("leaves non-presigned args untouched", () => {
+    const args = [
+      "ssh",
+      "-p",
+      "22",
+      "user@host",
+      "https://example.com/plain?a=b",
+    ];
+    expect(redactPresignedUrls(args)).toEqual(args);
   });
 });

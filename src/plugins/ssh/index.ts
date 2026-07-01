@@ -515,6 +515,18 @@ const addScpArgs = (args: ScpCommandArgs) => {
 };
 
 /** Converts arguments for manual execution - arguments may have to be quoted or certain characters escaped when executing the commands from a shell */
+// Presigned URLs carry the AWS signature (and often credentials + session
+// token) in their query string, so the URL itself is a live download credential.
+// Strip the query before printing so debug repro output can't leak it.
+export const redactPresignedUrls = (args: string[]) =>
+  args.map((arg) => {
+    if (!arg.includes("X-Amz-Signature")) return arg;
+    const queryIndex = arg.indexOf("?");
+    return queryIndex < 0
+      ? arg
+      : `${arg.slice(0, queryIndex)}?<redacted-presigned-query>`;
+  });
+
 const transformForShell = (args: string[]) => {
   return args.map((arg) => {
     // The ProxyCommand option must be surrounded by single quotes
@@ -626,7 +638,7 @@ export const sshOrScp = async (args: {
       const reproCommands = sshProvider.reproCommands(request, setupData) ?? [];
       const repro = [
         ...reproCommands,
-        `${command} ${transformForShell(commandArgs).join(" ")}`,
+        `${command} ${transformForShell(redactPresignedUrls(commandArgs)).join(" ")}`,
       ].join("\n");
       print2(
         `Execute the following commands to create a similar SSH/SCP session:\n*** COMMANDS BEGIN ***\n${repro}\n*** COMMANDS END ***"\n`
