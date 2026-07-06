@@ -63,3 +63,5 @@ Each provider's flow is skipped with a warning when its node is not configured â
 - Your `~/.ssh/config` delegating to this repository's CLI (see "The ssh flow" above).
 - Cloud CLIs installed for the providers under test (`aws` + session-manager plugin, `az`, `gcloud`), plus a system `ssh`/`scp`.
 - Expect long runtimes: access propagation can take several minutes per provider; individual tests time out after 20 minutes.
+
+Tests against real cloud infra hit occasional transient failures (propagation timing, intermittent connection errors), so each test retries up to 3 times before failing the run (see `retry` in `vitest.e2e.config.mts`).

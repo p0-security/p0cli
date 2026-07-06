@@ -32,5 +32,10 @@ export default defineConfig({
     // SSH access propagation alone can take up to ~10 minutes per provider.
     testTimeout: 20 * 60 * 1000,
     hookTimeout: 5 * 60 * 1000,
+
+    // These tests drive real cloud infra and hit occasional transient
+    // failures (propagation timing, intermittent connection errors), so
+    // retry before failing the run.
+    retry: 3,
   },
 });
