@@ -88,10 +88,31 @@ export type RunOptions = {
  * shell, so this is purely for the log. */
 const shellQuote = (arg: string) => (/\s/.test(arg) ? `"${arg}"` : arg);
 
+const STRIPPED_ENV_PREFIXES = ["npm_", "VITEST", "TINYPOOL_"];
+const STRIPPED_ENV_KEYS = new Set([
+  // Would silently turn every ssh test into a sudo request; the suite always
+  // controls sudo explicitly.
+  "P0_SSH_SUDO",
+  "NODE_ENV",
+  "TEST",
+  "MODE",
+  "DEV",
+  "PROD",
+  "SSR",
+  "BASE_URL",
+  "FORCE_TTY",
+  "COLOR",
+  "NODE_CHANNEL_FD",
+]);
+
 const childEnv = (extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
-  // P0_SSH_SUDO would silently turn every ssh test into a sudo request, so the
-  // suite always controls sudo explicitly.
-  const { P0_SSH_SUDO: _ignored, ...env } = process.env;
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) =>
+        !STRIPPED_ENV_KEYS.has(key) &&
+        !STRIPPED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))
+    )
+  );
   return { ...env, ...extra };
 };
 

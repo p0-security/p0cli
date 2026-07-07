@@ -65,3 +65,7 @@ Each provider's flow is skipped with a warning when its node is not configured â
 - Expect long runtimes: access propagation can take several minutes per provider; individual tests time out after 20 minutes.
 
 Tests against real cloud infra hit occasional transient failures (propagation timing, intermittent connection errors), so each test retries up to 3 times before failing the run (see `retry` in `vitest.e2e.config.mts`).
+
+## Troubleshooting
+
+If the plain-`ssh` step consistently fails with `Could not resolve hostname` while a manual `ssh <node-id>` works, check the p0 process's environment size. The `Match exec` command runs through your login shell, so an oversized shell profile (e.g. a `~/.zshenv` that grows `PATH` on every invocation) can push the resolved environment to a size where `p0 ssh-resolve` crashes and the `Include` never applies. `zsh -c 'printf %s "$PATH" | wc -c'` should be well under a few KB.
