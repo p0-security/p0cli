@@ -123,6 +123,30 @@ describe("sshResolveAction", () => {
     }
   });
 
+  it.each([-5, 0, 2.5, NaN])(
+    "omits ConnectTimeout when the provider sets an invalid sshConnectTimeoutSeconds (%s)",
+    async (invalidTimeout) => {
+      const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+      SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = invalidTimeout;
+      try {
+        await sshResolveAction({ ...baseArgs });
+
+        const configWriteCall = (fs.writeFileSync as Mock).mock.calls.find(
+          ([path]) => typeof path === "string" && path.endsWith(".config")
+        );
+        expect(configWriteCall).toBeDefined();
+        const configContent = configWriteCall![1] as string;
+        expect(configContent).not.toContain("ConnectTimeout");
+      } finally {
+        if (originalTimeout === undefined) {
+          delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+        } else {
+          SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+        }
+      }
+    }
+  );
+
   it("omits ConnectTimeout when the provider does not set sshConnectTimeoutSeconds", async () => {
     await sshResolveAction({ ...baseArgs });
 

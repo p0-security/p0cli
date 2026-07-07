@@ -71,6 +71,15 @@ export const sshResolveCommand = (yargs: yargs.Argv) =>
     sshResolveAction
   );
 
+export const connectTimeoutDirective = (
+  timeoutSeconds: number | undefined
+): string =>
+  timeoutSeconds !== undefined &&
+  Number.isInteger(timeoutSeconds) &&
+  timeoutSeconds > 0
+    ? `ConnectTimeout ${timeoutSeconds}`
+    : "";
+
 /** Determine if an SSH backend is accessible to the user and prepares local files for access
  *
  * Creates an access request with approvedOnly and creates any
@@ -155,9 +164,9 @@ export const sshResolveAction = async (
 
   // Bound the ssh handshake for providers that request it (e.g. Azure jump hosts), so an offline/unreachable
   // target VM surfaces a prompt error instead of hanging indefinitely.
-  const connectTimeoutInfo = sshProvider?.sshConnectTimeoutSeconds
-    ? `ConnectTimeout ${sshProvider.sshConnectTimeoutSeconds}`
-    : "";
+  const connectTimeoutInfo = connectTimeoutDirective(
+    sshProvider?.sshConnectTimeoutSeconds
+  );
 
   const alias = sshHostKeys?.alias ?? request?.id;
 
