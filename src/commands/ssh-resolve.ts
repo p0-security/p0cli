@@ -153,6 +153,12 @@ export const sshResolveAction = async (
     ? `UserKnownHostsFile ${sshHostKeys.path}`
     : "";
 
+  // Bound the ssh handshake for providers that request it (e.g. Azure jump hosts), so an offline/unreachable
+  // target VM surfaces a prompt error instead of hanging indefinitely.
+  const connectTimeoutInfo = sshProvider?.sshConnectTimeoutSeconds
+    ? `ConnectTimeout ${sshProvider.sshConnectTimeoutSeconds}`
+    : "";
+
   const alias = sshHostKeys?.alias ?? request?.id;
 
   const hostKeyAlias = alias ? `HostKeyAlias ${alias}` : "";
@@ -177,6 +183,7 @@ export const sshResolveAction = async (
   User ${request.linuxUserName}
   IdentityFile ${identityFile}
   ${certificateInfo}
+  ${connectTimeoutInfo}
   PasswordAuthentication no
   ProxyCommand ${appPath} ssh-proxy %h --port %p --provider ${provisionedRequest.permission.provider} --identity-file ${identityFile} --request-json ${tmpFile.name}${orgFlag}${debugFlag}
   ${hostKeysInfo}
