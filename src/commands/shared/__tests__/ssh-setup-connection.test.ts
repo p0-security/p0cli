@@ -10,24 +10,27 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { Authn } from "../../../types/identity";
 import { PermissionRequest } from "../../../types/request";
-import { PluginSshRequest, SshProvider } from "../../../types/ssh";
-import { BaseSshCommandArgs, SSH_PROVIDERS, setupSshConnection } from "../ssh";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PluginSshRequest } from "../../../types/ssh";
+import { BaseSshCommandArgs, setupSshConnection } from "../ssh";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs";
 
-const mockEnsureInstall = vi.fn();
-const mockSubmitPublicKey = vi.fn();
-const mockToCliRequest = vi.fn();
-const mockRequestToSsh = vi.fn();
-const mockResolveHostKeys = vi.fn();
+// setupSshConnection resolves its provider through newSshProvider at call
+// time, which for an "aws" request returns the aws plugin's provider — so mock
+// that module. Vitest resolves the export at property-access time, so tests
+// can swap awsSshModule.awsSshProvider per test case.
+const { mockProvider, awsSshModule } = vi.hoisted(() => {
+  const mockProvider = {
+    ensureInstall: vi.fn(),
+    submitPublicKey: vi.fn(),
+    toCliRequest: vi.fn(),
+    requestToSsh: vi.fn(),
+    resolveHostKeys: vi.fn(),
+  };
+  return { mockProvider, awsSshModule: { awsSshProvider: mockProvider } };
+});
 
-const mockProvider = {
-  ensureInstall: mockEnsureInstall,
-  submitPublicKey: mockSubmitPublicKey,
-  toCliRequest: mockToCliRequest,
-  requestToSsh: mockRequestToSsh,
-  resolveHostKeys: mockResolveHostKeys,
-} as unknown as SshProvider<any, any, any, any>;
+vi.mock("../../../plugins/aws/ssh", () => awsSshModule);
 
 const mockAuthn = {
   identity: { credential: { expires_at: 0 }, org: {} },
@@ -48,17 +51,9 @@ const provisionedRequest = {
 } as unknown as PermissionRequest<PluginSshRequest>;
 
 describe("setupSshConnection", () => {
-  // setupSshConnection resolves the provider from the shared SSH_PROVIDERS record at call time, so overwrite the "aws" entry with the mock and restore it afterwards so it doesn't affect other tests.
-  let originalProvider: SshProvider<any, any, any, any>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    originalProvider = SSH_PROVIDERS.aws;
-    SSH_PROVIDERS.aws = mockProvider;
-  });
-
-  afterEach(() => {
-    SSH_PROVIDERS.aws = originalProvider;
+    awsSshModule.awsSshProvider = mockProvider;
   });
 
   it("calls each required ssh prep method", async () => {
@@ -70,20 +65,20 @@ describe("setupSshConnection", () => {
       provisionedRequest
     );
 
-    expect(mockEnsureInstall).toHaveBeenCalled();
-    expect(mockSubmitPublicKey).toHaveBeenCalled();
-    expect(mockToCliRequest).toHaveBeenCalled();
-    expect(mockRequestToSsh).toHaveBeenCalled();
-    expect(mockResolveHostKeys).toHaveBeenCalled();
+    expect(mockProvider.ensureInstall).toHaveBeenCalled();
+    expect(mockProvider.submitPublicKey).toHaveBeenCalled();
+    expect(mockProvider.toCliRequest).toHaveBeenCalled();
+    expect(mockProvider.requestToSsh).toHaveBeenCalled();
+    expect(mockProvider.resolveHostKeys).toHaveBeenCalled();
   });
 
   it("functions for providers without submitPublicKey/resolveHostKeys", async () => {
-    // Same partial-mock cast as mockProvider, omitting the two optional methods to exercise the ?. branch.
-    SSH_PROVIDERS.aws = {
-      ensureInstall: mockEnsureInstall,
-      toCliRequest: mockToCliRequest,
-      requestToSsh: mockRequestToSsh,
-    } as unknown as SshProvider<any, any, any, any>;
+    // Partial provider omitting the two optional methods to exercise the ?. branch.
+    awsSshModule.awsSshProvider = {
+      ensureInstall: mockProvider.ensureInstall,
+      toCliRequest: mockProvider.toCliRequest,
+      requestToSsh: mockProvider.requestToSsh,
+    } as typeof mockProvider;
 
     const result = await setupSshConnection(
       mockAuthn,
@@ -93,8 +88,8 @@ describe("setupSshConnection", () => {
       provisionedRequest
     );
 
-    expect(mockSubmitPublicKey).not.toHaveBeenCalled();
-    expect(mockResolveHostKeys).not.toHaveBeenCalled();
+    expect(mockProvider.submitPublicKey).not.toHaveBeenCalled();
+    expect(mockProvider.resolveHostKeys).not.toHaveBeenCalled();
     expect(result.sshHostKeys).toBeUndefined();
   });
 
@@ -102,7 +97,7 @@ describe("setupSshConnection", () => {
     const hostKeys = {
       keys: ["ssh-ed25519 AAAAHOSTKEY..."],
     };
-    mockResolveHostKeys.mockResolvedValue(hostKeys);
+    mockProvider.resolveHostKeys.mockResolvedValue(hostKeys);
 
     const result = await setupSshConnection(
       mockAuthn,

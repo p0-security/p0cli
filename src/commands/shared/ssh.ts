@@ -25,9 +25,11 @@ import {
   CliSshRequest,
   PluginSshRequest,
   SshProvider,
+  SshRequest,
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
+import { assertNever } from "../../util";
 import { request } from "./request";
 import { pick } from "lodash";
 import { sys } from "typescript";
@@ -89,14 +91,24 @@ export type SshAdditionalSetup = {
   teardown: () => Promise<void>;
 };
 
-export const SSH_PROVIDERS: Record<
-  SupportedSshProvider,
-  SshProvider<any, any, any, any>
-> = {
-  aws: awsSshProvider,
-  azure: azureSshProvider,
-  gcloud: gcpSshProvider,
-  "self-hosted": selfHostedSshProvider,
+export const newSshProvider = (
+  request: PermissionRequest<PluginSshRequest> | SshRequest
+): SshProvider<any, any, any, any> => {
+  const provider =
+    "permission" in request ? request.permission.provider : request.type;
+
+  switch (provider) {
+    case "aws":
+      return awsSshProvider;
+    case "gcloud":
+      return gcpSshProvider;
+    case "self-hosted":
+      return selfHostedSshProvider;
+    case "azure":
+      return azureSshProvider;
+    default:
+      throw assertNever(provider);
+  }
 };
 
 export const validateSshInstall = async (
@@ -223,10 +235,7 @@ const pluginToCliRequest = async (
   request: PermissionRequest<PluginSshRequest>,
   options: { debug?: boolean; publicKey: string }
 ): Promise<PermissionRequest<CliSshRequest>> =>
-  await SSH_PROVIDERS[request.permission.provider].toCliRequest(
-    request,
-    options
-  );
+  await newSshProvider(request).toCliRequest(request, options);
 
 export const prepareRequest = async (
   authn: Authn,
@@ -282,7 +291,7 @@ export const setupSshConnection = async (
   publicKey: string,
   provisionedRequest: PermissionRequest<PluginSshRequest>
 ) => {
-  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+  const sshProvider = newSshProvider(provisionedRequest);
 
   await sshProvider.ensureInstall({ debug: args.debug });
 

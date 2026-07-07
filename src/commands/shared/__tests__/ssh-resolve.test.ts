@@ -9,10 +9,11 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { authenticate } from "../../../drivers/auth";
+import { awsSshProvider } from "../../../plugins/aws/ssh";
 import { Authn } from "../../../types/identity";
 import { sshResolveAction } from "../../ssh-resolve";
 import { SshResolveCommandArgs } from "../ssh";
-import { prepareRequest, SSH_PROVIDERS } from "../ssh";
+import { prepareRequest } from "../ssh";
 import fs from "fs";
 import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
@@ -59,6 +60,9 @@ const basePrepareResult = {
     permission: { provider: "aws", resource: {} },
   },
   sshHostKeys: undefined,
+  sshProvider: {
+    generateKeys: vi.fn(async () => ({ privateKeyPath: "/tmp/key" })),
+  },
 };
 
 const baseArgs = {
@@ -103,8 +107,8 @@ describe("sshResolveAction", () => {
   });
 
   it("includes ConnectTimeout when the provider sets sshConnectTimeoutSeconds", async () => {
-    const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
-    SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = 10;
+    const originalTimeout = awsSshProvider.sshConnectTimeoutSeconds;
+    awsSshProvider.sshConnectTimeoutSeconds = 10;
     try {
       await sshResolveAction({ ...baseArgs });
 
@@ -116,9 +120,9 @@ describe("sshResolveAction", () => {
       expect(configContent).toContain("ConnectTimeout 10");
     } finally {
       if (originalTimeout === undefined) {
-        delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+        delete awsSshProvider.sshConnectTimeoutSeconds;
       } else {
-        SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+        awsSshProvider.sshConnectTimeoutSeconds = originalTimeout;
       }
     }
   });
@@ -126,8 +130,8 @@ describe("sshResolveAction", () => {
   it.each([-5, 0, 2.5, NaN])(
     "omits ConnectTimeout when the provider sets an invalid sshConnectTimeoutSeconds (%s)",
     async (invalidTimeout) => {
-      const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
-      SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = invalidTimeout;
+      const originalTimeout = awsSshProvider.sshConnectTimeoutSeconds;
+      awsSshProvider.sshConnectTimeoutSeconds = invalidTimeout;
       try {
         await sshResolveAction({ ...baseArgs });
 
@@ -139,9 +143,9 @@ describe("sshResolveAction", () => {
         expect(configContent).not.toContain("ConnectTimeout");
       } finally {
         if (originalTimeout === undefined) {
-          delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+          delete awsSshProvider.sshConnectTimeoutSeconds;
         } else {
-          SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+          awsSshProvider.sshConnectTimeoutSeconds = originalTimeout;
         }
       }
     }
