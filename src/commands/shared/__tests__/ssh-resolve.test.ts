@@ -103,6 +103,7 @@ describe("sshResolveAction", () => {
   });
 
   it("includes ConnectTimeout when the provider sets sshConnectTimeoutSeconds", async () => {
+    const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
     SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = 10;
     try {
       await sshResolveAction({ ...baseArgs });
@@ -114,7 +115,11 @@ describe("sshResolveAction", () => {
       const configContent = configWriteCall![1] as string;
       expect(configContent).toContain("ConnectTimeout 10");
     } finally {
-      delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+      if (originalTimeout === undefined) {
+        delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+      } else {
+        SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+      }
     }
   });
 
