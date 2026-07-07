@@ -15,7 +15,7 @@ import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
-import { azureSshProvider } from "../../plugins/azure/ssh";
+import { azureSshProvider } from "../../plugins/azure/ssh-bastion";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
 import { SshConfig } from "../../plugins/ssh/types";
