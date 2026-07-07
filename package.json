@@ -88,6 +88,7 @@
     "build:debian": "tsc --project tsconfig.build.json && cp -r public build/dist/ && node esbuild.js",
     "test": "yarn test:unit",
     "test:unit": "NODE_ENV=unit vitest run",
+    "e2e": "vitest run --config vitest.e2e.config.mts",
     "clean": "rm -rf build",
     "format": "yarn prettier --write .",
     "lint": "yarn lint:formatting && yarn lint:code && yarn lint:types",

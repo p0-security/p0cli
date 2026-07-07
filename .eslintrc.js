@@ -58,6 +58,7 @@ module.exports = {
     ".eslintrc.js",
     "prettier.config.js",
     "vitest.config.mts",
+    "vitest.e2e.config.mts",
     "public/**",
     "build/**",
 
