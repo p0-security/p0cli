@@ -59,6 +59,9 @@ const basePrepareResult = {
     permission: { provider: "aws", resource: {} },
   },
   sshHostKeys: undefined,
+  sshProvider: {
+    generateKeys: vi.fn(async () => ({ privateKeyPath: "/tmp/key" })),
+  },
 };
 
 const baseArgs = {

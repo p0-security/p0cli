@@ -13,7 +13,7 @@ import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { sshProxy } from "../plugins/ssh";
 import { P0_PATH } from "../util";
-import { SshProxyCommandArgs, SSH_PROVIDERS } from "./shared/ssh";
+import { newSshProvider, SshProxyCommandArgs } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import * as fs from "fs/promises";
 import path from "path";
@@ -94,10 +94,10 @@ const sshProxyAction = async (
     throw "Azure SSH does not currently support specifying a port. SSH on the target VM must be listening on the default port 22.";
   }
 
-  const sshProvider = SSH_PROVIDERS[args.provider];
-
   const requestJson = await fs.readFile(args.requestJson, "utf8");
   const request = JSON.parse(requestJson);
+
+  const sshProvider = newSshProvider(request);
 
   const privateKey = await fs.readFile(args.identityFile, "utf8");
 

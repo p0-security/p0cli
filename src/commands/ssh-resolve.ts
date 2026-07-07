@@ -20,9 +20,9 @@ import {
   P0_PATH,
 } from "../util";
 import {
+  newSshProvider,
   prepareRequest,
   SshResolveCommandArgs,
-  SSH_PROVIDERS,
 } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import fs from "fs";
@@ -129,13 +129,12 @@ export const sshResolveAction = async (
       approvedOnly: true,
       quiet: args.quiet,
     }).catch(requestErrorHandler);
-
-  const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
+  const sshProvider = newSshProvider(provisionedRequest);
 
   if (args.debug) {
     print2("Generating Keys");
   }
-  const keys = await sshProvider?.generateKeys?.(
+  const keys = await sshProvider.generateKeys?.(
     authn,
     provisionedRequest.permission.resource,
     {

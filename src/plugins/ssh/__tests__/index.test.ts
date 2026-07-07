@@ -149,11 +149,6 @@ describe("sshProxy credential handoff stays shell-agnostic", () => {
 });
 
 describe("GCP connection failure diagnostics", () => {
-  // spawnSshNode resolves the provider (and thus its connectionErrorMessage and
-  // unprovisionedAccessPatterns) from the SSH_PROVIDERS registry keyed by
-  // request.type, so a `gcloud` request exercises the real GCP classifier. The
-  // passed sshProvider only supplies the hooks sshProxy itself calls; stub the
-  // gcloud login so the test never shells out.
   const gcpProviderWith = (propagationTimeoutMs: number) =>
     ({
       cloudProviderLogin: vi.fn(async () => undefined),
