@@ -12,7 +12,7 @@ import { authenticate } from "../../../drivers/auth";
 import { Authn } from "../../../types/identity";
 import { sshResolveAction } from "../../ssh-resolve";
 import { SshResolveCommandArgs } from "../ssh";
-import { prepareRequest } from "../ssh";
+import { prepareRequest, SSH_PROVIDERS } from "../ssh";
 import fs from "fs";
 import { beforeEach, describe, expect, it, vi, Mock } from "vitest";
 import yargs from "yargs";
@@ -100,5 +100,61 @@ describe("sshResolveAction", () => {
     expect(configWriteCall).toBeDefined();
     const configContent = configWriteCall![1] as string;
     expect(configContent).not.toContain("--org");
+  });
+
+  it("includes ConnectTimeout when the provider sets sshConnectTimeoutSeconds", async () => {
+    const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+    SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = 10;
+    try {
+      await sshResolveAction({ ...baseArgs });
+
+      const configWriteCall = (fs.writeFileSync as Mock).mock.calls.find(
+        ([path]) => typeof path === "string" && path.endsWith(".config")
+      );
+      expect(configWriteCall).toBeDefined();
+      const configContent = configWriteCall![1] as string;
+      expect(configContent).toContain("ConnectTimeout 10");
+    } finally {
+      if (originalTimeout === undefined) {
+        delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+      } else {
+        SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+      }
+    }
+  });
+
+  it.each([-5, 0, 2.5, NaN])(
+    "omits ConnectTimeout when the provider sets an invalid sshConnectTimeoutSeconds (%s)",
+    async (invalidTimeout) => {
+      const originalTimeout = SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+      SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = invalidTimeout;
+      try {
+        await sshResolveAction({ ...baseArgs });
+
+        const configWriteCall = (fs.writeFileSync as Mock).mock.calls.find(
+          ([path]) => typeof path === "string" && path.endsWith(".config")
+        );
+        expect(configWriteCall).toBeDefined();
+        const configContent = configWriteCall![1] as string;
+        expect(configContent).not.toContain("ConnectTimeout");
+      } finally {
+        if (originalTimeout === undefined) {
+          delete SSH_PROVIDERS.aws.sshConnectTimeoutSeconds;
+        } else {
+          SSH_PROVIDERS.aws.sshConnectTimeoutSeconds = originalTimeout;
+        }
+      }
+    }
+  );
+
+  it("omits ConnectTimeout when the provider does not set sshConnectTimeoutSeconds", async () => {
+    await sshResolveAction({ ...baseArgs });
+
+    const configWriteCall = (fs.writeFileSync as Mock).mock.calls.find(
+      ([path]) => typeof path === "string" && path.endsWith(".config")
+    );
+    expect(configWriteCall).toBeDefined();
+    const configContent = configWriteCall![1] as string;
+    expect(configContent).not.toContain("ConnectTimeout");
   });
 });
