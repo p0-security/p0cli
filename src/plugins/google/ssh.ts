@@ -8,9 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { isSudoCommand } from "../../commands/shared/ssh";
 import { PRIVATE_KEY_PATH } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
+import { isSudoCommand } from "../ssh/shared";
 import { ensureGcloudLogin } from "./auth";
 import { classifyGcpConnectionError } from "./connection-error";
 import { ensureGcpSshInstall } from "./install";

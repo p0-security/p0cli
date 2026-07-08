@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs, SshAdditionalSetup } from "../commands/shared/ssh";
+import type { CommandArgs, SshAdditionalSetup } from "../commands/shared/ssh";
 import {
   AwsSsh,
   AwsSshPermissionSpec,

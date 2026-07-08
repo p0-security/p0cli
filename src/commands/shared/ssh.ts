@@ -18,6 +18,7 @@ import { awsSshProvider } from "../../plugins/aws/ssh";
 import { azureSshProvider } from "../../plugins/azure/ssh-bastion";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
+import { isSudoCommand } from "../../plugins/ssh/shared";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
@@ -144,9 +145,6 @@ export const getDefaultSudo = (): boolean => {
   const sudo = process.env.P0_SSH_SUDO;
   return !!sudo && sudo !== "0" && sudo.toLowerCase?.() !== "false";
 };
-
-export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
-  args.sudo || args.command === "sudo";
 
 export const provisionRequest = async (
   authn: Authn,

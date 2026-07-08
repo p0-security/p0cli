@@ -24,3 +24,6 @@ export const createTempDirectoryForKeys = async (): Promise<{
 
   return { path, cleanup };
 };
+
+export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
+  args.sudo || args.command === "sudo";
