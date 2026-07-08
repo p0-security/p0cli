@@ -225,16 +225,24 @@ export const azureSshProvider: SshProvider<
     };
   },
 
-  requestToSsh: (request) => ({
-    type: "azure",
-    id: "localhost",
-    ...request.cliLocalData,
-    instanceId: request.permission.resource.instanceId,
-    subscriptionId: request.permission.resource.subscriptionId,
-    instanceResourceGroup: request.permission.resource.resourceGroupId,
-    bastionId: request.permission.bastionHostId,
-    directoryId: request.generated.directoryId,
-  }),
+  requestToSsh: (request) => {
+    const { bastionHost, jumpHost } = request.permission;
+    if (!bastionHost) {
+      throw jumpHost
+        ? "This SSH session uses an Azure jump host, which is not yet supported by this CLI version. Please request a Bastion-based session or retry after upgrading."
+        : "Backend did not provide an Azure Bastion host for SSH session.";
+    }
+    return {
+      type: "azure",
+      id: "localhost",
+      ...request.cliLocalData,
+      instanceId: request.permission.resource.instanceId,
+      subscriptionId: request.permission.resource.subscriptionId,
+      instanceResourceGroup: request.permission.resource.resourceGroupId,
+      bastionId: bastionHost.id,
+      directoryId: request.generated.directoryId,
+    };
+  },
 
   unprovisionedAccessPatterns,
   provisionedAccessPatterns,

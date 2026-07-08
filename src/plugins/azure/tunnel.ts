@@ -42,8 +42,12 @@ export type BastionTunnelMeta = {
 export const azBastionTunnelCommand = (
   request: AzureSshRequest,
   port: string
-) =>
-  osSafeCommand("az", [
+) => {
+  if (!request.bastionId) {
+    throw "Cannot establish an Azure Bastion tunnel: no bastion host is associated with this request.";
+  }
+
+  return osSafeCommand("az", [
     "network",
     "bastion",
     "tunnel",
@@ -60,6 +64,7 @@ export const azBastionTunnelCommand = (
     // doesn't pass the --debug flag to the p0 ssh process.
     "--debug",
   ]);
+};
 
 const selectRandomPort = (): string => {
   // The IANA ephemeral port range is 49152 to 65535, inclusive. Pick a random value in that range.
