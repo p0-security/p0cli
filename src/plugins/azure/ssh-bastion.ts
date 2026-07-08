@@ -24,7 +24,7 @@ import {
   AD_SSH_KEY_PRIVATE,
   azSshCertCommand,
   generateSshKeyAndAzureAdCert,
-} from "./keygen";
+} from "./ssh-shared";
 import { azBastionTunnelCommand, trySpawnBastionTunnel } from "./tunnel";
 import {
   AzureLocalData,
@@ -144,7 +144,7 @@ export const azureSshProvider: SshProvider<
     ];
   },
 
-  generateKeys: async (_authn, request, options: { debug?: boolean } = {}) => {
+  generateKeys: async (_authn, request, options) => {
     const { debug } = options;
     const { path: keyPath } = await createTempDirectoryForKeys();
     await azSetSubscription(request, options);
@@ -158,10 +158,7 @@ export const azureSshProvider: SshProvider<
     };
   },
 
-  setupProxy: async (
-    request: AzureSshRequest,
-    options: { debug?: boolean; abortController: AbortController }
-  ) => {
+  setupProxy: async (request, options) => {
     const { killTunnel, tunnelLocalPort } = await trySpawnBastionTunnel(
       request,
       options
