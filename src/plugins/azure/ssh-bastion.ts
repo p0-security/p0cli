@@ -27,7 +27,9 @@ import {
 } from "./types";
 import path from "node:path";
 
-export const azureSshProvider: SshProvider<
+/** Connects to an Azure VM through an Azure Bastion tunnel: a local port is
+ * forwarded to the VM's SSH port over the Bastion host's HTTPS tunnel. */
+export const azureBastionSshProvider: SshProvider<
   AzureSshPermissionSpec,
   AzureLocalData,
   AzureSshRequest
@@ -43,8 +45,8 @@ export const azureSshProvider: SshProvider<
   },
 
   reproCommands: (request, additionalData) => {
-    // If additionalData is undefined (which should be never for the azureSshProvider), use the default port for Azure
-    // Network Bastion tunnels instead of generating a random one
+    // If additionalData is undefined (which should be never for the azureBastionSshProvider), use the default port for
+    // Azure Network Bastion tunnels instead of generating a random one
     const { command: azTunnelExe, args: azTunnelArgs } = azBastionTunnelCommand(
       request,
       additionalData?.port ?? "50022"
@@ -135,11 +137,11 @@ export const azureSshProvider: SshProvider<
   },
 
   requestToSsh: (request) => {
-    const { bastionHost, jumpHost } = request.permission;
+    const { bastionHost } = request.permission;
     if (!bastionHost) {
-      throw jumpHost
-        ? "This SSH session uses an Azure jump host, which is not yet supported by this CLI version. Please request a Bastion-based session or retry after upgrading."
-        : "Backend did not provide an Azure Bastion host for SSH session.";
+      // Jump-host requests are routed to the jump-host provider by newSshProvider, so reaching this provider
+      // without a bastion host means the VM has no connection method at all.
+      throw "This Azure VM is not reachable: no jump host or bastion host is associated with it.";
     }
     return {
       type: "azure",

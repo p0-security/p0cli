@@ -35,7 +35,7 @@ export type AzureBastionHost = {
 export type AzureJumpHost = {
   id: string;
   roleId: string;
-  ip: string;
+  publicIp: string;
 };
 
 export type AzureSshPermission = CommonSshPermissionSpec & {
@@ -69,17 +69,20 @@ export type AzureNodeSpec = {
   sudo?: boolean;
 };
 
-export type AzureBastionSpec = {
-  bastionId: string;
-};
-
 export type AzureSshRequest = AzureNodeSpec &
-  AzureBastionSpec &
   AzureLocalData & {
     type: "azure";
-    id: "localhost"; // Azure SSH always connects to the local tunnel
+    // "localhost" for the Azure Bastion tunnel flow; the target VM's private
+    // IP for the jump-host flow.
+    id: string;
     subscriptionId: string;
     directoryId: string;
+    // Present for the Azure Bastion flow.
+    bastionId?: string;
+    // Present for the jump-host flow.
+    jumpHost?: AzureJumpHost;
+    // The target VM's private IP (used as `id` for the jump-host flow).
+    privateIp?: string;
   };
 
 export type AzureLocalData = {

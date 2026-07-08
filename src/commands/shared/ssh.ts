@@ -15,7 +15,8 @@ import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
-import { azureSshProvider } from "../../plugins/azure/ssh-bastion";
+import { azureBastionSshProvider } from "../../plugins/azure/ssh-bastion";
+import { azureJumpHostSshProvider } from "../../plugins/azure/ssh-jump-host";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
 import { isSudoCommand } from "../../plugins/ssh/shared";
@@ -78,12 +79,21 @@ export type SshRequestOptions = {
   quiet?: boolean;
 };
 
-export type SshAdditionalSetup = {
-  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
-  sshOptions: string[];
-
+/** Identity file/certificate paths minted by setup/setupProxy, for providers
+ * whose proxy hop is itself an authenticated command (e.g. Azure's jump-host
+ * ProxyCommand, which is a full `ssh` invocation) and so needs them passed
+ * into proxyCommand explicitly rather than held as provider state. */
+export type SshProxyCredentials = {
   /** The path to the private key file to use for the SSH connection, instead of the default P0 CLI managed key */
   identityFile?: string;
+
+  /** The path to the certificate file to use for the SSH connection */
+  certificatePath?: string;
+};
+
+export type SshAdditionalSetup = SshProxyCredentials & {
+  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
+  sshOptions: string[];
 
   /** The port to connect to, overriding the default */
   port?: string;
@@ -105,8 +115,16 @@ export const newSshProvider = (
       return gcpSshProvider;
     case "self-hosted":
       return selfHostedSshProvider;
-    case "azure":
-      return azureSshProvider;
+    case "azure": {
+      // Narrowing `provider` doesn't narrow `request`, so re-check the shape's
+      // own discriminant before reading its Azure-only fields.
+      const jumpHost =
+        "permission" in request
+          ? request.permission.provider === "azure" &&
+            request.permission.jumpHost
+          : request.type === "azure" && request.jumpHost;
+      return jumpHost ? azureJumpHostSshProvider : azureBastionSshProvider;
+    }
     default:
       throw assertNever(provider);
   }
