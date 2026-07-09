@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { createKeyPair } from "../common/keys";
 import { retryWithSleep } from "../common/retry";
+import { auditFileTransferActivity } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
@@ -62,6 +63,7 @@ const deleteUploadedObject = async (
     if (debug) {
       print2(`Deleted s3://${bucket}/${key} from the bucket.`);
     }
+    return true;
   } catch (err) {
     print2(
       `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, so this is safe to ignore. You may delete this object manually, or it will be removed automatically by the file-transfer bucket's lifecycle expiration rule.`
@@ -71,6 +73,7 @@ const deleteUploadedObject = async (
       const message = err instanceof Error ? err.message : String(err);
       print2(`Delete error: ${message}`);
     }
+    return false;
   }
 };
 
@@ -190,10 +193,27 @@ const fileTransferAction = async (
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.upload",
+          outcome: "failure",
+          debug: args.debug,
+        });
         throw `Upload failed: ${message}`;
       }
 
       print2("Uploaded.");
+
+      await auditFileTransferActivity({
+        authn,
+        requestId,
+        fileTransferId: target.prefix,
+        action: "file-transfer.upload",
+        outcome: "success",
+        debug: args.debug,
+      });
 
       print2(`Preparing to ssh into ${args.destination}...`);
 
@@ -261,10 +281,39 @@ const fileTransferAction = async (
       if (exitCode === SUCCESS_EXIT_CODE) {
         // Success path: the file is on the instance, so clean it from the bucket.
         print2(`Downloaded to ${remotePath}. File transfer succeeded.`);
-        await deleteUploadedObject(s3, target.bucket, uploadKey, args.debug);
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.download",
+          outcome: "success",
+          debug: args.debug,
+        });
+        const deleteSucceeded = await deleteUploadedObject(
+          s3,
+          target.bucket,
+          uploadKey,
+          args.debug
+        );
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.object-delete",
+          outcome: deleteSucceeded ? "success" : "failure",
+          debug: args.debug,
+        });
       } else if (exitCode === null) {
         throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
       } else {
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.download",
+          outcome: "failure",
+          debug: args.debug,
+        });
         throw `Remote download exited with code ${exitCode}`;
       }
 
