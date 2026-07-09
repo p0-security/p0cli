@@ -609,7 +609,11 @@ export const sshOrScp = async (args: {
       debug,
     });
 
-    const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
+    const proxyCommand = sshProvider.proxyCommand(
+      request,
+      setupData?.port,
+      setupData
+    );
 
     const { command, args: commandArgs } = createCommand(
       request,
@@ -731,7 +735,8 @@ export const sshProxy = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(
     request,
-    setupData?.port ?? args.port
+    setupData?.port ?? args.port,
+    setupData
   );
 
   const command = proxyCommand[0];
