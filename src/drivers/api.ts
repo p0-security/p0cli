@@ -324,22 +324,13 @@ export const auditFileTransferActivity = async (args: {
   fileTransferId: string;
   action: `file-transfer.${"download" | "object-delete" | "upload"}`;
   outcome: "failure" | "success";
-  bucketName: string;
   debug: boolean | undefined;
 }) => {
-  const {
-    authn,
-    requestId,
-    action,
-    fileTransferId,
-    outcome,
-    bucketName,
-    debug,
-  } = args;
+  const { authn, requestId, action, fileTransferId, outcome, debug } = args;
 
   if (debug) {
     print2(
-      `Submitting audit log for request: ${requestId}, action: ${action}, fileTransferId: ${fileTransferId}, outcome: ${outcome}, bucketName: ${bucketName}`
+      `Submitting audit log for request: ${requestId}, action: ${action}, fileTransferId: ${fileTransferId}, outcome: ${outcome}`
     );
   }
 
@@ -352,8 +343,8 @@ export const auditFileTransferActivity = async (args: {
         action,
         fileTransferId,
         outcome,
-        bucketName,
       }),
+      maxTimeoutMs: 5_000,
     });
     if (debug) {
       print2(`Audit log submitted for request: ${requestId}`);

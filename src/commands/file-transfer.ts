@@ -193,13 +193,12 @@ const fileTransferAction = async (
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        void auditFileTransferActivity({
+        await auditFileTransferActivity({
           authn,
           requestId,
           fileTransferId: target.prefix,
           action: "file-transfer.upload",
           outcome: "failure",
-          bucketName: target.bucket,
           debug: args.debug,
         });
         throw `Upload failed: ${message}`;
@@ -213,7 +212,6 @@ const fileTransferAction = async (
         fileTransferId: target.prefix,
         action: "file-transfer.upload",
         outcome: "success",
-        bucketName: target.bucket,
         debug: args.debug,
       });
 
@@ -289,7 +287,6 @@ const fileTransferAction = async (
           fileTransferId: target.prefix,
           action: "file-transfer.download",
           outcome: "success",
-          bucketName: target.bucket,
           debug: args.debug,
         });
         const deleteSucceeded = await deleteUploadedObject(
@@ -304,7 +301,6 @@ const fileTransferAction = async (
           fileTransferId: target.prefix,
           action: "file-transfer.object-delete",
           outcome: deleteSucceeded ? "success" : "failure",
-          bucketName: target.bucket,
           debug: args.debug,
         });
       } else if (exitCode === null) {
@@ -316,7 +312,6 @@ const fileTransferAction = async (
           fileTransferId: target.prefix,
           action: "file-transfer.download",
           outcome: "failure",
-          bucketName: target.bucket,
           debug: args.debug,
         });
         throw `Remote download exited with code ${exitCode}`;
