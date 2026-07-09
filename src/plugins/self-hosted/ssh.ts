@@ -8,11 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { isSudoCommand } from "../../commands/shared/ssh";
 import { createKeyPair } from "../../common/keys";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, getOperatingSystem } from "../../util";
-import { createTempDirectoryForKeys } from "../ssh/shared";
+import { createTempDirectoryForKeys, isSudoCommand } from "../ssh/shared";
 import { generateSelfHostedCertificate } from "./keygen";
 import { SelfHostedSshPermissionSpec, SelfHostedSshRequest } from "./types";
 import * as fs from "fs/promises";

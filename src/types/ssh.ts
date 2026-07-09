@@ -8,7 +8,11 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { CommandArgs, SshAdditionalSetup } from "../commands/shared/ssh";
+import type {
+  CommandArgs,
+  SshAdditionalSetup,
+  SshProxyCredentials,
+} from "../commands/shared/ssh";
 import {
   AwsSsh,
   AwsSshPermissionSpec,
@@ -120,10 +124,12 @@ export type SshProvider<
   setupProxy?: (
     request: SR,
     options: { debug?: boolean; abortController: AbortController }
-  ) => Promise<{
-    teardown: () => Promise<void>;
-    port: string;
-  }>;
+  ) => Promise<
+    SshProxyCredentials & {
+      teardown: () => Promise<void>;
+      port: string;
+    }
+  >;
 
   resolveHostKeys?: (
     request: SR,
@@ -147,8 +153,14 @@ export type SshProvider<
     certificatePath?: string;
   }>;
 
-  /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option */
-  proxyCommand: (request: SR, port?: string) => string[];
+  /** Returns the command and its arguments that are going to be injected as the ssh ProxyCommand option.
+   * `credentials` carries any identity file/certificate minted by setup/setupProxy, for providers whose proxy
+   * hop is itself an authenticated command (e.g. an embedded `ssh` jump-host hop). */
+  proxyCommand: (
+    request: SR,
+    port?: string,
+    credentials?: SshProxyCredentials
+  ) => string[];
 
   /** When set, generated SSH configs bound the handshake with this timeout so an unreachable target surfaces a
    * prompt, retryable error instead of hanging indefinitely. Used by providers whose ProxyCommand cannot itself
