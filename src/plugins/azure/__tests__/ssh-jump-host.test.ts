@@ -348,6 +348,19 @@ describe("unprovisionedAccessPatterns", () => {
     expect(matches("Permission denied (publickey).")).toBe(true);
   });
 
+  it("retries on a certificate rejection when the host's sshd offers other auth methods", () => {
+    // sshd lists every enabled auth method, so a VM that also allows password
+    // (or keyboard-interactive) auth reports more than just (publickey).
+    expect(
+      matches("alice@10.0.0.4: Permission denied (publickey,password).")
+    ).toBe(true);
+    expect(
+      matches(
+        "Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password)."
+      )
+    ).toBe(true);
+  });
+
   it("retries when the connection drops before the SSH banner (e.g. jump host unreachable)", () => {
     expect(
       matches("kex_exchange_identification: Connection closed by remote host")

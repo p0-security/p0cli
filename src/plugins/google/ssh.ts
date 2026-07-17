@@ -41,7 +41,9 @@ const PROPAGATION_TIMEOUT_LIMIT_MS = 2 * 60 * 1000;
  * 7: results in DESTINATION_READ_ERROR and also CONNECTION_CLOSED_MESSAGE
  */
 const unprovisionedAccessPatterns = [
-  { pattern: /Permission denied \(publickey\)/ },
+  // sshd lists every auth method it allows, so a host that also permits password
+  // auth reports "(publickey,password)" — tolerate any list that includes publickey.
+  { pattern: /Permission denied \([^)]*publickey[^)]*\)/ },
   {
     // The output of `sudo -v` when the user is not allowed to run sudo
     pattern: /Sorry, user .+ may not run sudo on .+/,
