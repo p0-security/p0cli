@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { isSudoCommand } from "../../commands/shared/ssh";
+import { getContactMessage } from "../../drivers/config";
 import { SshProvider } from "../../types/ssh";
 import { getOperatingSystem } from "../../util";
 import { createTempDirectoryForKeys } from "../ssh/shared";
@@ -225,16 +226,23 @@ export const azureSshProvider: SshProvider<
     };
   },
 
-  requestToSsh: (request) => ({
-    type: "azure",
-    id: "localhost",
-    ...request.cliLocalData,
-    instanceId: request.permission.resource.instanceId,
-    subscriptionId: request.permission.resource.subscriptionId,
-    instanceResourceGroup: request.permission.resource.resourceGroupId,
-    bastionId: request.permission.bastionHostId,
-    directoryId: request.generated.directoryId,
-  }),
+  requestToSsh: (request) => {
+    const bastionId =
+      request.permission.bastionHost?.id ?? request.permission.bastionHostId;
+    if (!bastionId) {
+      throw `The request does not specify an Azure bastion host for this instance. ${getContactMessage()}`;
+    }
+    return {
+      type: "azure",
+      id: "localhost",
+      ...request.cliLocalData,
+      instanceId: request.permission.resource.instanceId,
+      subscriptionId: request.permission.resource.subscriptionId,
+      instanceResourceGroup: request.permission.resource.resourceGroupId,
+      bastionId,
+      directoryId: request.generated.directoryId,
+    };
+  },
 
   unprovisionedAccessPatterns,
   provisionedAccessPatterns,

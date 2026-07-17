@@ -33,7 +33,10 @@ export type AzureSshPermission = CommonSshPermissionSpec & {
   destination: string;
   parent: string | undefined;
   group: string | undefined;
-  bastionHostId: string;
+  bastionHost?: { id: string; roleId: string };
+  /** @deprecated Replaced by `bastionHost.id`; only present on request documents
+   * staged before the backend removed the flat field. */
+  bastionHostId?: string;
   principal: string;
   resource: {
     instanceId: string;
