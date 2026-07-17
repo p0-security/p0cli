@@ -28,15 +28,25 @@ export type AzureSsh = CliPermissionSpec<
   AzureLocalData
 >;
 
+export type AzureBastionHost = {
+  id: string;
+};
+
+export type AzureJumpHost = {
+  id: string;
+  roleId: string;
+  publicIp: string;
+};
+
 export type AzureSshPermission = CommonSshPermissionSpec & {
   provider: "azure";
   destination: string;
   parent: string | undefined;
   group: string | undefined;
-  bastionHost?: { id: string; roleId: string };
-  /** @deprecated Replaced by `bastionHost.id`; only present on request documents
-   * staged before the backend removed the flat field. */
-  bastionHostId?: string;
+  // Exactly one of `bastionHost` / `jumpHost` is set, depending on how the
+  // subscription's bastion-host installation is configured
+  bastionHost?: AzureBastionHost;
+  jumpHost?: AzureJumpHost;
   principal: string;
   resource: {
     instanceId: string;
@@ -45,7 +55,12 @@ export type AzureSshPermission = CommonSshPermissionSpec & {
     resourceGroupId: string;
     subscriptionId: string;
     region: string;
-    networkInterfaceIds: string[];
+    networkInterface: {
+      id: string;
+      subnetId: string;
+      // The target's private IP, used to hop to it through a jump host
+      privateIp?: string;
+    };
   };
 };
 
@@ -54,17 +69,20 @@ export type AzureNodeSpec = {
   sudo?: boolean;
 };
 
-export type AzureBastionSpec = {
-  bastionId: string;
-};
-
 export type AzureSshRequest = AzureNodeSpec &
-  AzureBastionSpec &
   AzureLocalData & {
     type: "azure";
-    id: "localhost"; // Azure SSH always connects to the local tunnel
+    // "localhost" for the Azure Bastion tunnel flow; the target VM's private
+    // IP for the jump-host flow.
+    id: string;
     subscriptionId: string;
     directoryId: string;
+    // Present for the Azure Bastion flow.
+    bastionId?: string;
+    // Present for the jump-host flow.
+    jumpHost?: AzureJumpHost;
+    // The target VM's private IP (used as `id` for the jump-host flow).
+    privateIp?: string;
   };
 
 export type AzureLocalData = {

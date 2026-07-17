@@ -64,7 +64,7 @@ const AWS_DELEGATE: AwsResourcePermissionSpec = {
     name: "p0-rds-role",
   },
   generated: { name: "p0-rds-role" },
-  delegation: {},
+  delegation: [],
 };
 
 const buildAccess = (
@@ -138,23 +138,7 @@ describe("rds generate-db-auth-token", () => {
     }));
   };
 
-  it("passes the inner aws delegate to awsCloudAuth (legacy nested record form)", async () => {
-    mockAccessResponse({
-      "aws-rds": {
-        permission: { vpcId: "vpc-1" },
-        delegation: { aws: AWS_DELEGATE },
-      },
-    });
-
-    await buildRdsYargs().parse(
-      "rds generate-db-auth-token --arch postgres --role admin"
-    );
-
-    expect(mockAwsCloudAuth).toHaveBeenCalledOnce();
-    expect(mockAwsCloudAuth.mock.calls[0]?.[1]).toEqual(AWS_DELEGATE);
-  });
-
-  it("passes the inner aws delegate to awsCloudAuth (new array form at both levels)", async () => {
+  it("passes the inner aws delegate to awsCloudAuth (array form at both levels)", async () => {
     mockAccessResponse([
       {
         key: "aws-rds",
@@ -170,39 +154,6 @@ describe("rds generate-db-auth-token", () => {
     );
 
     expect(mockAwsCloudAuth).toHaveBeenCalledOnce();
-    expect(mockAwsCloudAuth.mock.calls[0]?.[1]).toEqual(AWS_DELEGATE);
-  });
-
-  it("supports mixed nesting (array outer, record inner)", async () => {
-    mockAccessResponse([
-      {
-        key: "aws-rds",
-        request: {
-          permission: { vpcId: "vpc-1" },
-          delegation: { aws: AWS_DELEGATE },
-        },
-      },
-    ]);
-
-    await buildRdsYargs().parse(
-      "rds generate-db-auth-token --arch postgres --role admin"
-    );
-
-    expect(mockAwsCloudAuth.mock.calls[0]?.[1]).toEqual(AWS_DELEGATE);
-  });
-
-  it("supports mixed nesting (record outer, array inner)", async () => {
-    mockAccessResponse({
-      "aws-rds": {
-        permission: { vpcId: "vpc-1" },
-        delegation: [{ key: "aws", request: AWS_DELEGATE }],
-      },
-    });
-
-    await buildRdsYargs().parse(
-      "rds generate-db-auth-token --arch postgres --role admin"
-    );
-
     expect(mockAwsCloudAuth.mock.calls[0]?.[1]).toEqual(AWS_DELEGATE);
   });
 
@@ -226,12 +177,15 @@ describe("rds generate-db-auth-token", () => {
 
     const runWithShell = async (shell: string, arch: "mysql" | "postgres") => {
       process.env.SHELL = shell;
-      mockAccessResponse({
-        "aws-rds": {
-          permission: { vpcId: "vpc-1" },
-          delegation: { aws: AWS_DELEGATE },
+      mockAccessResponse([
+        {
+          key: "aws-rds",
+          request: {
+            permission: { vpcId: "vpc-1" },
+            delegation: [{ key: "aws", request: AWS_DELEGATE }],
+          },
         },
-      });
+      ]);
       await buildRdsYargs().parse(
         `rds generate-db-auth-token --arch ${arch} --role admin`
       );

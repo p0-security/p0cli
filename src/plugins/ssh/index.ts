@@ -10,8 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import {
   CommandArgs,
+  newSshProvider,
   ScpCommandArgs,
-  SSH_PROVIDERS,
   SshAdditionalSetup,
   SshProxyCommandArgs,
 } from "../../commands/shared/ssh";
@@ -26,7 +26,6 @@ import {
   SshHostKeyInfo,
   SshProvider,
   SshRequest,
-  SupportedSshProvider,
 } from "../../types/ssh";
 import { delay, createCleanChildEnv, getOperatingSystem } from "../../util";
 import { AwsCredentials } from "../aws/types";
@@ -193,7 +192,6 @@ type SpawnSshNodeOptions = {
   endTime: number;
   abortController?: AbortController;
   stdio: [StdioNull, StdioNull, StdioPipe];
-  provider: SupportedSshProvider;
   request: SshRequest;
   debug?: boolean;
   isAccessPropagationPreTest?: boolean;
@@ -205,7 +203,7 @@ async function spawnSshNode(
   options: SpawnSshNodeOptions
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const provider = SSH_PROVIDERS[options.provider];
+    const provider = newSshProvider(options.request);
 
     if (options.debug) {
       const gerund = options.isAccessPropagationPreTest
@@ -295,7 +293,7 @@ async function spawnSshNode(
           const knownError = connectionErrorMessage();
           reject(
             knownError ??
-              `Access did not propagate through ${provider.friendlyName} in time. ${getContactMessage()}`
+              `Access did not propagate through ${provider.friendlyName} in time. If you had existing access, try revoking it and re-running the command to request fresh access. ${getContactMessage()}`
           );
           return;
         }
@@ -562,7 +560,6 @@ const preTestAccessPropagationIfNeeded = async <
       args,
       stdio: ["inherit", "inherit", "pipe"],
       debug: cmdArgs.debug,
-      provider: request.type,
       request,
       endTime: endTime,
       isAccessPropagationPreTest: true,
@@ -612,7 +609,11 @@ export const sshOrScp = async (args: {
       debug,
     });
 
-    const proxyCommand = sshProvider.proxyCommand(request, setupData?.port);
+    const proxyCommand = sshProvider.proxyCommand(
+      request,
+      setupData?.port,
+      setupData
+    );
 
     const { command, args: commandArgs } = createCommand(
       request,
@@ -692,7 +693,6 @@ export const sshOrScp = async (args: {
         args: commandArgs,
         stdio: ["inherit", "inherit", "pipe"],
         debug,
-        provider: request.type,
         request,
         endTime: endTime,
         onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
@@ -735,7 +735,8 @@ export const sshProxy = async (args: {
 
   const proxyCommand = sshProvider.proxyCommand(
     request,
-    setupData?.port ?? args.port
+    setupData?.port ?? args.port,
+    setupData
   );
 
   const command = proxyCommand[0];
@@ -773,7 +774,6 @@ export const sshProxy = async (args: {
       args: proxyArgs,
       stdio: ["inherit", "inherit", "pipe"],
       debug,
-      provider: request.type,
       request,
       endTime: endTime,
     });

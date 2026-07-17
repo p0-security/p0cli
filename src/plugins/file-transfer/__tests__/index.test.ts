@@ -8,25 +8,31 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { FileTransferCommandArgs } from "../../../commands/file-transfer";
+import { decodeProvisionStatus } from "../../../commands/shared";
+import { request } from "../../../commands/shared/request";
+import { Authn } from "../../../types/identity";
 import { awsCloudAuth } from "../../aws/auth";
 import type { AwsResourcePermissionSpec } from "../../aws/types";
 import {
   generateSignedUrl,
-  MAX_SECONDS_TO_EXPIRE_DELETE_URL,
   MAX_SECONDS_TO_EXPIRE_GET_URL,
+  provisionTransferRequest,
 } from "../index";
-import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import yargs from "yargs";
 
 vi.mock("../../aws/auth", () => ({ awsCloudAuth: vi.fn() }));
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: vi.fn().mockResolvedValue("https://signed.example/url"),
 }));
-// vi.mock("@aws-sdk/client-s3", () => ({
-//   DeleteObjectCommand: vi.fn(),
-//   GetObjectCommand: vi.fn(),
-// }));
+vi.mock("../../../commands/shared/request", () => ({ request: vi.fn() }));
+vi.mock("../../../commands/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../commands/shared")>()),
+  decodeProvisionStatus: vi.fn(),
+}));
 
 const FIVE_MINUTES = 5 * 60;
 const ONE_HOUR = 60 * 60;
@@ -53,7 +59,7 @@ describe("generateSignedUrl()", () => {
         idcRegion: undefined,
       },
       generated: { name: "test-role" },
-      delegation: {},
+      delegation: [],
     } satisfies AwsResourcePermissionSpec,
   };
 
@@ -84,7 +90,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 2 * ONE_HOUR * 1000,
     });
 
-    const result = await generateSignedUrl(authn, s3, target, "get");
+    const result = await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(FIVE_MINUTES);
     expect(result.expirySeconds).toBe(FIVE_MINUTES);
@@ -96,7 +102,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 300 * 1000, // 5 minutes left
     });
 
-    const result = await generateSignedUrl(authn, s3, target, "get");
+    const result = await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(300);
     expect(result.expirySeconds).toBe(300);
@@ -105,7 +111,7 @@ describe("generateSignedUrl()", () => {
   it("falls back to the configured window when expiry is unknown", async () => {
     vi.mocked(awsCloudAuth).mockResolvedValue({ ...defaultCredentials });
 
-    await generateSignedUrl(authn, s3, target, "get");
+    await generateSignedUrl(authn, s3, target);
 
     expect(signedExpiries()).toBe(FIVE_MINUTES);
   });
@@ -116,7 +122,7 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW - 1000,
     });
 
-    await expect(generateSignedUrl(authn, s3, target, "get")).rejects.toThrow(
+    await expect(generateSignedUrl(authn, s3, target)).rejects.toThrow(
       /too soon to sign usable URLs/
     );
   });
@@ -127,13 +133,13 @@ describe("generateSignedUrl()", () => {
       expiresAt: NOW + 30 * 1000, // 30s left, below 60s threshold
     });
 
-    await expect(generateSignedUrl(authn, s3, target, "get")).rejects.toThrow(
+    await expect(generateSignedUrl(authn, s3, target)).rejects.toThrow(
       /too soon to sign usable URLs/
     );
   });
 
-  it("correctly generates get signed URL and max get expiry time when get command passed in", async () => {
-    const result = await generateSignedUrl(authn, s3, target, "get");
+  it("correctly generates get signed URL and max get expiry time", async () => {
+    const result = await generateSignedUrl(authn, s3, target);
     expect(result.signedUrl).toBe("https://signed.example/url");
     expect(result.expirySeconds).toBe(FIVE_MINUTES);
     expect(getSignedUrl).toHaveBeenCalledWith(
@@ -142,15 +148,64 @@ describe("generateSignedUrl()", () => {
       { expiresIn: MAX_SECONDS_TO_EXPIRE_GET_URL }
     );
   });
+});
 
-  it("correctly generates delete signed URL and max delete expiry time when delete command passed in", async () => {
-    const result = await generateSignedUrl(authn, s3, target, "delete");
-    expect(result.signedUrl).toBe("https://signed.example/url");
-    expect(result.expirySeconds).toBe(ONE_HOUR);
-    expect(getSignedUrl).toHaveBeenCalledWith(
-      s3,
-      expect.any(DeleteObjectCommand),
-      { expiresIn: MAX_SECONDS_TO_EXPIRE_DELETE_URL }
-    );
+describe("provisionTransferRequest()", () => {
+  // `request` is curried: request("request") returns the inner fn that calls the API, so we mock both layers.
+  const mockRequest = vi.mocked(request);
+  const mockInnerRequest = vi.fn();
+  const mockDecodeProvisionStatus = vi.mocked(decodeProvisionStatus);
+  const mockAuthn = {} as unknown as Authn;
+  const publicKey = "ssh-ed25519 AAAA...";
+  const args = {
+    $0: "p0",
+    _: ["file-transfer"],
+    source: "file.txt",
+    destination: "i-0123456789",
+  } satisfies yargs.ArgumentsCamelCase<FileTransferCommandArgs>;
+
+  // Backend strips `type` from delegate entries (the array key is the discriminant); getDelegate reattaches it.
+  const awsDelegate = {
+    key: "aws",
+    request: { permission: {}, generated: {} },
+  };
+  const sshDelegate = {
+    key: "ssh",
+    request: { permission: {}, generated: {} },
+  };
+  const backendRequestResponse = {
+    id: "req-abc",
+    request: {
+      status: "DONE",
+      principal: "user@example.com",
+      delegation: [] as { key: string; request: object }[],
+    },
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequest.mockReturnValue(mockInnerRequest);
+    mockDecodeProvisionStatus.mockResolvedValue(true);
+    backendRequestResponse.request.delegation = [];
+  });
+
+  it("throws when the aws delegate is missing", async () => {
+    // only has ssh delegate, should have both ssh and aws
+    backendRequestResponse.request.delegation = [sshDelegate];
+    mockInnerRequest.mockResolvedValue(backendRequestResponse);
+
+    await expect(
+      provisionTransferRequest(mockAuthn, args, publicKey)
+    ).rejects.toMatch(/AWS access details/);
+  });
+
+  it("throws when the ssh delegate is missing", async () => {
+    // only has aws delegate, should have both ssh and aws
+    backendRequestResponse.request.delegation = [awsDelegate];
+
+    mockInnerRequest.mockResolvedValue(backendRequestResponse);
+
+    await expect(
+      provisionTransferRequest(mockAuthn, args, publicKey)
+    ).rejects.toMatch(/SSH access details/);
   });
 });

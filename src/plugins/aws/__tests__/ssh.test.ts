@@ -39,7 +39,7 @@ const AWS_DELEGATE_IDC: AwsResourcePermissionSpec = {
     name: "permset",
   },
   generated: { name: "delegated-name" },
-  delegation: {},
+  delegation: [],
 };
 
 const AWS_DELEGATE_ROLE: AwsResourcePermissionSpec = {
@@ -84,7 +84,7 @@ describe("awsSshProvider.requestToSsh", () => {
   describe("legacy record-form delegation", () => {
     it("builds an IDC request when idc fields are populated", () => {
       const result = awsSshProvider.requestToSsh(
-        buildRequest({ aws: AWS_DELEGATE_IDC })
+        buildRequest([{ key: "aws", request: AWS_DELEGATE_IDC }])
       );
       expect(result).toEqual({
         type: "aws",
@@ -101,7 +101,7 @@ describe("awsSshProvider.requestToSsh", () => {
 
     it("builds a role request when idc fields are absent", () => {
       const result = awsSshProvider.requestToSsh(
-        buildRequest({ aws: AWS_DELEGATE_ROLE })
+        buildRequest([{ key: "aws", request: AWS_DELEGATE_ROLE }])
       );
       expect(result).toEqual({
         type: "aws",
@@ -152,7 +152,7 @@ describe("awsSshProvider.requestToSsh", () => {
 
     it("produces the same output as the record form for equivalent input", () => {
       const recordResult = awsSshProvider.requestToSsh(
-        buildRequest({ aws: AWS_DELEGATE_IDC })
+        buildRequest([{ key: "aws", request: AWS_DELEGATE_IDC }])
       );
       const arrayResult = awsSshProvider.requestToSsh(
         buildRequest([{ key: "aws", request: AWS_DELEGATE_IDC }])

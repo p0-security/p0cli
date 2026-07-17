@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { print2 } from "../../../drivers/stdio";
-import { sshProxy } from "../index";
+import { sshOrScp, sshProxy } from "../index";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
@@ -149,11 +149,6 @@ describe("sshProxy credential handoff stays shell-agnostic", () => {
 });
 
 describe("GCP connection failure diagnostics", () => {
-  // spawnSshNode resolves the provider (and thus its connectionErrorMessage and
-  // unprovisionedAccessPatterns) from the SSH_PROVIDERS registry keyed by
-  // request.type, so a `gcloud` request exercises the real GCP classifier. The
-  // passed sshProvider only supplies the hooks sshProxy itself calls; stub the
-  // gcloud login so the test never shells out.
   const gcpProviderWith = (propagationTimeoutMs: number) =>
     ({
       cloudProviderLogin: vi.fn(async () => undefined),
@@ -222,5 +217,110 @@ describe("GCP connection failure diagnostics", () => {
     expect(exitCode).toBe(1);
     const printed = (print2 as Mock).mock.calls.map((call) => String(call[0]));
     expect(printed.some((line) => line.includes("OS Login"))).toBe(false);
+  });
+});
+
+// Providers like the Azure jump host build their ProxyCommand as an authenticated `ssh`
+// invocation, so it needs the identity file/certificate minted by setup/setupProxy. That data
+// is threaded to proxyCommand as an explicit argument (not held as provider state), and these
+// tests pin down that both sshOrScp and sshProxy actually pass it through, for both SSH and SCP.
+describe("proxyCommand receives setup/setupProxy credentials", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSpawn.mockImplementation(() => makeFakeChild());
+  });
+
+  const credentials = {
+    identityFile: "/tmp/jump-host-key",
+    certificatePath: "/tmp/jump-host-cert",
+  };
+
+  const fakeJumpHostLikeProvider = () => ({
+    cloudProviderLogin: vi.fn(async () => undefined),
+    setup: vi.fn(async () => ({
+      sshOptions: [],
+      teardown: vi.fn(async () => {}),
+      ...credentials,
+    })),
+    setupProxy: vi.fn(async () => ({
+      port: "22",
+      teardown: vi.fn(async () => {}),
+      ...credentials,
+    })),
+    proxyCommand: vi.fn(() => ["ssh", "-W", "10.0.0.1:22", "jump-host"]),
+    reproCommands: () => undefined,
+    preTestAccessPropagationArgs: () => undefined,
+    propagationTimeoutMs: 1000,
+    unprovisionedAccessPatterns: [],
+  });
+
+  const request = {
+    type: "azure",
+    id: "10.0.0.1",
+    linuxUserName: "user",
+  } as any;
+
+  it("sshOrScp passes setup()'s credentials to proxyCommand for an SSH session", async () => {
+    const sshProvider = fakeJumpHostLikeProvider();
+
+    await sshOrScp({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: { destination: "10.0.0.1", arguments: [] } as any,
+      privateKey: "pk",
+      sshProvider: sshProvider as any,
+      sshHostKeys: undefined,
+    });
+
+    expect(sshProvider.proxyCommand).toHaveBeenCalledWith(
+      request,
+      undefined,
+      expect.objectContaining(credentials)
+    );
+  });
+
+  it("sshOrScp passes setup()'s credentials to proxyCommand for an SCP transfer", async () => {
+    const sshProvider = fakeJumpHostLikeProvider();
+
+    await sshOrScp({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: {
+        source: "/local/file",
+        destination: "10.0.0.1:/remote/file",
+      } as any,
+      privateKey: "pk",
+      sshProvider: sshProvider as any,
+      sshHostKeys: undefined,
+    });
+
+    expect(sshProvider.proxyCommand).toHaveBeenCalledWith(
+      request,
+      undefined,
+      expect.objectContaining(credentials)
+    );
+  });
+
+  it("sshProxy passes setupProxy()'s credentials to proxyCommand", async () => {
+    const sshProvider = fakeJumpHostLikeProvider();
+
+    await sshProxy({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: {} as any,
+      privateKey: "pk",
+      sshProvider: sshProvider as any,
+      debug: false,
+      port: "22",
+    });
+
+    expect(sshProvider.proxyCommand).toHaveBeenCalledWith(
+      request,
+      "22",
+      expect.objectContaining(credentials)
+    );
   });
 });

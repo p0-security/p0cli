@@ -8,22 +8,19 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import tmp from "tmp-promise";
+import { isSudoCommand } from "../shared";
+import { describe, expect, it } from "vitest";
 
-export const createTempDirectoryForKeys = async (): Promise<{
-  path: string;
-  cleanup: () => Promise<void>;
-}> => {
-  // unsafeCleanup lets us delete the directory even if there are still files in it, which is fine since the
-  // files are no longer needed once we've authenticated to the remote system.
-  const { path, cleanup } = await tmp.dir({
-    mode: 0o700,
-    prefix: "p0cli-",
-    unsafeCleanup: true,
+describe("isSudoCommand", () => {
+  it("is true for the --sudo flag", () => {
+    expect(isSudoCommand({ sudo: true })).toBe(true);
   });
 
-  return { path, cleanup };
-};
+  it("is true when the remote command is sudo", () => {
+    expect(isSudoCommand({ command: "sudo" })).toBe(true);
+  });
 
-export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
-  args.sudo || args.command === "sudo";
+  it("is false otherwise", () => {
+    expect(isSudoCommand({ command: "ls" })).toBeFalsy();
+  });
+});

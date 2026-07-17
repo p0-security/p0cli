@@ -15,9 +15,11 @@ import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan } from "../../opentelemetry/otel-helpers";
 import { awsSshProvider } from "../../plugins/aws/ssh";
-import { azureSshProvider } from "../../plugins/azure/ssh";
+import { azureBastionSshProvider } from "../../plugins/azure/ssh-bastion";
+import { azureJumpHostSshProvider } from "../../plugins/azure/ssh-jump-host";
 import { gcpSshProvider } from "../../plugins/google/ssh";
 import { selfHostedSshProvider } from "../../plugins/self-hosted/ssh";
+import { isSudoCommand } from "../../plugins/ssh/shared";
 import { SshConfig } from "../../plugins/ssh/types";
 import { Authn } from "../../types/identity";
 import { PermissionRequest } from "../../types/request";
@@ -25,9 +27,11 @@ import {
   CliSshRequest,
   PluginSshRequest,
   SshProvider,
+  SshRequest,
   SupportedSshProvider,
   SupportedSshProviders,
 } from "../../types/ssh";
+import { assertNever } from "../../util";
 import { request } from "./request";
 import { pick } from "lodash";
 import { sys } from "typescript";
@@ -75,12 +79,21 @@ export type SshRequestOptions = {
   quiet?: boolean;
 };
 
-export type SshAdditionalSetup = {
-  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
-  sshOptions: string[];
-
+/** Identity file/certificate paths minted by setup/setupProxy, for providers
+ * whose proxy hop is itself an authenticated command (e.g. Azure's jump-host
+ * ProxyCommand, which is a full `ssh` invocation) and so needs them passed
+ * into proxyCommand explicitly rather than held as provider state. */
+export type SshProxyCredentials = {
   /** The path to the private key file to use for the SSH connection, instead of the default P0 CLI managed key */
   identityFile?: string;
+
+  /** The path to the certificate file to use for the SSH connection */
+  certificatePath?: string;
+};
+
+export type SshAdditionalSetup = SshProxyCredentials & {
+  /** A list of SSH configuration options, as would be used after '-o' in an SSH command */
+  sshOptions: string[];
 
   /** The port to connect to, overriding the default */
   port?: string;
@@ -89,17 +102,35 @@ export type SshAdditionalSetup = {
   teardown: () => Promise<void>;
 };
 
-export const SSH_PROVIDERS: Record<
-  SupportedSshProvider,
-  SshProvider<any, any, any, any>
-> = {
-  aws: awsSshProvider,
-  azure: azureSshProvider,
-  gcloud: gcpSshProvider,
-  "self-hosted": selfHostedSshProvider,
+export const newSshProvider = (
+  request: PermissionRequest<PluginSshRequest> | SshRequest
+): SshProvider<any, any, any, any> => {
+  const provider =
+    "permission" in request ? request.permission.provider : request.type;
+
+  switch (provider) {
+    case "aws":
+      return awsSshProvider;
+    case "gcloud":
+      return gcpSshProvider;
+    case "self-hosted":
+      return selfHostedSshProvider;
+    case "azure": {
+      // Narrowing `provider` doesn't narrow `request`, so re-check the shape's
+      // own discriminant before reading its Azure-only fields.
+      const jumpHost =
+        "permission" in request
+          ? request.permission.provider === "azure" &&
+            request.permission.jumpHost
+          : request.type === "azure" && request.jumpHost;
+      return jumpHost ? azureJumpHostSshProvider : azureBastionSshProvider;
+    }
+    default:
+      throw assertNever(provider);
+  }
 };
 
-const validateSshInstall = async (
+export const validateSshInstall = async (
   authn: Authn,
   args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>
 ) => {
@@ -132,9 +163,6 @@ export const getDefaultSudo = (): boolean => {
   const sudo = process.env.P0_SSH_SUDO;
   return !!sudo && sudo !== "0" && sudo.toLowerCase?.() !== "false";
 };
-
-export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
-  args.sudo || args.command === "sudo";
 
 export const provisionRequest = async (
   authn: Authn,
@@ -172,21 +200,7 @@ export const provisionRequest = async (
     );
   };
 
-  // Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
-  const requestErrorHandler = (err: any) => {
-    if (typeof err === "string") {
-      print2(err);
-      if (
-        err.startsWith("Could not find any instances matching") &&
-        destination.includes("@")
-      ) {
-        print2(
-          "Hint: The instance name appears to include a username. The username should be omitted."
-        );
-      }
-    }
-    sys.exit(1);
-  };
+  const requestErrorHandler = newSshRequestErrorHandler(destination);
 
   let response;
   if (options?.approvedOnly) {
@@ -237,10 +251,7 @@ const pluginToCliRequest = async (
   request: PermissionRequest<PluginSshRequest>,
   options: { debug?: boolean; publicKey: string }
 ): Promise<PermissionRequest<CliSshRequest>> =>
-  await SSH_PROVIDERS[request.permission.provider].toCliRequest(
-    request as any,
-    options
-  );
+  await newSshProvider(request).toCliRequest(request, options);
 
 export const prepareRequest = async (
   authn: Authn,
@@ -258,36 +269,68 @@ export const prepareRequest = async (
 
     const { requestId, publicKey, provisionedRequest } = result;
 
-    const sshProvider = SSH_PROVIDERS[provisionedRequest.permission.provider];
-
     span.setAttribute("provider", provisionedRequest.permission.provider);
     span.setAttribute("requestId", requestId);
-
-    await sshProvider.ensureInstall({ debug: args.debug });
-
-    await sshProvider.submitPublicKey?.(
+    const { request, sshProvider, sshHostKeys } = await setupSshConnection(
       authn,
-      provisionedRequest,
+      args,
       requestId,
       publicKey,
-      args.debug
+      provisionedRequest
     );
-
-    await sshProvider.ensureInstall();
-
-    const cliRequest = await pluginToCliRequest(provisionedRequest, {
-      ...args,
-      publicKey,
-    });
-
-    const request = sshProvider.requestToSsh(cliRequest);
-
-    const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
-      ...args,
-      authn,
-      requestId,
-    });
 
     return { ...result, request, sshProvider, provisionedRequest, sshHostKeys };
   });
+};
+
+// Always prints the error, but adds a hint if we think a username was included in the instance name by mistake.
+export const newSshRequestErrorHandler =
+  (destination: string) => (err: any) => {
+    if (typeof err === "string") {
+      print2(err);
+      if (
+        err.startsWith("Could not find any instances matching") &&
+        destination.includes("@")
+      ) {
+        print2(
+          "Hint: The instance name appears to include a username. The username should be omitted."
+        );
+      }
+    }
+    sys.exit(1);
+  };
+
+export const setupSshConnection = async (
+  authn: Authn,
+  args: yargs.ArgumentsCamelCase<BaseSshCommandArgs>,
+  requestId: string,
+  publicKey: string,
+  provisionedRequest: PermissionRequest<PluginSshRequest>
+) => {
+  const sshProvider = newSshProvider(provisionedRequest);
+
+  await sshProvider.ensureInstall({ debug: args.debug });
+
+  await sshProvider.submitPublicKey?.(
+    authn,
+    provisionedRequest,
+    requestId,
+    publicKey,
+    args.debug
+  );
+
+  const cliRequest = await pluginToCliRequest(provisionedRequest, {
+    ...args,
+    publicKey,
+  });
+
+  const request = sshProvider.requestToSsh(cliRequest);
+
+  const sshHostKeys = await sshProvider.resolveHostKeys?.(request, {
+    ...args,
+    authn,
+    requestId,
+  });
+
+  return { request, sshProvider, sshHostKeys };
 };

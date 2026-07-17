@@ -62,7 +62,7 @@ const AWS_DELEGATE: AwsResourcePermissionSpec = {
     name: "p0-role",
   },
   generated: { name: "p0-role" },
-  delegation: {},
+  delegation: [],
 };
 
 const buildRequest = (
@@ -117,18 +117,7 @@ describe("kubeconfigAction", () => {
     vi.clearAllMocks();
   });
 
-  it("passes the aws delegate to awsCloudAuth when delegation is in legacy record form", async () => {
-    mockRequestAccessToCluster.mockResolvedValue(
-      buildRequest({ aws: AWS_DELEGATE })
-    );
-
-    await runKubeconfig();
-
-    expect(mockAwsCloudAuth).toHaveBeenCalledOnce();
-    expect(mockAwsCloudAuth.mock.calls[0]?.[1]).toEqual(AWS_DELEGATE);
-  });
-
-  it("passes the aws delegate to awsCloudAuth when delegation is in new array form", async () => {
+  it("passes the aws delegate to awsCloudAuth when delegation is in array form", async () => {
     mockRequestAccessToCluster.mockResolvedValue(
       buildRequest([{ key: "aws", request: AWS_DELEGATE }])
     );
@@ -146,41 +135,5 @@ describe("kubeconfigAction", () => {
       "Backend granted k8s access, but this is not an EKS cluster."
     );
     expect(mockAwsCloudAuth).not.toHaveBeenCalled();
-  });
-
-  it("resolves equivalent shapes identically", async () => {
-    mockRequestAccessToCluster.mockResolvedValueOnce(
-      buildRequest({ aws: AWS_DELEGATE })
-    );
-    await runKubeconfig();
-    const recordCallArg = mockAwsCloudAuth.mock.calls[0]?.[1];
-
-    vi.clearAllMocks();
-    mockGetAndValidateK8sIntegration.mockResolvedValue({
-      clusterConfig: {
-        clusterId: "c-1",
-        awsAccountId: "111111111111",
-        awsClusterArn: "arn:aws:eks:us-east-1:111111111111:cluster/my-cluster",
-      },
-      awsLoginType: "federated",
-    });
-    mockEnsureEksInstall.mockResolvedValue(true);
-    mockAwsCloudAuth.mockResolvedValue({
-      AWS_ACCESS_KEY_ID: "k",
-      AWS_SECRET_ACCESS_KEY: "s",
-      AWS_SESSION_TOKEN: "t",
-      AWS_SECURITY_TOKEN: "t",
-    });
-    mockSpinUntil.mockImplementation(
-      async (_msg: string, action: any) => action
-    );
-    mockExec.mockResolvedValue({ stdout: "ok", stderr: "", code: 0 });
-    mockRequestAccessToCluster.mockResolvedValueOnce(
-      buildRequest([{ key: "aws", request: AWS_DELEGATE }])
-    );
-    await runKubeconfig();
-    const arrayCallArg = mockAwsCloudAuth.mock.calls[0]?.[1];
-
-    expect(arrayCallArg).toEqual(recordCallArg);
   });
 });

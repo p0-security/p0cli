@@ -8,22 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import tmp from "tmp-promise";
+import { GCLOUD_TARGET } from "./harness";
+import { describeSshFlow } from "./ssh-flow";
 
-export const createTempDirectoryForKeys = async (): Promise<{
-  path: string;
-  cleanup: () => Promise<void>;
-}> => {
-  // unsafeCleanup lets us delete the directory even if there are still files in it, which is fine since the
-  // files are no longer needed once we've authenticated to the remote system.
-  const { path, cleanup } = await tmp.dir({
-    mode: 0o700,
-    prefix: "p0cli-",
-    unsafeCleanup: true,
-  });
-
-  return { path, cleanup };
-};
-
-export const isSudoCommand = (args: { sudo?: boolean; command?: string }) =>
-  args.sudo || args.command === "sudo";
+describeSshFlow(GCLOUD_TARGET);

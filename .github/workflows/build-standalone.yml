@@ -302,6 +302,14 @@ jobs:
         with:
           name: p0-macOS-${{ env.VERSION }}
           path: build/sea/p0-macOS-${{ env.VERSION }}.pkg
+        env:
+          # The FIPS OpenSSL config (set via GITHUB_ENV above, intended only for the
+          # bundled app's Node) leaks into GitHub's own Node runtime, which now defaults
+          # to Node 24 / OpenSSL 3.5. Pointing that at the FIPS-node 3.1.2 provider breaks
+          # the action's crypto (EVP_DigestSqueeze: method not supported). Unset them here
+          # so the runner's default OpenSSL is used.
+          OPENSSL_CONF: ""
+          OPENSSL_MODULES: ""
       - name: Upload artifact to release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
@@ -309,6 +317,8 @@ jobs:
           files: build/sea/p0-macOS-${{ env.VERSION }}.pkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENSSL_CONF: ""
+          OPENSSL_MODULES: ""
       - name: Cleanup keychain
         run: |
           security delete-keychain build.keychain

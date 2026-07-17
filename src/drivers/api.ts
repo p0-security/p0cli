@@ -29,6 +29,8 @@ const certSignRequestUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/certificates`;
 const sshAuditUrl = (tenant: string) =>
   `${tenantUrl(tenant)}/integrations/ssh/audit`;
+const fileTransferAuditUrl = (tenant: string) =>
+  `${tenantUrl(tenant)}/integrations/file-transfer/audit`;
 
 const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 export const requestStatusUrl = (tenant: string, requestId: string) =>
@@ -304,6 +306,45 @@ export const auditSshSessionActivity = async (args: {
         action,
         sshSessionId,
       }),
+    });
+    if (debug) {
+      print2(`Audit log submitted for request: ${requestId}`);
+    }
+  } catch (error) {
+    if (debug) {
+      print2(`Failed to submit audit log for request: ${requestId}`);
+      print2(`Error: ${JSON.stringify(error)}`);
+    }
+  }
+};
+
+export const auditFileTransferActivity = async (args: {
+  authn: Authn;
+  requestId: string;
+  fileTransferId: string;
+  action: `file-transfer.${"download" | "object-delete" | "upload"}`;
+  outcome: "failure" | "success";
+  debug: boolean | undefined;
+}) => {
+  const { authn, requestId, action, fileTransferId, outcome, debug } = args;
+
+  if (debug) {
+    print2(
+      `Submitting audit log for request: ${requestId}, action: ${action}, fileTransferId: ${fileTransferId}, outcome: ${outcome}`
+    );
+  }
+
+  try {
+    await authFetch(authn, {
+      url: fileTransferAuditUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        requestId,
+        action,
+        fileTransferId,
+        outcome,
+      }),
+      maxTimeoutMs: 5_000,
     });
     if (debug) {
       print2(`Audit log submitted for request: ${requestId}`);

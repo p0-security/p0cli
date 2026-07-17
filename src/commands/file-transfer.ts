@@ -8,7 +8,9 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { createKeyPair } from "../common/keys";
 import { retryWithSleep } from "../common/retry";
+import { auditFileTransferActivity } from "../drivers/api";
 import { authenticate } from "../drivers/auth";
 import { print2 } from "../drivers/stdio";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
@@ -18,7 +20,9 @@ import {
   provisionTransferRequest,
 } from "../plugins/file-transfer";
 import { sshOrScp } from "../plugins/ssh";
-import { prepareRequest } from "./shared/ssh";
+import { setupSshConnection, validateSshInstall } from "./shared/ssh";
+import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { createReadStream, statSync } from "fs";
 import { basename } from "node:path";
@@ -33,6 +37,45 @@ export type FileTransferCommandArgs = {
 
 const renderDurationSec = (s: number) =>
   s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
+
+// Standard POSIX shell exit code for "command not found".
+const COMMAND_NOT_FOUND_EXIT_CODE = 127;
+const SUCCESS_EXIT_CODE = 0;
+
+/**
+ * Best-effort cleanup of the uploaded S3 object. The CLI already holds an
+ * authenticated S3 client, so it deletes directly and the client also
+ * auto-refreshes credentials.
+ *
+ * This must never fail an otherwise-successful transfer: the object still
+ * expires via the bucket's lifecycle policy, so a failed delete is harmless.
+ * The result therefore defaults to success — errors are only surfaced under
+ * --debug.
+ */
+const deleteUploadedObject = async (
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  debug?: boolean
+) => {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    if (debug) {
+      print2(`Deleted s3://${bucket}/${key} from the bucket.`);
+    }
+    return true;
+  } catch (err) {
+    print2(
+      `Warning: could not delete s3://${bucket}/${key}. The file transfer succeeded, so this is safe to ignore. You may delete this object manually, or it will be removed automatically by the file-transfer bucket's lifecycle expiration rule.`
+    );
+    // The raw error is debugging detail, not outcome info.
+    if (debug) {
+      const message = err instanceof Error ? err.message : String(err);
+      print2(`Delete error: ${message}`);
+    }
+    return false;
+  }
+};
 
 export const fileTransferCommand = (yargs: yargs.Argv) =>
   yargs.command<FileTransferCommandArgs>(
@@ -56,11 +99,15 @@ export const fileTransferCommand = (yargs: yargs.Argv) =>
         })
         .option("debug", {
           type: "boolean",
-          describe: "Print debug information, including signed URLs.",
+          describe: "Print debug information.",
         }),
     fileTransferAction
   );
 
+/** Transfers files between a local and AWS remote host using s3. Allows for faster transfer speeds than scp.
+ *
+ * Implicitly gains access to the SSH resource.
+ */
 const fileTransferAction = async (
   args: yargs.ArgumentsCamelCase<FileTransferCommandArgs>
 ) => {
@@ -69,6 +116,14 @@ const fileTransferAction = async (
     async (span) => {
       span.setAttribute("source", args.source);
       span.setAttribute("destination", args.destination);
+
+      const authn = await authenticate(args);
+
+      // file transfer requires ssh to be installed
+      await validateSshInstall(authn, args);
+      const { publicKey, privateKey } = await createKeyPair();
+
+      // TODO need to add verify file transfer installed?
 
       // Fail before requesting backend approval if the source can't be uploaded —
       // a missing path or directory would otherwise only surface mid-upload, after
@@ -83,10 +138,10 @@ const fileTransferAction = async (
         throw `Source path is not a regular file: ${args.source}`;
       }
 
-      const authn = await authenticate(args);
-
       print2("Requesting file-transfer access...");
-      const target = await provisionTransferRequest(authn, args);
+
+      const { target, delegatedSshRequest, requestId } =
+        await provisionTransferRequest(authn, args, publicKey);
       print2(`Access approved for s3://${target.bucket}/${target.prefix}`);
 
       // append original basename so the S3 object preserves the original filename.
@@ -94,21 +149,6 @@ const fileTransferAction = async (
 
       print2("Preparing upload credentials...");
       const s3 = createTransferClient(authn, target, args.debug);
-      const { signedUrl: deleteUrl, expirySeconds: deleteExpirySeconds } =
-        await generateSignedUrl(
-          authn,
-          s3,
-          { ...target, key: uploadKey },
-          "delete",
-          args.debug
-        );
-
-      // TODO: remove logging actual credential but log expiry when we remove the launchdarkly file-transfer flag
-      if (args.debug) {
-        print2(
-          `DELETE (${renderDurationSec(deleteExpirySeconds)}): ${deleteUrl}`
-        );
-      }
 
       print2(`Uploading ${args.source}...`);
 
@@ -153,13 +193,39 @@ const fileTransferAction = async (
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.upload",
+          outcome: "failure",
+          debug: args.debug,
+        });
         throw `Upload failed: ${message}`;
       }
 
       print2("Uploaded.");
 
-      // TODO we need to remove this second request. it should be included in file transfer delegation. Will be removed in future ticket
-      print2(`Requesting download access on ${args.destination}...`);
+      await auditFileTransferActivity({
+        authn,
+        requestId,
+        fileTransferId: target.prefix,
+        action: "file-transfer.upload",
+        outcome: "success",
+        debug: args.debug,
+      });
+
+      print2(`Preparing to ssh into ${args.destination}...`);
+
+      await cleanupStaleSshConfigs(args.debug);
+
+      const { request, sshProvider, sshHostKeys } = await setupSshConnection(
+        authn,
+        args,
+        requestId,
+        publicKey,
+        delegatedSshRequest
+      );
 
       // Drop `source` (local file path) before passing to SSH plumbing —
       // `createCommand` uses `"source" in args` to branch between scp and ssh path, and we want the ssh branch here.
@@ -170,9 +236,6 @@ const fileTransferAction = async (
         sshOptions: [],
       };
 
-      const { request, requestId, privateKey, sshProvider, sshHostKeys } =
-        await prepareRequest(authn, sshCmdArgs, args.destination);
-
       // Sign GET URL now so the 5-min TTL starts after approval clears,
       // not before — otherwise long approval waits could expire the URL.
       const { signedUrl: getUrl, expirySeconds: getExpirySeconds } =
@@ -180,11 +243,12 @@ const fileTransferAction = async (
           authn,
           s3,
           { bucket: target.bucket, key: uploadKey, awsSpec: target.awsSpec },
-          "get",
           args.debug
         );
       if (args.debug) {
-        print2(`GET    (${renderDurationSec(getExpirySeconds)}): ${getUrl}`);
+        print2(
+          `GET URL created. Expiry:${renderDurationSec(getExpirySeconds)}`
+        );
       }
 
       const remotePath = `/home/${request.linuxUserName}/${basename(args.source)}`;
@@ -209,15 +273,49 @@ const fileTransferAction = async (
         sshHostKeys,
       });
 
-      // TODO update comment when we add fallback downloader if needed
-      if (exitCode === 127) {
+      // curl is the only downloader today; revisit this branch if we add fallbacks
+      if (exitCode === COMMAND_NOT_FOUND_EXIT_CODE) {
         throw `curl not found on ${args.destination}. The file is in S3 — install curl on the destination instance and re-run file-transfer command`;
       }
-      if (exitCode !== null && exitCode !== 0) {
+
+      if (exitCode === SUCCESS_EXIT_CODE) {
+        // Success path: the file is on the instance, so clean it from the bucket.
+        print2(`Downloaded to ${remotePath}. File transfer succeeded.`);
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.download",
+          outcome: "success",
+          debug: args.debug,
+        });
+        const deleteSucceeded = await deleteUploadedObject(
+          s3,
+          target.bucket,
+          uploadKey,
+          args.debug
+        );
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.object-delete",
+          outcome: deleteSucceeded ? "success" : "failure",
+          debug: args.debug,
+        });
+      } else if (exitCode === null) {
+        throw `Remote download was interrupted before completing ... re-run the file-transfer command`;
+      } else {
+        await auditFileTransferActivity({
+          authn,
+          requestId,
+          fileTransferId: target.prefix,
+          action: "file-transfer.download",
+          outcome: "failure",
+          debug: args.debug,
+        });
         throw `Remote download exited with code ${exitCode}`;
       }
-
-      print2(`Downloaded to ${remotePath}.`);
 
       // Force exit to prevent hanging due to orphaned child processes (e.g.,
       // session-manager-plugin) holding open file descriptors. See:
