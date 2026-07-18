@@ -52,7 +52,9 @@ const jumpHostUnprovisionedAccessPatterns = [
   {
     // The host rejected our certificate. Until the access role finishes propagating to the jump host / target VM,
     // public key auth is refused; retry within the propagation window rather than failing immediately.
-    pattern: /Permission denied \(publickey\)/,
+    // sshd lists every auth method it allows, so a host that also permits password auth
+    // reports "(publickey,password)" — tolerate any method list that includes publickey.
+    pattern: /Permission denied \([^)]*publickey[^)]*\)/,
   },
   {
     // The connection dropped before the SSH banner — e.g. the jump host ProxyCommand exited after a connect timeout,
