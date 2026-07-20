@@ -324,3 +324,83 @@ describe("proxyCommand receives setup/setupProxy credentials", () => {
     );
   });
 });
+
+// A `--sudo` session runs a `sudo -nv` pre-test to wait for the sudoers grant to
+// propagate. The Azure providers classify propagation from stderr:
+// `Sorry, user ... may not run sudo` means "still propagating" and
+// `sudo: a password is required` means "provisioned". A user granted passwordless
+// (NOPASSWD) sudo hits neither branch — `sudo -nv` just exits 0 with no output —
+// so the pre-test must treat a clean exit as "access propagated" instead of
+// looping until the propagation timeout (the "stuck pre-testing" bug).
+describe("sudo pre-test access propagation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Mirrors the Azure providers: sudo commands are pre-tested with `sudo -nv`.
+  // A negative propagation timeout puts endTime in the past, so a pre-test that
+  // is *not* recognized as propagated fails immediately instead of retrying —
+  // letting us assert the exit-0 short-circuit without waiting on a real timer.
+  const sudoProvider = (propagationTimeoutMs: number) =>
+    ({
+      cloudProviderLogin: vi.fn(async () => undefined),
+      proxyCommand: vi.fn(() => ["nc", "localhost", "22"]),
+      reproCommands: () => undefined,
+      preTestAccessPropagationArgs: (cmdArgs: any) => ({
+        ...cmdArgs,
+        command: "sudo",
+        arguments: ["-nv"],
+      }),
+      propagationTimeoutMs,
+    }) as any;
+
+  // type: "azure" (no jump host) makes spawnSshNode resolve the real
+  // azureBastionSshProvider internally, whose provisionedAccessPatterns only
+  // match `sudo: a password is required` — never emitted for NOPASSWD sudo.
+  const request = {
+    type: "azure",
+    id: "localhost",
+    linuxUserName: "user",
+  } as any;
+
+  const runSudoSsh = (sshProvider: any) =>
+    sshOrScp({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: { sudo: true, destination: "my-vm", arguments: [] } as any,
+      privateKey: "pk",
+      sshProvider,
+      sshHostKeys: undefined,
+    });
+
+  it("proceeds to the session when a passwordless `sudo -nv` pre-test exits 0", async () => {
+    // Every spawned child exits 0 with no stderr, mimicking NOPASSWD sudo where
+    // `sudo -nv` succeeds silently. Without treating exit 0 as propagated, the
+    // past-due endTime would make this reject as "did not propagate".
+    mockSpawn.mockImplementation(() => makeFakeChild());
+
+    await expect(runSudoSsh(sudoProvider(-1))).resolves.toBe(0);
+
+    // Both the pre-test probe and the real session ran.
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+    const [preTestCommand, preTestArgs] = mockSpawn.mock.calls[0]!;
+    expect(preTestCommand).toBe("ssh");
+    expect((preTestArgs as string[]).join(" ")).toContain('sudo "-nv"');
+  });
+
+  it("keeps failing when the user is still not a sudoer after the window closes", async () => {
+    // While the grant is still propagating, `sudo -nv` prints the not-a-sudoer
+    // message and exits non-zero; with endTime in the past this is terminal.
+    mockSpawn.mockImplementation(() =>
+      makeFailingChild("Sorry, user miguel may not run sudo on my-vm.\n", 1)
+    );
+
+    await expect(runSudoSsh(sudoProvider(-1))).rejects.toMatch(
+      /did not propagate/
+    );
+
+    // Only the pre-test ran; the session is never reached.
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+});

@@ -286,9 +286,21 @@ async function spawnSshNode(
       exitListener.unref();
       cleanupAllListeners();
 
+      // A pre-test probe that exits cleanly has itself succeeded: `sudo -nv`
+      // returns 0 when the user already holds (passwordless, i.e. NOPASSWD, or
+      // freshly-cached) sudo. That is an unambiguous signal that access has
+      // propagated, even though the provider's `provisionedAccessPatterns`
+      // message (`sudo: a password is required`) is only emitted when a password
+      // would be required. Without treating a clean exit as propagated, users
+      // with NOPASSWD sudo keep retrying the pre-test until the propagation
+      // timeout elapses, so the command appears to hang before finally failing.
+      const accessPropagated =
+        isAccessPropagated() ||
+        (!!options.isAccessPropagationPreTest && code === 0);
+
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
-      if (!isAccessPropagated()) {
+      if (!accessPropagated) {
         if (options.endTime < Date.now()) {
           const knownError = connectionErrorMessage();
           reject(
@@ -339,8 +351,9 @@ async function spawnSshNode(
         }
       }
 
-      if (options.isAccessPropagationPreTest && isAccessPropagated()) {
-        // override the exit code to 0 if the expected error was found, this means access is ready.
+      if (options.isAccessPropagationPreTest && accessPropagated) {
+        // override the exit code to 0 if the expected error was found (or the
+        // probe already exited 0), this means access is ready.
         resolve(0);
         return;
       }
