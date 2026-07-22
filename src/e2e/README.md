@@ -6,19 +6,22 @@ Automated end-to-end tests that exercise the real CLI against a live P0 organiza
 yarn e2e
 ```
 
-Target a single cloud provider's flow by passing its spec file (see "What it does" below for the file names):
+Target a single flow by passing its spec file (see "What it does" below for the file names):
 
 ```
 yarn e2e src/e2e/ssh-aws.e2e.ts
 yarn e2e src/e2e/ssh-azure.e2e.ts
 yarn e2e src/e2e/ssh-gcloud.e2e.ts
+yarn e2e src/e2e/file-transfer-aws.e2e.ts
 ```
 
-Global setup and login still run first; only that provider's node needs to be configured (see Configuration below).
+Global setup and login still run first; only that flow's node needs to be configured (see Configuration below).
 
 ## What it does
 
 Global setup (before any test) smoke-tests the existing build with `p0 --version` and runs `p0 login p0-e2e` — a failure of either step aborts the whole run. Run `yarn build` yourself first; the suite does not build for you.
+
+### The ssh flow
 
 There's one ssh flow spec per cloud provider — `ssh-aws.e2e.ts`, `ssh-azure.e2e.ts`, `ssh-gcloud.e2e.ts` — each driving its configured node through the whole access lifecycle, in order. They share their step logic (`ssh-flow.ts`) but are separate files so you can run one provider independently, e.g. `yarn e2e src/e2e/ssh-aws.e2e.ts`. Each step runs a remote command instead of an interactive shell, so its session ends on its own once the connection succeeds:
 
@@ -36,6 +39,17 @@ Include <P0_PATH>/ssh/configs/*.config
 ```
 
 (`<P0_PATH>` is `~/.p0` or `~/.p0-<env>` depending on your CLI environment; extra `ssh-resolve` flags such as `--debug` are fine, but the `Match` line must come before the `Include`.)
+
+### The file-transfer flow
+
+`file-transfer-aws.e2e.ts` is a separate suite for `p0 file-transfer`, which only supports AWS destinations today. It targets the same AWS node as the ssh flow (`P0_E2E_AWS_NODE`) and runs, in order:
+
+1. `p0 ls file-transfer session destination --json` — confirms the configured node is visible to the e2e user before requesting access
+2. `p0 file-transfer <missing-file> <node-id>` — asserts a nonexistent source path fails fast, before any access request is made
+3. `p0 file-transfer <file> <node-id>` — uploads a marker file through the temporary S3 bucket, waits for approval and propagation, and downloads it onto the instance (this implicitly provisions ssh access to the node)
+4. `p0 ssh <node-id> cat <remote-path>` — verifies the file content actually landed on the instance, reusing the grant from step 3
+
+The suite removes the remote file (best effort) when it finishes, logging a warning if that cleanup fails. Run it together with the ssh flows or on its own — each suite requests its own access.
 
 At the end of the run the suite prints a reminder: **please revoke all access granted to the e2e user before running the suite again**, so the next run requests access from scratch.
 

@@ -65,6 +65,40 @@ export const GCLOUD_TARGET = sshTarget(
   process.env.P0_E2E_GCLOUD_NODE
 );
 
+/** POSIX success exit code, for readable assertions on {@link CliResult}. */
+export const SUCCESS_EXIT_CODE = 0;
+
+/** Item shape of `p0 ls <command> session destination --json` output.
+ *
+ * Beyond the `key`/`value` listing pair, the backend reports the other
+ * identifiers a destination is known by — its cloud instance ID, display
+ * name, and any alternative hostnames. A node matcher should accept all of
+ * them so the configured node ID can be any identifier a user could pass to
+ * `p0 ssh`. */
+export type LsDestinationItem = {
+  provider: string;
+  key: string;
+  value: string;
+  instanceId?: string;
+  name?: string;
+  alternativeNames?: string[];
+};
+
+/** True when an ls destination item refers to the configured node for the
+ * given cloud (matched by key, value, instance ID, name, or alternative
+ * name). */
+export const lsItemMatchesNode = (
+  item: LsDestinationItem,
+  lsProvider: string,
+  node: string
+) =>
+  item.provider === lsProvider &&
+  (item.key === node ||
+    item.value === node ||
+    item.instanceId === node ||
+    item.name === node ||
+    (item.alternativeNames?.includes(node) ?? false));
+
 export type CliResult = {
   code: number | null;
   stdout: string;

@@ -10,9 +10,12 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import {
   E2E_REASON,
+  LsDestinationItem,
+  lsItemMatchesNode,
   runCommand,
   runP0,
   SshTarget,
+  SUCCESS_EXIT_CODE,
   uniqueMarker,
 } from "./harness";
 import * as fs from "node:fs";
@@ -63,27 +66,13 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
         ["ls", "ssh", "session", "destination", "--json", "--size", "500"],
         { timeoutMs: 2 * 60_000 }
       );
-      expect(result.code, result.output).toBe(0);
+      expect(result.code, result.output).toBe(SUCCESS_EXIT_CODE);
 
       const { items } = JSON.parse(result.stdout) as {
-        items: {
-          provider: string;
-          key: string;
-          value: string;
-          instanceId?: string;
-          name?: string;
-          alternativeNames?: string[];
-        }[];
+        items: LsDestinationItem[];
       };
-      const found = items.some(
-        (item) =>
-          item.provider === lsProvider &&
-          (item.key === node ||
-            item.value === node ||
-            item.instanceId === node ||
-            item.name === node ||
-            // eslint is having a hard time realizing that node is not null here.
-            (!!node && item.alternativeNames?.includes(node)))
+      const found = items.some((item) =>
+        lsItemMatchesNode(item, lsProvider, node!)
       );
       expect(
         found,
@@ -103,7 +92,7 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
         marker,
       ]);
 
-      expect(result.code, result.output).toBe(0);
+      expect(result.code, result.output).toBe(SUCCESS_EXIT_CODE);
       expect(result.output).toContain(marker);
     });
 
@@ -120,7 +109,7 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
         "whoami",
       ]);
 
-      expect(result.code, result.output).toBe(0);
+      expect(result.code, result.output).toBe(SUCCESS_EXIT_CODE);
       expect(result.output).toContain("root");
     });
 
@@ -136,7 +125,7 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
         "--reason",
         E2E_REASON,
       ]);
-      expect(upload.code, upload.output).toBe(0);
+      expect(upload.code, upload.output).toBe(SUCCESS_EXIT_CODE);
 
       const download = await runP0([
         "scp",
@@ -147,7 +136,7 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
         "--reason",
         E2E_REASON,
       ]);
-      expect(download.code, download.output).toBe(0);
+      expect(download.code, download.output).toBe(SUCCESS_EXIT_CODE);
 
       expect(fs.readFileSync(downloadPath, "utf8")).toBe(`${marker}\n`);
     });
@@ -159,7 +148,7 @@ export const describeSshFlow = ({ provider, lsProvider, node }: SshTarget) => {
       const sshMarker = uniqueMarker(`flow-${provider}-native-ssh`);
       const ssh = await runCommand("ssh", [node!, `echo ${sshMarker}`]);
 
-      expect(ssh.code, ssh.output).toBe(0);
+      expect(ssh.code, ssh.output).toBe(SUCCESS_EXIT_CODE);
       expect(ssh.output).toContain(sshMarker);
     });
   });
