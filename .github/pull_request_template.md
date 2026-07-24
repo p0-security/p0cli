@@ -39,9 +39,11 @@ Avoid:
 -->
 
 **Status:** [Preview/Beta/GA/N/A]
+
 <!-- Keep one. N/A is fine for refactors, CI, docs, and other non-feature changes. -->
 
 **Change**
+
 <!-- What does this PR change (user-facing or not), and how does it solve the problem? -->
 
 Check off any of the following areas of code that are modified:
@@ -67,25 +69,30 @@ Check off any of the following areas of code that are modified:
 - [ ] Security fix
 
 **Validation**
+
 - Testing: <!-- manual steps, automated tests included, or link to test run -->
 - Blast radius: <!-- what else could this change affect? -->
 - Risks & mitigations: <!-- or "none" -->
 
 **Rollout / rollback**
+
 <!-- Required if APIs or datastore are checked above otherwise write "N/A".
 How is this deployed, and how do we turn it off or roll it back if something
 goes wrong? Feature flag? Migration reversible? -->
 
 **Tracking (optional)**
+
 <!-- Link to the Linear issue. -->
 
 **Implementation (optional)**
+
 <!--
 - What technical decisions were necessary?
 - Any technical debt introduced? Link follow-up tickets.
 -->
 
 **Attachments (optional)**
+
 <!-- Screenshots / video / etc. that aid review. -->
 
 **Follow-up Work (optional)**
