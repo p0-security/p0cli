@@ -38,25 +38,31 @@ Avoid:
 - "Updates auth flow for prod-db-cluster" (internal system; say "database cluster" instead)
 -->
 
+**Status:** [Preview/Beta/GA/N/A]
+
+<!-- Keep one. N/A is fine for refactors, CI, docs, and other non-feature changes. -->
+
 **Change**
 
-What does this pull request change (user-facing or not), and how does it solve the problem?
+<!-- What does this PR change (user-facing or not), and how does it solve the problem? -->
 
 Check off any of the following areas of code that are modified:
 
 - [ ] authentication / authorization
 - [ ] workflow
+- [ ] APIs
 - [ ] lifecycle SDK
 - [ ] datastore abstractions
+- [ ] none of the above
 
 **Type of Change**
 
 <!-- Mark the relevant option(s) -->
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] Refactoring (code changes that neither fix bugs nor add features)
+- [ ] Bug fix <!-- (non-breaking change that fixes an issue)-->
+- [ ] New feature <!-- (non-breaking change that adds functionality)-->
+- [ ] Breaking change <!-- (fix or feature that would cause existing functionality to change)-->
+- [ ] Refactoring <!-- (code changes that neither fix bugs nor add features)-->
 - [ ] Documentation update
 - [ ] Dependency update
 - [ ] Performance improvement
@@ -64,25 +70,30 @@ Check off any of the following areas of code that are modified:
 
 **Validation**
 
-How do you know that this change solves the problem? Is testing manual, or are automated
-tests included?
+- Testing: <!-- manual steps, automated tests included, or link to test run -->
+- Blast radius: <!-- what else could this change affect? -->
+- Risks & mitigations: <!-- or "none" -->
 
-How do you know that this change does not introduce new issues? What do you expect to be
-affected by this change? Identify any additional risks or risk-mitigation strategies associated with
-this change.
+**Rollout / rollback**
+
+<!-- Required if APIs or datastore are checked above otherwise write "N/A".
+How is this deployed, and how do we turn it off or roll it back if something
+goes wrong? Feature flag? Migration reversible? -->
 
 **Tracking (optional)**
 
-Link to Linear issue here.
+<!-- Link to the Linear issue. -->
 
 **Implementation (optional)**
 
-- What technical decisions or changes were necessary to make this change?
-- What technical debt, if any, is introduced by this change? If so, include links to any existing follow-up tickets.
+<!--
+- What technical decisions were necessary?
+- Any technical debt introduced? Link follow-up tickets.
+-->
 
 **Attachments (optional)**
 
-Add any screenshots / video / etc. that may aid in review.
+<!-- Screenshots / video / etc. that aid review. -->
 
 **Follow-up Work (optional)**
 
