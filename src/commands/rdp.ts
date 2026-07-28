@@ -40,6 +40,12 @@ export const rdpCommand = (yargs: yargs.Argv) =>
           describe: "Configure the RDP session before connecting",
           default: false,
         })
+        .option("admin", {
+          type: "boolean",
+          describe:
+            "Connect using the target VM's local administrator credentials instead of Microsoft Entra ID",
+          default: false,
+        })
         .usage("$0 rdp <destination>")
         .epilogue(
           `Connect to a Windows virtual machine via RDP through Azure Bastion Host.
