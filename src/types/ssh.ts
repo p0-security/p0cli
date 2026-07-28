@@ -192,6 +192,14 @@ export type SshProvider<
    */
   provisionedAccessPatterns?: readonly AccessPattern[];
 
+  /** Regex matches for error strings indicating a terminal (non-retryable)
+   * connection failure — one that retrying cannot fix, e.g. the provider
+   * rejecting the connection's authentication outright. A match aborts the
+   * access-propagation retry loop immediately and surfaces
+   * `connectionErrorMessage` (falling back to the matched stderr line) instead
+   * of waiting out the propagation timeout. */
+  terminalAccessPatterns?: readonly AccessPattern[];
+
   /** Regex matches for error strings indicating that the provider has fully provisioned */
 
   /** Converts a backend request to a CLI request */

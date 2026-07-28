@@ -77,6 +77,7 @@ const PORT_FORWARDING_FAILED_ERROR_PATTERN = /.*port forwarding failed.*/;
 const accessPropagationGuard = (
   invalidAccessPatterns: readonly AccessPattern[],
   validAccessPatterns: readonly AccessPattern[] | undefined,
+  terminalAccessPatterns: readonly AccessPattern[] | undefined,
   loginRequiredPattern: RegExp | undefined,
   child: ChildProcessByStdio<null, null, Readable>,
   options: SpawnSshNodeOptions
@@ -85,6 +86,10 @@ const accessPropagationGuard = (
   let isLoginException = false;
   let isValidError = false;
   let isHostKeyMismatch = false;
+  // The stderr line that matched a terminal (non-retryable) pattern, if any.
+  // Retrying cannot succeed once this is set, so the retry loop aborts and
+  // surfaces this line when the provider has no friendlier classification.
+  let terminalErrorLine: string | undefined;
   // Retain the (bounded) raw stderr of this attempt so a terminal failure can be
   // classified into an actionable message. We keep the trailing bytes because
   // the decisive error appears at the end of the stream.
@@ -113,6 +118,19 @@ const accessPropagationGuard = (
       isEphemeralAccessDeniedException = true;
     }
 
+    if (terminalErrorLine === undefined) {
+      const matchTerminalPattern = terminalAccessPatterns?.find((message) =>
+        chunkString.match(message.pattern)
+      );
+      if (matchTerminalPattern) {
+        terminalErrorLine =
+          chunkString
+            .split("\n")
+            .find((line) => line.match(matchTerminalPattern.pattern)) ??
+          chunkString;
+      }
+    }
+
     if (matchValidAccessPattern && !matchUnprovisionedPattern) {
       isValidError = true;
     }
@@ -135,6 +153,7 @@ const accessPropagationGuard = (
       (!validAccessPatterns || isValidError),
     isHostKeyMismatch: () => isHostKeyMismatch,
     isLoginException: () => isLoginException,
+    terminalError: () => terminalErrorLine,
     capturedStderr: () => capturedStderr,
     cleanup: () => {
       child.stderr.removeListener("data", stderrHandler);
@@ -221,6 +240,12 @@ async function spawnSshNode(
     const child = spawn(options.command, options.args, {
       env: {
         ...createCleanChildEnv(),
+        // OpenSSH executes ProxyCommand and Match exec via `$SHELL -c`. Pin a
+        // POSIX shell: unlike `sh -c`, `fish -c` sources the user's
+        // config.fish/conf.d, which can override the AWS_* credentials
+        // injected below before the ProxyCommand (`aws ssm start-session`)
+        // runs (CX-464). Windows OpenSSH does not consult $SHELL.
+        ...(getOperatingSystem() !== "win" && { SHELL: "/bin/sh" }),
         ...credentialEnv,
       },
       stdio: options.stdio,
@@ -248,6 +273,7 @@ async function spawnSshNode(
       isAccessPropagated,
       isHostKeyMismatch,
       isLoginException,
+      terminalError,
       capturedStderr,
       cleanup: cleanupStderr,
     } = accessPropagationGuard(
@@ -255,6 +281,7 @@ async function spawnSshNode(
       options.isAccessPropagationPreTest
         ? provider.provisionedAccessPatterns
         : undefined,
+      provider.terminalAccessPatterns,
       provider.loginRequiredPattern,
       child,
       options
@@ -297,6 +324,23 @@ async function spawnSshNode(
       const accessPropagated =
         isAccessPropagated() ||
         (!!options.isAccessPropagationPreTest && code === 0);
+
+      // A terminal error (e.g. AWS rejecting the StartSession call outright)
+      // can never succeed on retry. Check it independently of
+      // `accessPropagated`: that flag only reflects `unprovisionedAccessPatterns`,
+      // which a terminal failure need not also match (e.g. in the `ssh-proxy`
+      // flow, where the watched stderr is the `aws` child's alone, with no
+      // outer ssh "Connection closed" line folded in to trip the unprovisioned
+      // pattern) — so gating this on `!accessPropagated` would silently never
+      // fire for such providers/flows.
+      const terminalErrorLine = terminalError();
+      if (terminalErrorLine !== undefined) {
+        reject(
+          connectionErrorMessage() ??
+            `Failed to connect to ${provider.friendlyName}:\n${terminalErrorLine.trim()}\n${getContactMessage()}`
+        );
+        return;
+      }
 
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success

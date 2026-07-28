@@ -141,10 +141,77 @@ describe("sshProxy credential handoff stays shell-agnostic", () => {
     expect(awsEnv(fishOpts.env)).toEqual(awsEnv(bashOpts.env));
     expect(fishOpts.env.AWS_SESSION_TOKEN).toBe("session-token-123");
 
-    // $SHELL is merely passed through (env is cloned), not used to decide
-    // anything — proving the credential handoff does not depend on it.
-    expect(fishOpts.env.SHELL).toBe("/usr/bin/fish");
-    expect(bashOpts.env.SHELL).toBe("/bin/bash");
+    // $SHELL is pinned to /bin/sh in the child env: OpenSSH executes
+    // ProxyCommand and Match exec via `$SHELL -c`, and `fish -c` — unlike
+    // `sh -c` — sources the user's config.fish, which can override the
+    // injected AWS_* credentials before `aws ssm start-session` runs (CX-464).
+    expect(fishOpts.env.SHELL).toBe("/bin/sh");
+    expect(bashOpts.env.SHELL).toBe("/bin/sh");
+  });
+});
+
+// A hard rejection of the SSM StartSession call (e.g. the 403 <UnauthorizedRequest>
+// body produced by clock skew, a TLS-intercepting proxy, or credentials mangled
+// between p0 and the ProxyCommand) can never succeed on retry. It must abort the
+// access-propagation wait immediately with a classified message instead of
+// blind-retrying for 30s and reporting "Access did not propagate" (CX-464).
+describe("terminal StartSession failures abort the propagation retry loop", () => {
+  // `sshProxy` spawns the `aws` binary directly (it IS the ProxyCommand,
+  // e.g. in the native `ssh-proxy` integration fish users hit) — its stderr
+  // never contains an outer ssh's "Connection closed"/kex line, unlike the
+  // direct `p0 ssh` flow where ssh itself is the spawned child. Terminal
+  // classification must fire from the bare aws error alone.
+  const AWS_403_STDERR =
+    "aws: [ERROR]: An error occurred (403) when calling the StartSession operation: Server authentication failed: <UnauthorizedRequest><message>Forbidden.</message></UnauthorizedRequest>\n";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // request.type "aws" makes spawnSshNode resolve the real awsSshProvider
+  // internally, so its terminalAccessPatterns/connectionErrorMessage apply;
+  // the passed provider controls only the propagation window.
+  const runAwsProxy = (propagationTimeoutMs: number) =>
+    sshProxy({
+      authn: {} as any,
+      request: { type: "aws", region: "us-west-2" } as any,
+      requestId: "req-1",
+      cmdArgs: {} as any,
+      privateKey: "pk",
+      sshProvider: { ...fakeAwsProvider, propagationTimeoutMs },
+      debug: false,
+      port: "22",
+    });
+
+  it("rejects on the first 403 with the classified error instead of retrying", async () => {
+    mockSpawn.mockImplementation(() => makeFailingChild(AWS_403_STDERR, 255));
+
+    // endTime is well in the future: without terminal classification this
+    // would retry every 5s until the window closes.
+    const error = await runAwsProxy(30_000).catch((e) => e);
+
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(error).toContain("AWS rejected the SSM StartSession call");
+    expect(error).toContain(
+      "<UnauthorizedRequest><message>Forbidden.</message></UnauthorizedRequest>"
+    );
+    expect(error).not.toContain("did not propagate");
+  });
+
+  it("still treats a bare connection-closed error as retryable propagation delay", async () => {
+    mockSpawn.mockImplementation(() =>
+      makeFailingChild(
+        "kex_exchange_identification: Connection closed by remote host\n",
+        255
+      )
+    );
+
+    // A past-due endTime makes the retryable failure exhaust the window: it
+    // must still report the propagation message, proving the connection-closed
+    // line alone is not misclassified as terminal.
+    const error = await runAwsProxy(-1).catch((e) => e);
+
+    expect(error).toContain("did not propagate");
   });
 });
 
