@@ -19,17 +19,29 @@ export type AzureRdpPermissionSpec = PermissionSpec<
 export type AzureRdpRequest = {
   principal: string;
   permission: {
+    // Whether to connect using the target VM's local administrator
+    // credentials instead of Microsoft Entra ID.
+    admin?: boolean;
+    bastionHost: {
+      id: string;
+      roleId: string;
+    };
     resource: {
       instanceId: string;
+      instanceName: string;
       subscriptionId: string;
-      bastionName: string;
-      bastionRg: string;
       directoryId: string;
+      region: string;
+      networkInterface: {
+        id: string;
+        subnetId: string;
+      };
     };
   };
 };
 
 export type RdpCommandArgs = {
+  admin?: boolean;
   configure?: boolean;
   debug?: boolean;
   destination: string;

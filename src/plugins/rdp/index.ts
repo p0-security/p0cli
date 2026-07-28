@@ -58,6 +58,7 @@ const provisionRequest = async (
           "session",
           destination,
           ...(args.reason ? ["--reason", args.reason] : []),
+          ...(args.admin ? ["--admin"] : []),
         ],
         wait: true,
         debug: args.debug,
