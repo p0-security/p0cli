@@ -62,29 +62,6 @@ const unprovisionedAccessPatterns = [
   },
 ] as const;
 
-/** Matches StartSession failures that retrying cannot fix.
- *
- * These are distinct from the named `AccessDeniedException` above (an IAM
- * denial emitted while a fresh grant propagates, which self-heals):
- * - A bare 403 with the `<UnauthorizedRequest>` body is not an IAM policy
- *   denial at all — it is the SSM edge rejecting the request's signature
- *   (e.g. client clock skew) or a non-AWS middlebox answering in AWS's place,
- *   or the ProxyCommand signing with credentials other than the ones p0
- *   injected (e.g. mangled by shell startup files).
- * - Expired or unrecognized credentials cannot recover because each retry
- *   reuses the same in-memory credential set.
- */
-const terminalAccessPatterns = [
-  {
-    pattern:
-      /An error occurred \(403\) when calling the StartSession operation.*<UnauthorizedRequest>/,
-  },
-  {
-    pattern:
-      /An error occurred \((?:ExpiredTokenException|UnrecognizedClientException)\) when calling the StartSession operation/,
-  },
-] as const;
-
 export const awsSshProvider: SshProvider<
   AwsSshPermissionSpec,
   undefined,
@@ -224,26 +201,4 @@ export const awsSshProvider: SshProvider<
   toCliRequest: async (request) => ({ ...request, cliLocalData: undefined }),
 
   unprovisionedAccessPatterns,
-
-  terminalAccessPatterns,
-
-  connectionErrorMessage: (stderr, request) => {
-    const errorLine = stderr
-      .split("\n")
-      .find((line) =>
-        terminalAccessPatterns.some((message) => line.match(message.pattern))
-      );
-    if (!errorLine) return undefined;
-    return [
-      "AWS rejected the SSM StartSession call:",
-      "",
-      `  ${errorLine.trim()}`,
-      "",
-      "This is an authentication failure, not an access-propagation delay. Common causes:",
-      "- Shell startup files overriding the AWS_* credential variables inside the ssh ProxyCommand (e.g. fish config.fish, direnv, aws-vault hooks)",
-      "- System clock skew breaking request signing (common on WSL2 after sleep; run 'sudo hwclock -s' inside WSL)",
-      `- An HTTPS proxy or TLS inspection intercepting requests to ssm.${request.region}.amazonaws.com`,
-      "- Expired credentials; re-run the command to mint fresh ones",
-    ].join("\n");
-  },
 };

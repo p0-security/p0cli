@@ -141,77 +141,10 @@ describe("sshProxy credential handoff stays shell-agnostic", () => {
     expect(awsEnv(fishOpts.env)).toEqual(awsEnv(bashOpts.env));
     expect(fishOpts.env.AWS_SESSION_TOKEN).toBe("session-token-123");
 
-    // $SHELL is pinned to /bin/sh in the child env: OpenSSH executes
-    // ProxyCommand and Match exec via `$SHELL -c`, and `fish -c` — unlike
-    // `sh -c` — sources the user's config.fish, which can override the
-    // injected AWS_* credentials before `aws ssm start-session` runs (CX-464).
-    expect(fishOpts.env.SHELL).toBe("/bin/sh");
-    expect(bashOpts.env.SHELL).toBe("/bin/sh");
-  });
-});
-
-// A hard rejection of the SSM StartSession call (e.g. the 403 <UnauthorizedRequest>
-// body produced by clock skew, a TLS-intercepting proxy, or credentials mangled
-// between p0 and the ProxyCommand) can never succeed on retry. It must abort the
-// access-propagation wait immediately with a classified message instead of
-// blind-retrying for 30s and reporting "Access did not propagate" (CX-464).
-describe("terminal StartSession failures abort the propagation retry loop", () => {
-  // `sshProxy` spawns the `aws` binary directly (it IS the ProxyCommand,
-  // e.g. in the native `ssh-proxy` integration fish users hit) — its stderr
-  // never contains an outer ssh's "Connection closed"/kex line, unlike the
-  // direct `p0 ssh` flow where ssh itself is the spawned child. Terminal
-  // classification must fire from the bare aws error alone.
-  const AWS_403_STDERR =
-    "aws: [ERROR]: An error occurred (403) when calling the StartSession operation: Server authentication failed: <UnauthorizedRequest><message>Forbidden.</message></UnauthorizedRequest>\n";
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  // request.type "aws" makes spawnSshNode resolve the real awsSshProvider
-  // internally, so its terminalAccessPatterns/connectionErrorMessage apply;
-  // the passed provider controls only the propagation window.
-  const runAwsProxy = (propagationTimeoutMs: number) =>
-    sshProxy({
-      authn: {} as any,
-      request: { type: "aws", region: "us-west-2" } as any,
-      requestId: "req-1",
-      cmdArgs: {} as any,
-      privateKey: "pk",
-      sshProvider: { ...fakeAwsProvider, propagationTimeoutMs },
-      debug: false,
-      port: "22",
-    });
-
-  it("rejects on the first 403 with the classified error instead of retrying", async () => {
-    mockSpawn.mockImplementation(() => makeFailingChild(AWS_403_STDERR, 255));
-
-    // endTime is well in the future: without terminal classification this
-    // would retry every 5s until the window closes.
-    const error = await runAwsProxy(30_000).catch((e) => e);
-
-    expect(mockSpawn).toHaveBeenCalledTimes(1);
-    expect(error).toContain("AWS rejected the SSM StartSession call");
-    expect(error).toContain(
-      "<UnauthorizedRequest><message>Forbidden.</message></UnauthorizedRequest>"
-    );
-    expect(error).not.toContain("did not propagate");
-  });
-
-  it("still treats a bare connection-closed error as retryable propagation delay", async () => {
-    mockSpawn.mockImplementation(() =>
-      makeFailingChild(
-        "kex_exchange_identification: Connection closed by remote host\n",
-        255
-      )
-    );
-
-    // A past-due endTime makes the retryable failure exhaust the window: it
-    // must still report the propagation message, proving the connection-closed
-    // line alone is not misclassified as terminal.
-    const error = await runAwsProxy(-1).catch((e) => e);
-
-    expect(error).toContain("did not propagate");
+    // $SHELL is merely passed through (env is cloned), not used to decide
+    // anything — proving the credential handoff does not depend on it.
+    expect(fishOpts.env.SHELL).toBe("/usr/bin/fish");
+    expect(bashOpts.env.SHELL).toBe("/bin/bash");
   });
 });
 
@@ -389,6 +322,123 @@ describe("proxyCommand receives setup/setupProxy credentials", () => {
       "22",
       expect.objectContaining(credentials)
     );
+  });
+});
+
+// OpenSSH runs a ProxyCommand as `$SHELL -c "exec <command>"`. fish sources
+// config.fish on every `fish -c` (and zsh sources .zshenv), so a user whose
+// startup files touch AWS_* would have the credentials we injected rewritten
+// before `aws ssm start-session` ever signs its request — SSH then fails for
+// fish users only. Pinning the ssh child's $SHELL to /bin/sh, which reads no
+// startup files, keeps the ProxyCommand's environment exactly as we set it
+// (CX-464).
+describe("ssh client $SHELL is pinned so ProxyCommand skips shell startup files", () => {
+  const originalShell = process.env.SHELL;
+  const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSpawn.mockImplementation(() => makeFakeChild());
+  });
+
+  afterEach(() => {
+    process.env.SHELL = originalShell;
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+  });
+
+  const request = {
+    type: "azure",
+    id: "10.0.0.1",
+    linuxUserName: "user",
+  } as any;
+
+  const fakeProvider = () => ({
+    cloudProviderLogin: vi.fn(async () => undefined),
+    setup: vi.fn(async () => ({
+      sshOptions: [],
+      teardown: vi.fn(async () => {}),
+    })),
+    setupProxy: vi.fn(async () => ({
+      port: "22",
+      teardown: vi.fn(async () => {}),
+    })),
+    proxyCommand: vi.fn(() => ["aws", "ssm", "start-session"]),
+    reproCommands: () => undefined,
+    preTestAccessPropagationArgs: () => undefined,
+    propagationTimeoutMs: 1000,
+    unprovisionedAccessPatterns: [],
+  });
+
+  const runSshSession = () =>
+    sshOrScp({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: { destination: "10.0.0.1", arguments: [] } as any,
+      privateKey: "pk",
+      sshProvider: fakeProvider() as any,
+      sshHostKeys: undefined,
+    });
+
+  it("pins SHELL to /bin/sh for the ssh child even when the user runs fish", async () => {
+    process.env.SHELL = "/usr/bin/fish";
+    Object.defineProperty(process, "platform", { value: "darwin" });
+
+    await runSshSession();
+
+    const [command, , options] = mockSpawn.mock.calls[0]!;
+    expect(command).toBe("ssh");
+    expect(options.env.SHELL).toBe("/bin/sh");
+  });
+
+  it("produces the same ssh child env under fish and bash", async () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+
+    process.env.SHELL = "/usr/bin/fish";
+    await runSshSession();
+    const fishShell = mockSpawn.mock.calls[0]![2].env.SHELL;
+
+    vi.clearAllMocks();
+    mockSpawn.mockImplementation(() => makeFakeChild());
+
+    process.env.SHELL = "/bin/bash";
+    await runSshSession();
+    const bashShell = mockSpawn.mock.calls[0]![2].env.SHELL;
+
+    expect(fishShell).toBe(bashShell);
+    expect(fishShell).toBe("/bin/sh");
+  });
+
+  it("leaves SHELL alone on Windows, which does not run ProxyCommand via $SHELL", async () => {
+    process.env.SHELL = "/usr/bin/fish";
+    Object.defineProperty(process, "platform", { value: "win32" });
+
+    await runSshSession();
+
+    expect(mockSpawn.mock.calls[0]![2].env.SHELL).toBe("/usr/bin/fish");
+  });
+
+  it("leaves SHELL alone when the child is the ProxyCommand binary, not an ssh client", async () => {
+    // In the `ssh-proxy` flow p0 IS the ProxyCommand: it spawns `aws` directly
+    // with `shell: false`, so no shell is interposed and $SHELL is irrelevant.
+    process.env.SHELL = "/usr/bin/fish";
+    Object.defineProperty(process, "platform", { value: "darwin" });
+
+    await sshProxy({
+      authn: {} as any,
+      request,
+      requestId: "req-1",
+      cmdArgs: {} as any,
+      privateKey: "pk",
+      sshProvider: fakeProvider() as any,
+      debug: false,
+      port: "22",
+    });
+
+    const [command, , options] = mockSpawn.mock.calls[0]!;
+    expect(command).toBe("aws");
+    expect(options.shell).toBe(false);
+    expect(options.env.SHELL).toBe("/usr/bin/fish");
   });
 });
 

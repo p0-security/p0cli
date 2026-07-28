@@ -77,7 +77,6 @@ const PORT_FORWARDING_FAILED_ERROR_PATTERN = /.*port forwarding failed.*/;
 const accessPropagationGuard = (
   invalidAccessPatterns: readonly AccessPattern[],
   validAccessPatterns: readonly AccessPattern[] | undefined,
-  terminalAccessPatterns: readonly AccessPattern[] | undefined,
   loginRequiredPattern: RegExp | undefined,
   child: ChildProcessByStdio<null, null, Readable>,
   options: SpawnSshNodeOptions
@@ -86,10 +85,6 @@ const accessPropagationGuard = (
   let isLoginException = false;
   let isValidError = false;
   let isHostKeyMismatch = false;
-  // The stderr line that matched a terminal (non-retryable) pattern, if any.
-  // Retrying cannot succeed once this is set, so the retry loop aborts and
-  // surfaces this line when the provider has no friendlier classification.
-  let terminalErrorLine: string | undefined;
   // Retain the (bounded) raw stderr of this attempt so a terminal failure can be
   // classified into an actionable message. We keep the trailing bytes because
   // the decisive error appears at the end of the stream.
@@ -118,19 +113,6 @@ const accessPropagationGuard = (
       isEphemeralAccessDeniedException = true;
     }
 
-    if (terminalErrorLine === undefined) {
-      const matchTerminalPattern = terminalAccessPatterns?.find((message) =>
-        chunkString.match(message.pattern)
-      );
-      if (matchTerminalPattern) {
-        terminalErrorLine =
-          chunkString
-            .split("\n")
-            .find((line) => line.match(matchTerminalPattern.pattern)) ??
-          chunkString;
-      }
-    }
-
     if (matchValidAccessPattern && !matchUnprovisionedPattern) {
       isValidError = true;
     }
@@ -153,7 +135,6 @@ const accessPropagationGuard = (
       (!validAccessPatterns || isValidError),
     isHostKeyMismatch: () => isHostKeyMismatch,
     isLoginException: () => isLoginException,
-    terminalError: () => terminalErrorLine,
     capturedStderr: () => capturedStderr,
     cleanup: () => {
       child.stderr.removeListener("data", stderrHandler);
@@ -216,7 +197,29 @@ type SpawnSshNodeOptions = {
   isAccessPropagationPreTest?: boolean;
   audit?: (action: "end" | "start") => void;
   onHostKeyMismatch?: () => Promise<boolean>;
+  /** True when the spawned child is the OpenSSH client (`ssh`/`scp`), which
+   * runs our generated ProxyCommand through a shell. See
+   * `PROXY_COMMAND_SHELL`. */
+  isSshClient?: boolean;
 };
+
+/** The shell OpenSSH is directed to use when it runs a ProxyCommand.
+ *
+ * OpenSSH executes a ProxyCommand as `$SHELL -c "exec <command>"`. Shells that
+ * read the user's startup files even when non-interactive then get a chance to
+ * rewrite the environment before the ProxyCommand runs: fish sources
+ * config.fish on every `fish -c`, and zsh sources .zshenv. A config.fish that
+ * sets AWS_* (directly, or via direnv/aws-vault style helpers) therefore
+ * replaces the short-lived credentials we injected for `aws ssm start-session`,
+ * which then signs its request with the wrong identity and is rejected — the
+ * fish-only SSH failures behind CX-464. `sh -c` reads no startup files, so
+ * pinning $SHELL for the ssh child guarantees the ProxyCommand inherits exactly
+ * the environment we set.
+ *
+ * This only sets $SHELL on the ssh child process we spawn; the user's own shell
+ * is untouched, and the remote login shell is chosen by the remote host.
+ */
+const PROXY_COMMAND_SHELL = "/bin/sh";
 
 async function spawnSshNode(
   options: SpawnSshNodeOptions
@@ -237,15 +240,16 @@ async function spawnSshNode(
     // `expiresAt` is metadata, not an env var, so exclude it from the child env.
     const { expiresAt: _expiresAt, ...credentialEnv } =
       options.credential ?? {};
+    // Windows OpenSSH does not run ProxyCommand through $SHELL (and has no
+    // /bin/sh to point at), so only pin it on POSIX platforms.
+    const proxyCommandShellEnv =
+      options.isSshClient && getOperatingSystem() !== "win"
+        ? { SHELL: PROXY_COMMAND_SHELL }
+        : {};
     const child = spawn(options.command, options.args, {
       env: {
         ...createCleanChildEnv(),
-        // OpenSSH executes ProxyCommand and Match exec via `$SHELL -c`. Pin a
-        // POSIX shell: unlike `sh -c`, `fish -c` sources the user's
-        // config.fish/conf.d, which can override the AWS_* credentials
-        // injected below before the ProxyCommand (`aws ssm start-session`)
-        // runs (CX-464). Windows OpenSSH does not consult $SHELL.
-        ...(getOperatingSystem() !== "win" && { SHELL: "/bin/sh" }),
+        ...proxyCommandShellEnv,
         ...credentialEnv,
       },
       stdio: options.stdio,
@@ -273,7 +277,6 @@ async function spawnSshNode(
       isAccessPropagated,
       isHostKeyMismatch,
       isLoginException,
-      terminalError,
       capturedStderr,
       cleanup: cleanupStderr,
     } = accessPropagationGuard(
@@ -281,7 +284,6 @@ async function spawnSshNode(
       options.isAccessPropagationPreTest
         ? provider.provisionedAccessPatterns
         : undefined,
-      provider.terminalAccessPatterns,
       provider.loginRequiredPattern,
       child,
       options
@@ -324,23 +326,6 @@ async function spawnSshNode(
       const accessPropagated =
         isAccessPropagated() ||
         (!!options.isAccessPropagationPreTest && code === 0);
-
-      // A terminal error (e.g. AWS rejecting the StartSession call outright)
-      // can never succeed on retry. Check it independently of
-      // `accessPropagated`: that flag only reflects `unprovisionedAccessPatterns`,
-      // which a terminal failure need not also match (e.g. in the `ssh-proxy`
-      // flow, where the watched stderr is the `aws` child's alone, with no
-      // outer ssh "Connection closed" line folded in to trip the unprovisioned
-      // pattern) — so gating this on `!accessPropagated` would silently never
-      // fire for such providers/flows.
-      const terminalErrorLine = terminalError();
-      if (terminalErrorLine !== undefined) {
-        reject(
-          connectionErrorMessage() ??
-            `Failed to connect to ${provider.friendlyName}:\n${terminalErrorLine.trim()}\n${getContactMessage()}`
-        );
-        return;
-      }
 
       // In the case of ephemeral AccessDenied exceptions due to unpropagated
       // permissions, continually retry access until success
@@ -620,6 +605,7 @@ const preTestAccessPropagationIfNeeded = async <
       request,
       endTime: endTime,
       isAccessPropagationPreTest: true,
+      isSshClient: true,
     });
   }
   return null;
@@ -753,6 +739,7 @@ export const sshOrScp = async (args: {
         request,
         endTime: endTime,
         onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
+        isSshClient: true,
       });
 
       if (sessionExitCode !== null && sessionExitCode !== 0) {
