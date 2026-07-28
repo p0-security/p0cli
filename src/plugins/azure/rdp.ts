@@ -67,6 +67,25 @@ const BASTION_SERVICE_ERROR_PATTERN = /Request failed with error: (.+)/;
  * Not something p0 can resolve client-side. */
 const BASTION_UNEXPECTED_INTERNAL_ERROR = "Unexpected internal error";
 
+/** Matches JWT-shaped tokens (three dot-separated base64url segments), the
+ * shape of the bearer tokens observed in az's DEBUG-level output. */
+const BEARER_TOKEN_PATTERN =
+  /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+
+/** az's --debug output has been observed to include live bearer tokens in
+ * cleartext on DEBUG-level lines. Even when the *user* explicitly asked p0
+ * rdp for --debug (the only case az itself is passed --debug — see
+ * azBastionRdpCommand above), stderr must never be echoed to the terminal
+ * verbatim: only ERROR/WARNING-level lines are shown (the levels that
+ * actually carry failure context), with any lookalike bearer token further
+ * redacted as defense in depth. */
+export const sanitizeAzureDebugOutput = (stderr: string): string =>
+  stderr
+    .split("\n")
+    .filter((line) => /^\s*(ERROR|WARNING):/.test(line))
+    .join("\n")
+    .replace(BEARER_TOKEN_PATTERN, "[REDACTED]");
+
 export const classifyBastionRdpError = (stderr: string): string | undefined => {
   const match = stderr.match(BASTION_SERVICE_ERROR_PATTERN);
   if (!match?.[1]) return undefined;
@@ -129,7 +148,7 @@ export const azureRdpProvider = {
         );
         if (stderr) {
           print2("Error details:");
-          print2(stderr);
+          print2(sanitizeAzureDebugOutput(stderr));
         }
       }
 

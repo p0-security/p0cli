@@ -8,10 +8,31 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { print2 } from "../../../drivers/stdio";
 import { AzureRdpRequest } from "../../../types/rdp";
 import { PermissionRequest } from "../../../types/request";
-import { azBastionRdpCommand, classifyBastionRdpError } from "../rdp";
-import { describe, expect, it } from "vitest";
+import { exec } from "../../../util";
+import {
+  azBastionRdpCommand,
+  azureRdpProvider,
+  classifyBastionRdpError,
+  sanitizeAzureDebugOutput,
+} from "../rdp";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../../drivers/stdio", () => ({
+  print2: vi.fn(),
+}));
+
+// Spread the original so the real osSafeCommand (used by azBastionRdpCommand)
+// keeps working; only stub the subprocess execution.
+vi.mock("../../../util", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../util")>()),
+  exec: vi.fn(),
+}));
+
+const mockExec = vi.mocked(exec);
+const mockPrint2 = vi.mocked(print2);
 
 const REQUEST = {
   permission: {
@@ -123,5 +144,60 @@ describe("classifyBastionRdpError", () => {
     expect(
       classifyBastionRdpError("DEBUG: some unrelated noise\n")
     ).toBeUndefined();
+  });
+});
+
+// az's --debug output has been observed to include live bearer tokens in
+// cleartext on DEBUG-level lines. Even when the user explicitly asked p0 rdp
+// for --debug, that raw stderr must never be echoed to the terminal as-is.
+const MOCK_BEARER_TOKEN =
+  "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+
+describe("sanitizeAzureDebugOutput", () => {
+  it("redacts a bearer token even on an ERROR line", () => {
+    const stderr = `ERROR: cli.azure.cli.core.azclierror: Response ${MOCK_BEARER_TOKEN}`;
+    const sanitized = sanitizeAzureDebugOutput(stderr);
+    expect(sanitized).not.toContain(MOCK_BEARER_TOKEN);
+    expect(sanitized).toContain("[REDACTED]");
+  });
+
+  it("drops DEBUG/INFO lines (where az's bearer tokens are actually logged), keeping ERROR/WARNING context", () => {
+    const stderr = [
+      "DEBUG: cli.knack.cli: Event: Cli.PreExecute []",
+      `DEBUG: urllib3.connectionpool: Response ${MOCK_BEARER_TOKEN}`,
+      "ERROR: az_command_data_logger: Request failed with error: Unexpected internal error",
+      "INFO: az_command_data_logger: exit code: 1",
+    ].join("\n");
+
+    const sanitized = sanitizeAzureDebugOutput(stderr);
+    expect(sanitized).not.toContain(MOCK_BEARER_TOKEN);
+    expect(sanitized).not.toContain("DEBUG:");
+    expect(sanitized).not.toContain("INFO:");
+    expect(sanitized).toContain(
+      "ERROR: az_command_data_logger: Request failed with error: Unexpected internal error"
+    );
+  });
+});
+
+describe("azureRdpProvider.spawnConnection debug logging", () => {
+  it("never prints a raw bearer token to the terminal, even with --debug on a failed connection", async () => {
+    mockExec.mockRejectedValueOnce(
+      Object.assign(new Error("Sub-process exited with code"), {
+        code: 1,
+        stdout: "",
+        stderr: [
+          "DEBUG: cli.knack.cli: Event: Cli.PreExecute []",
+          `DEBUG: urllib3.connectionpool: Response ${MOCK_BEARER_TOKEN}`,
+          "ERROR: az_command_data_logger: Request failed with error: Unexpected internal error",
+        ].join("\n"),
+      })
+    );
+
+    await expect(
+      azureRdpProvider.spawnConnection(REQUEST, { debug: true })
+    ).rejects.toThrow();
+
+    const printedText = mockPrint2.mock.calls.map((call) => call[0]).join("\n");
+    expect(printedText).not.toContain(MOCK_BEARER_TOKEN);
   });
 });
