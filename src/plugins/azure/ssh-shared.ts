@@ -144,7 +144,7 @@ export const azureSshProviderBase = {
 
   ensureInstall: async () => {
     if (!(await ensureAzInstall())) {
-      throw "Please try again after installing the Azure CLI tool.";
+      throw "Please try again after installing the Azure CLI and its 'ssh' extension.";
     }
   },
 

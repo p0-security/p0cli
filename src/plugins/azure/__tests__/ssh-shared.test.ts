@@ -194,7 +194,7 @@ describe("azureSshProviderBase", () => {
   });
 
   describe("ensureInstall", () => {
-    it("resolves when the Azure CLI is installed", async () => {
+    it("resolves when the Azure CLI and its ssh extension are installed", async () => {
       mockEnsureAzInstall.mockResolvedValue(true);
 
       await expect(
@@ -202,11 +202,11 @@ describe("azureSshProviderBase", () => {
       ).resolves.toBeUndefined();
     });
 
-    it("rejects with an install prompt when the Azure CLI is missing", async () => {
+    it("rejects with an install prompt when the Azure CLI or its ssh extension is missing", async () => {
       mockEnsureAzInstall.mockResolvedValue(false);
 
       await expect(azureSshProviderBase.ensureInstall()).rejects.toMatch(
-        /installing the Azure CLI/
+        /installing the Azure CLI and its 'ssh' extension/
       );
     });
   });

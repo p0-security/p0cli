@@ -8,7 +8,10 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { classifyAzureCertGenerationError } from "../cert-error";
+import {
+  azSshExtensionRemediation,
+  classifyAzureCertGenerationError,
+} from "../cert-error";
 import { describe, expect, it } from "vitest";
 
 // Sample output captured from real `az ssh cert` failures. The Azure CLI
@@ -56,6 +59,27 @@ const LOGIN_FAILURE = `
 ERROR: Please run 'az login' to setup account.
 `;
 
+describe("azSshExtensionRemediation", () => {
+  it.each(["mac", "linux"] as const)(
+    "recommends the az, pip, and extension install commands on %s",
+    (os) => {
+      const message = azSshExtensionRemediation(os);
+      expect(message).toContain("az extension add --name ssh");
+      expect(message).toContain("az upgrade");
+      expect(message).toContain("python3 -m ensurepip --upgrade");
+    }
+  );
+
+  it("omits the pip command on Windows, where python3 is not a real command", () => {
+    // The MSI-installed Azure CLI bundles its own Python there; `az upgrade`
+    // is the effective fix
+    const message = azSshExtensionRemediation("win");
+    expect(message).toContain("az extension add --name ssh");
+    expect(message).toContain("az upgrade");
+    expect(message).not.toContain("python3");
+  });
+});
+
 describe("classifyAzureCertGenerationError", () => {
   describe("missing `ssh` extension", () => {
     it.each([
@@ -66,6 +90,9 @@ describe("classifyAzureCertGenerationError", () => {
       expect(message).toBeDefined();
       expect(message).toContain("'ssh' extension");
       expect(message).toContain("az extension add --name ssh");
+      // Remediation for the failed install itself
+      expect(message).toContain("az upgrade");
+      expect(message).toContain("python3 -m ensurepip --upgrade");
     });
 
     it.each([
