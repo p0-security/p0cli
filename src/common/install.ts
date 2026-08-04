@@ -68,6 +68,12 @@ export type HomebrewItem = (typeof HomebrewItems)[number];
 export type InstallMetadata = {
   label: string;
   commands: Record<SupportedPlatform, Readonly<string[]>>;
+  /** Overrides the default `which` PATH lookup, for items that are not
+   * standalone binaries (e.g. a CLI's extension) */
+  isInstalled?: () => Promise<boolean>;
+  /** Advice printed after the install commands, for items with a known
+   * failure mode the commands alone do not cover */
+  failureHint?: string;
 };
 
 export const AwsInstall: Readonly<Record<AwsItem, InstallMetadata>> = {
@@ -123,12 +129,22 @@ const queryInteractive = async () => {
   return isGuided;
 };
 
-const requiredInstalls = async <T extends string>(installItems: readonly T[]) =>
+const requiredInstalls = async <
+  T extends string,
+  U extends Readonly<Record<T, InstallMetadata>>,
+>(
+  installItems: readonly T[],
+  installData: U
+) =>
   compact(
     await Promise.all(
-      installItems.map(async (item) =>
-        (await which(item, { nothrow: true })) === null ? item : undefined
-      )
+      installItems.map(async (item) => {
+        const { isInstalled } = installData[item];
+        const installed = isInstalled
+          ? await isInstalled()
+          : (await which(item, { nothrow: true })) !== null;
+        return installed ? undefined : item;
+      })
     )
   );
 
@@ -140,12 +156,13 @@ const printInstallCommands = <
   item: T,
   installData: U
 ) => {
-  const { label, commands } = installData[item];
+  const { label, commands, failureHint } = installData[item];
   print2(`To install ${label}, run the following commands:\n`);
   for (const command of commands[platform]) {
     print1(`  ${command}`);
   }
   print1(""); // Newline is useful for reading command output in a script, so send to /fd/1
+  if (failureHint) print2(failureHint);
 };
 
 export const guidedInstall = async <
@@ -188,7 +205,7 @@ export const ensureInstall = async <
   installItems: readonly T[],
   installData: U
 ): Promise<boolean> => {
-  const toInstall = await requiredInstalls(installItems);
+  const toInstall = await requiredInstalls(installItems, installData);
 
   if (toInstall.length === 0) {
     return true;
@@ -205,14 +222,28 @@ export const ensureInstall = async <
     );
   }
 
-  const interactive = !!sys.writeOutputIsTTY?.() && (await queryInteractive());
+  // The prompt reads its answer from stdin, so stdin must be a TTY too: with
+  // stdin redirected (e.g. piping data to a remote ssh command) the prompt
+  // would consume the user's data
+  const interactive =
+    !!sys.writeOutputIsTTY?.() &&
+    !!process.stdin.isTTY &&
+    (await queryInteractive());
 
   for (const item of toInstall) {
-    if (interactive) await guidedInstall(platform, item, installData);
-    else printInstallCommands(platform, item, installData);
+    if (interactive) {
+      try {
+        await guidedInstall(platform, item, installData);
+      } catch (error: any) {
+        // The user saw the underlying failure via the inherited stdio; fall
+        // back to the manual commands rather than aborting with a raw error
+        print2(`Automatic installation failed: ${error}\n`);
+        printInstallCommands(platform, item, installData);
+      }
+    } else printInstallCommands(platform, item, installData);
   }
 
-  const remaining = await requiredInstalls(installItems);
+  const remaining = await requiredInstalls(installItems, installData);
 
   if (remaining.length === 0) {
     print2("All packages successfully installed");
