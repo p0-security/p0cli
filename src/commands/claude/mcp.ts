@@ -103,7 +103,7 @@ const handleListMcpServers = async (argv: ListMcpServerArgs) => {
   const authn = await authenticate();
 
   const result = await authFetch<ListMcpServersResp>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/mcp/servers`,
+    url: `${tenantUrl(authn.identity.org.slug)}/agentic/servers`,
     method: "GET",
     debug: argv.debug,
   });
@@ -143,7 +143,7 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
   const hostname = await getHostname();
 
   const clientData = await authFetch<CreateMcpClientResp>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/mcp/clients`,
+    url: `${tenantUrl(authn.identity.org.slug)}/agentic/clients`,
     method: "POST",
     body: JSON.stringify({
       hostname,
@@ -187,7 +187,7 @@ const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
 
 const getServer = async (authn: Authn, argv: AddMcpServerArgs) =>
   await authFetch<GetMcpServerResp>(authn, {
-    url: `${tenantUrl(authn.identity.org.slug)}/mcp/servers/${encodeURIComponent(argv.server)}`,
+    url: `${tenantUrl(authn.identity.org.slug)}/agentic/servers/${encodeURIComponent(argv.server)}`,
     method: "GET",
   });
 
