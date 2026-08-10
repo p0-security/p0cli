@@ -22,7 +22,7 @@ const SSH_COMMAND_GROUP_MISSING_PATTERNS = [
 
 export const AZ_SSH_EXTENSION_ADD_COMMAND = "az extension add --name ssh";
 
-export const azSshExtensionPipHint = (
+const azSshExtensionPipHint = (
   os: ReturnType<typeof getOperatingSystem> = getOperatingSystem()
 ) =>
   os === "win"
@@ -35,7 +35,7 @@ export const azSshExtensionPipHint = (
 export const azSshExtensionRemediation = (
   os: ReturnType<typeof getOperatingSystem> = getOperatingSystem()
 ) =>
-  `To install the extension manually, run:\n\n` +
+  `To install the extension, run:\n\n` +
   `  ${AZ_SSH_EXTENSION_ADD_COMMAND}\n\n` +
   azSshExtensionPipHint(os) +
   `\nThen run '${AZ_SSH_EXTENSION_ADD_COMMAND}' again, and retry this p0 command.`;

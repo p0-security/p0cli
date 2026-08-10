@@ -9,49 +9,21 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
+  checkToolVersion,
   ensureInstall,
   HomebrewInstall,
   HomebrewItems,
   InstallMetadata,
 } from "../../common/install";
-import { exec, getOperatingSystem, osSafeCommand } from "../../util";
+import { print2 } from "../../drivers/stdio";
+import { getOperatingSystem } from "../../util";
 import {
   AZ_SSH_EXTENSION_ADD_COMMAND,
-  azSshExtensionPipHint,
+  azSshExtensionRemediation,
 } from "./cert-error";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import path from "node:path";
 
 const os = getOperatingSystem();
-
-const azSshExtensionDir = () => {
-  const configDir =
-    process.env.AZURE_CONFIG_DIR || path.join(homedir(), ".azure");
-  const extensionDir =
-    process.env.AZURE_EXTENSION_DIR || path.join(configDir, "cliextensions");
-  return path.join(extensionDir, "ssh");
-};
-
-const isAzSshExtensionInstalled = async () => {
-  if (existsSync(azSshExtensionDir())) return true;
-
-  try {
-    const { command, args } = osSafeCommand("az", [
-      "extension",
-      "show",
-      "--name",
-      "ssh",
-    ]);
-    const { code } = await exec(command, args);
-    return code === 0;
-  } catch {
-    return false;
-  }
-};
-
-const AzItems =
-  os === "mac" ? [...HomebrewItems, "az", "az-ssh-extension"] : ["az"];
+const AzItems = os === "mac" ? [...HomebrewItems, "az"] : ["az"];
 
 type AzItem = (typeof AzItems)[number];
 
@@ -60,18 +32,34 @@ export const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
   az: {
     label: "Azure command-line interface",
     commands: {
-      darwin: ["brew update", "brew install azure-cli"],
+      // The `ssh` extension is required by `az ssh cert`; the Azure CLI is
+      // always installed together with it, never alone
+      darwin: [
+        "brew update",
+        "brew install azure-cli",
+        AZ_SSH_EXTENSION_ADD_COMMAND,
+      ],
     },
-  },
-  "az-ssh-extension": {
-    label: "the Azure CLI 'ssh' extension",
-    commands: {
-      darwin: [AZ_SSH_EXTENSION_ADD_COMMAND],
-    },
-    isInstalled: isAzSshExtensionInstalled,
-    failureHint: azSshExtensionPipHint(),
   },
 };
 
-export const ensureAzInstall = async () =>
-  await ensureInstall(AzItems, AzInstall);
+/** The `ssh` extension (required by `az ssh cert`) is not a standalone
+ * binary, so it is probed by running the Azure CLI instead of `which` */
+const isAzSshExtensionInstalled = async (debug?: boolean) =>
+  (await checkToolVersion(
+    "the Azure CLI 'ssh' extension",
+    ["az", "extension", "show", "--name", "ssh"],
+    debug
+  )) !== undefined;
+
+export const ensureAzInstall = async (debug?: boolean) => {
+  if (!(await ensureInstall(AzItems, AzInstall))) return false;
+
+  if (await isAzSshExtensionInstalled(debug)) return true;
+
+  print2(
+    "The Azure CLI 'ssh' extension must be installed on your system to continue.\n\n" +
+      azSshExtensionRemediation()
+  );
+  return false;
+};

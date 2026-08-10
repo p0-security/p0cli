@@ -198,8 +198,10 @@ describe("azureSshProviderBase", () => {
       mockEnsureAzInstall.mockResolvedValue(true);
 
       await expect(
-        azureSshProviderBase.ensureInstall()
+        azureSshProviderBase.ensureInstall({ debug: true })
       ).resolves.toBeUndefined();
+
+      expect(mockEnsureAzInstall).toHaveBeenCalledWith(true);
     });
 
     it("rejects with an install prompt when the Azure CLI or its ssh extension is missing", async () => {
