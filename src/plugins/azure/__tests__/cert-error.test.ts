@@ -59,6 +59,33 @@ const LOGIN_FAILURE = `
 ERROR: Please run 'az login' to setup account.
 `;
 
+/** The extension is installed but its bundled native dependencies were built
+ * for a different Python, e.g. after brew upgraded azure-cli (observed with
+ * azure-cli 2.89.0 / Python 3.14 and a stale rpds wheel). */
+const EXTENSION_IMPORT_FAILURE = `
+ERROR: The command failed with an unexpected error. Here is the traceback:
+ERROR: No module named 'rpds.rpds'
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/azure-cli/2.89.0/libexec/lib/python3.14/site-packages/knack/cli.py", line 233, in invoke
+    cmd_result = self.invocation.execute(args)
+  File "/Users/p0user/.azure/cliextensions/ssh/azext_ssh/custom.py", line 20, in <module>
+    from . import rdp_utils
+  File "/Users/p0user/.azure/cliextensions/ssh/rpds/__init__.py", line 1, in <module>
+    from .rpds import *
+ModuleNotFoundError: No module named 'rpds.rpds'
+`;
+
+/** A ModuleNotFoundError raised purely from the Azure CLI core, with no
+ * frames in the ssh extension: reinstalling the extension would not help. */
+const CORE_IMPORT_FAILURE = `
+ERROR: The command failed with an unexpected error. Here is the traceback:
+ERROR: No module named 'azure.mgmt.core'
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/azure-cli/2.89.0/libexec/lib/python3.14/site-packages/knack/cli.py", line 233, in invoke
+    cmd_result = self.invocation.execute(args)
+ModuleNotFoundError: No module named 'azure.mgmt.core'
+`;
+
 describe("azSshExtensionRemediation", () => {
   it.each(["mac", "linux"] as const)(
     "recommends the az, pip, and extension install commands on %s",
@@ -81,13 +108,19 @@ describe("azSshExtensionRemediation", () => {
 });
 
 describe("classifyAzureCertGenerationError", () => {
+  /** A rejected exec() error carrying the Azure CLI's captured output */
+  const azError = (stderr: string, stdout = "") =>
+    Object.assign(new Error("exited with code 1"), { stdout, stderr });
+
+  const FALLBACK =
+    "Failed to generate Azure AD SSH certificate: Error: exited with code 1";
+
   describe("missing `ssh` extension", () => {
     it.each([
       ["non-interactive auto-install pip failure", AUTO_INSTALL_PIP_FAILURE],
       ["interactive install pip failure", INTERACTIVE_INSTALL_PIP_FAILURE],
     ])("classifies a failed dynamic install: %s", (_name, output) => {
-      const message = classifyAzureCertGenerationError(output);
-      expect(message).toBeDefined();
+      const message = classifyAzureCertGenerationError(azError(output));
       expect(message).toContain("'ssh' extension");
       expect(message).toContain("az extension add --name ssh");
       // Remediation for the failed install itself
@@ -101,26 +134,52 @@ describe("classifyAzureCertGenerationError", () => {
     ])(
       "classifies an unresolved `az ssh` command group: %s",
       (_name, output) => {
-        const message = classifyAzureCertGenerationError(output);
-        expect(message).toBeDefined();
+        const message = classifyAzureCertGenerationError(azError(output));
         expect(message).toContain("az extension add --name ssh");
       }
     );
+
+    it("classifies output regardless of which stream captured it", () => {
+      const message = classifyAzureCertGenerationError(
+        azError("", AUTO_INSTALL_PIP_FAILURE)
+      );
+      expect(message).toContain("az extension add --name ssh");
+    });
   });
 
-  describe("passthrough", () => {
+  describe("broken `ssh` extension", () => {
+    it("classifies an extension that is installed but fails to import", () => {
+      const message = classifyAzureCertGenerationError(
+        azError(EXTENSION_IMPORT_FAILURE)
+      );
+      expect(message).toContain("az extension remove --name ssh");
+      expect(message).toContain("az extension add --name ssh");
+    });
+  });
+
+  describe("fallback", () => {
     it("does not classify a failure that happened after the extension installed successfully", () => {
       expect(
-        classifyAzureCertGenerationError(INSTALL_SUCCEEDED_THEN_LOGIN_FAILURE)
-      ).toBeUndefined();
+        classifyAzureCertGenerationError(
+          azError(INSTALL_SUCCEEDED_THEN_LOGIN_FAILURE)
+        )
+      ).toBe(FALLBACK);
     });
 
-    it("returns undefined for an unrelated error", () => {
-      expect(classifyAzureCertGenerationError(LOGIN_FAILURE)).toBeUndefined();
+    it("returns the generic message for an unrelated error", () => {
+      expect(classifyAzureCertGenerationError(azError(LOGIN_FAILURE))).toBe(
+        FALLBACK
+      );
     });
 
-    it("returns undefined for empty output", () => {
-      expect(classifyAzureCertGenerationError("")).toBeUndefined();
+    it("does not blame the extension for an import failure in the Azure CLI core", () => {
+      expect(
+        classifyAzureCertGenerationError(azError(CORE_IMPORT_FAILURE))
+      ).toBe(FALLBACK);
+    });
+
+    it("returns the generic message for empty output", () => {
+      expect(classifyAzureCertGenerationError(azError(""))).toBe(FALLBACK);
     });
   });
 });

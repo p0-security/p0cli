@@ -20,7 +20,15 @@ const SSH_COMMAND_GROUP_MISSING_PATTERNS = [
   /'ssh' is misspelled or not recognized by the system/,
 ];
 
+const MODULE_NOT_FOUND_PATTERN = /No module named/;
+
+// The failing import must come from the extension's own directory; a broken
+// Azure CLI core also raises ModuleNotFoundError but needs a different fix
+const SSH_EXTENSION_SOURCE_PATTERN = /azext_ssh|cliextensions[/\\]ssh[/\\]/;
+
 export const AZ_SSH_EXTENSION_ADD_COMMAND = "az extension add --name ssh";
+
+export const AZ_SSH_EXTENSION_REMOVE_COMMAND = "az extension remove --name ssh";
 
 const azSshExtensionPipHint = (
   os: ReturnType<typeof getOperatingSystem> = getOperatingSystem()
@@ -45,16 +53,32 @@ const missingSshExtensionMessage = () =>
   `extension is not installed, and it could not be installed automatically.` +
   `\n\n${azSshExtensionRemediation()}`;
 
-export const classifyAzureCertGenerationError = (
-  output: string
-): string | undefined => {
+const brokenSshExtensionMessage = () =>
+  `\nFailed to generate an Azure AD SSH certificate: the Azure CLI's 'ssh' ` +
+  `extension is installed but can not load, usually after an Azure CLI or ` +
+  `Python upgrade.` +
+  `\n\nTo reinstall the extension, run:\n\n` +
+  `  ${AZ_SSH_EXTENSION_REMOVE_COMMAND}\n` +
+  `  ${AZ_SSH_EXTENSION_ADD_COMMAND}\n\n` +
+  azSshExtensionPipHint() +
+  `\nThen retry this p0 command.`;
+
+export const classifyAzureCertGenerationError = (error: any): string => {
+  const output = `${error?.stdout ?? ""}\n${error?.stderr ?? ""}`;
   const installFailed =
     EXTENSION_INSTALL_ATTEMPTED_PATTERN.test(output) &&
     PIP_INSTALL_FAILED_PATTERN.test(output);
   const extensionUnavailable = SSH_COMMAND_GROUP_MISSING_PATTERNS.some(
     (pattern) => pattern.test(output)
   );
-  return installFailed || extensionUnavailable
-    ? missingSshExtensionMessage()
-    : undefined;
+  if (installFailed || extensionUnavailable) {
+    return missingSshExtensionMessage();
+  }
+
+  const extensionBroken =
+    MODULE_NOT_FOUND_PATTERN.test(output) &&
+    SSH_EXTENSION_SOURCE_PATTERN.test(output);
+  return extensionBroken
+    ? brokenSshExtensionMessage()
+    : `Failed to generate Azure AD SSH certificate: ${error}`;
 };

@@ -9,18 +9,13 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import {
-  checkToolVersion,
   ensureInstall,
   HomebrewInstall,
   HomebrewItems,
   InstallMetadata,
 } from "../../common/install";
-import { print2 } from "../../drivers/stdio";
 import { getOperatingSystem } from "../../util";
-import {
-  AZ_SSH_EXTENSION_ADD_COMMAND,
-  azSshExtensionRemediation,
-} from "./cert-error";
+import { AZ_SSH_EXTENSION_ADD_COMMAND } from "./cert-error";
 
 const os = getOperatingSystem();
 const AzItems = os === "mac" ? [...HomebrewItems, "az"] : ["az"];
@@ -43,23 +38,5 @@ export const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
   },
 };
 
-/** The `ssh` extension (required by `az ssh cert`) is not a standalone
- * binary, so it is probed by running the Azure CLI instead of `which` */
-const isAzSshExtensionInstalled = async (debug?: boolean) =>
-  (await checkToolVersion(
-    "the Azure CLI 'ssh' extension",
-    ["az", "extension", "show", "--name", "ssh"],
-    debug
-  )) !== undefined;
-
-export const ensureAzInstall = async (debug?: boolean) => {
-  if (!(await ensureInstall(AzItems, AzInstall))) return false;
-
-  if (await isAzSshExtensionInstalled(debug)) return true;
-
-  print2(
-    "The Azure CLI 'ssh' extension must be installed on your system to continue.\n\n" +
-      azSshExtensionRemediation()
-  );
-  return false;
-};
+export const ensureAzInstall = async () =>
+  await ensureInstall(AzItems, AzInstall);

@@ -84,10 +84,7 @@ export const generateSshKeyAndAzureAdCert = async (
   } catch (error: any) {
     print2(error.stdout);
     print2(error.stderr);
-    const hint = classifyAzureCertGenerationError(
-      `${error.stdout ?? ""}\n${error.stderr ?? ""}`
-    );
-    throw hint ?? `Failed to generate Azure AD SSH certificate: ${error}`;
+    throw classifyAzureCertGenerationError(error);
   }
 };
 
@@ -142,8 +139,8 @@ export const azureSshProviderBase = {
     return undefined;
   },
 
-  ensureInstall: async (options?: { debug?: boolean }) => {
-    if (!(await ensureAzInstall(options?.debug))) {
+  ensureInstall: async () => {
+    if (!(await ensureAzInstall())) {
       throw "Please try again after installing the Azure CLI and its 'ssh' extension.";
     }
   },

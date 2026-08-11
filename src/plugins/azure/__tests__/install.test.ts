@@ -8,27 +8,16 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { checkToolVersion, ensureInstall } from "../../../common/install";
-import { print2 } from "../../../drivers/stdio";
+import { ensureInstall } from "../../../common/install";
 import { AzInstall, ensureAzInstall } from "../install";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../common/install", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../common/install")>()),
   ensureInstall: vi.fn(),
-  checkToolVersion: vi.fn(),
-}));
-
-vi.mock("../../../drivers/stdio", () => ({
-  print1: vi.fn(),
-  print2: vi.fn(),
 }));
 
 const mockEnsureInstall = vi.mocked(ensureInstall);
-const mockCheckToolVersion = vi.mocked(checkToolVersion);
-const mockPrint2 = vi.mocked(print2);
-
-const EXTENSION_SHOW_COMMAND = ["az", "extension", "show", "--name", "ssh"];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,52 +32,17 @@ describe("AzInstall", () => {
 });
 
 describe("ensureAzInstall", () => {
-  it("succeeds when the Azure CLI and its ssh extension are both installed", async () => {
-    mockEnsureInstall.mockResolvedValueOnce(true);
-    mockCheckToolVersion.mockResolvedValueOnce('{"name": "ssh"}');
+  it.each([true, false])(
+    "delegates to the shared install flow (result: %s)",
+    async (result) => {
+      mockEnsureInstall.mockResolvedValueOnce(result);
 
-    await expect(ensureAzInstall()).resolves.toBe(true);
+      await expect(ensureAzInstall()).resolves.toBe(result);
 
-    expect(mockCheckToolVersion).toHaveBeenCalledWith(
-      "the Azure CLI 'ssh' extension",
-      EXTENSION_SHOW_COMMAND,
-      undefined
-    );
-    expect(mockPrint2).not.toHaveBeenCalled();
-  });
-
-  it("fails without probing the extension when the Azure CLI is missing", async () => {
-    mockEnsureInstall.mockResolvedValueOnce(false);
-
-    await expect(ensureAzInstall()).resolves.toBe(false);
-
-    expect(mockCheckToolVersion).not.toHaveBeenCalled();
-  });
-
-  it("prints the extension install instructions when the extension is missing", async () => {
-    mockEnsureInstall.mockResolvedValueOnce(true);
-    mockCheckToolVersion.mockResolvedValueOnce(undefined);
-
-    await expect(ensureAzInstall()).resolves.toBe(false);
-
-    const output = mockPrint2.mock.calls.map((call) => call[0]).join("\n");
-    expect(output).toContain(
-      "The Azure CLI 'ssh' extension must be installed on your system to continue."
-    );
-    expect(output).toContain("az extension add --name ssh");
-    expect(output).toContain("az upgrade");
-  });
-
-  it("threads debug through to the extension probe", async () => {
-    mockEnsureInstall.mockResolvedValueOnce(true);
-    mockCheckToolVersion.mockResolvedValueOnce('{"name": "ssh"}');
-
-    await expect(ensureAzInstall(true)).resolves.toBe(true);
-
-    expect(mockCheckToolVersion).toHaveBeenCalledWith(
-      "the Azure CLI 'ssh' extension",
-      EXTENSION_SHOW_COMMAND,
-      true
-    );
-  });
+      expect(mockEnsureInstall).toHaveBeenCalledWith(
+        expect.arrayContaining(["az"]),
+        AzInstall
+      );
+    }
+  );
 });
