@@ -29,6 +29,7 @@ type CreateMcpClientReq = {
   hostname: string;
   platform: string;
   redirectUri: string;
+  type: "client_credential_post";
   version: string;
 };
 
@@ -148,6 +149,7 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
     body: JSON.stringify({
       hostname,
       platform: "claude-code",
+      type: "client_credential_post",
       version,
       redirectUri: `http://localhost:${argv.callbackPort ?? REDIRECT_PORT}`,
     } satisfies CreateMcpClientReq),
