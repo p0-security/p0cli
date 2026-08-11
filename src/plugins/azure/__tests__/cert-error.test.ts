@@ -87,23 +87,10 @@ ModuleNotFoundError: No module named 'azure.mgmt.core'
 `;
 
 describe("azSshExtensionRemediation", () => {
-  it.each(["mac", "linux"] as const)(
-    "recommends the az, pip, and extension install commands on %s",
-    (os) => {
-      const message = azSshExtensionRemediation(os);
-      expect(message).toContain("az extension add --name ssh");
-      expect(message).toContain("az upgrade");
-      expect(message).toContain("python3 -m ensurepip --upgrade");
-    }
-  );
-
-  it("omits the pip command on Windows, where python3 is not a real command", () => {
-    // The MSI-installed Azure CLI bundles its own Python there; `az upgrade`
-    // is the effective fix
-    const message = azSshExtensionRemediation("win");
+  it("recommends the extension install command with the az upgrade fallback", () => {
+    const message = azSshExtensionRemediation();
     expect(message).toContain("az extension add --name ssh");
     expect(message).toContain("az upgrade");
-    expect(message).not.toContain("python3");
   });
 });
 
@@ -125,7 +112,6 @@ describe("classifyAzureCertGenerationError", () => {
       expect(message).toContain("az extension add --name ssh");
       // Remediation for the failed install itself
       expect(message).toContain("az upgrade");
-      expect(message).toContain("python3 -m ensurepip --upgrade");
     });
 
     it.each([

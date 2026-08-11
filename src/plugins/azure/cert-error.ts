@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { getOperatingSystem } from "../../util";
 
 const EXTENSION_INSTALL_ATTEMPTED_PATTERN =
   /The command requires the extension ssh/;
@@ -30,22 +29,14 @@ export const AZ_SSH_EXTENSION_ADD_COMMAND = "az extension add --name ssh";
 
 export const AZ_SSH_EXTENSION_REMOVE_COMMAND = "az extension remove --name ssh";
 
-const azSshExtensionPipHint = (
-  os: ReturnType<typeof getOperatingSystem> = getOperatingSystem()
-) =>
-  os === "win"
-    ? `If that command fails with a pip error, update the Azure CLI:\n\n` +
-      `  az upgrade\n`
-    : `If that command fails with a pip error, update the Azure CLI and pip:\n\n` +
-      `  az upgrade\n` +
-      `  python3 -m ensurepip --upgrade\n`;
+const azSshExtensionPipHint = () =>
+  `If that command fails with a pip error, update the Azure CLI:\n\n` +
+  `  az upgrade\n`;
 
-export const azSshExtensionRemediation = (
-  os: ReturnType<typeof getOperatingSystem> = getOperatingSystem()
-) =>
+export const azSshExtensionRemediation = () =>
   `To install the extension, run:\n\n` +
   `  ${AZ_SSH_EXTENSION_ADD_COMMAND}\n\n` +
-  azSshExtensionPipHint(os) +
+  azSshExtensionPipHint() +
   `\nThen run '${AZ_SSH_EXTENSION_ADD_COMMAND}' again, and retry this p0 command.`;
 
 const missingSshExtensionMessage = () =>
