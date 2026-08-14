@@ -15,18 +15,25 @@ import {
   InstallMetadata,
 } from "../../common/install";
 import { getOperatingSystem } from "../../util";
+import { AZ_SSH_EXTENSION_ADD_COMMAND } from "./cert-error";
 
 const os = getOperatingSystem();
 const AzItems = os === "mac" ? [...HomebrewItems, "az"] : ["az"];
 
 type AzItem = (typeof AzItems)[number];
 
-const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
+export const AzInstall: Readonly<Record<AzItem, InstallMetadata>> = {
   ...(os === "mac" ? HomebrewInstall : {}),
   az: {
     label: "Azure command-line interface",
     commands: {
-      darwin: ["brew update", "brew install azure-cli"],
+      // The `ssh` extension is required by `az ssh cert`; the Azure CLI is
+      // always installed together with it, never alone
+      darwin: [
+        "brew update",
+        "brew install azure-cli",
+        AZ_SSH_EXTENSION_ADD_COMMAND,
+      ],
     },
   },
 };

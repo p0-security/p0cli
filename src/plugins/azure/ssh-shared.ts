@@ -22,6 +22,7 @@ import {
   azLoginCommand,
   azSetSubscription,
 } from "./auth";
+import { classifyAzureCertGenerationError } from "./cert-error";
 import { ensureAzInstall } from "./install";
 import {
   AzureLocalData,
@@ -83,7 +84,7 @@ export const generateSshKeyAndAzureAdCert = async (
   } catch (error: any) {
     print2(error.stdout);
     print2(error.stderr);
-    throw `Failed to generate Azure AD SSH certificate: ${error}`;
+    throw classifyAzureCertGenerationError(error);
   }
 };
 
@@ -140,7 +141,7 @@ export const azureSshProviderBase = {
 
   ensureInstall: async () => {
     if (!(await ensureAzInstall())) {
-      throw "Please try again after installing the Azure CLI tool.";
+      throw "Please try again after installing the Azure CLI and its 'ssh' extension.";
     }
   },
 

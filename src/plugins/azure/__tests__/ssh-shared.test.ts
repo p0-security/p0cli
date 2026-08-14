@@ -120,6 +120,21 @@ describe("generateSshKeyAndAzureAdCert", () => {
     expect(mockPrint2).toHaveBeenCalledWith("az stdout");
     expect(mockPrint2).toHaveBeenCalledWith("az stderr");
   });
+
+  it("rejects with an actionable hint when the `ssh` extension is missing and its install fails", async () => {
+    mockExec.mockRejectedValue(
+      Object.assign(new Error("exited with code 1"), {
+        stdout: "",
+        stderr:
+          "WARNING: The command requires the extension ssh. It will be installed first.\n" +
+          "ERROR: An error occurred. Pip failed with status code 1. Use --debug for more information.\n",
+      })
+    );
+
+    await expect(generateSshKeyAndAzureAdCert(KEY_PATH)).rejects.toMatch(
+      /az extension add --name ssh/
+    );
+  });
 });
 
 describe("azureSshLoginReproCommands", () => {
@@ -179,7 +194,7 @@ describe("azureSshProviderBase", () => {
   });
 
   describe("ensureInstall", () => {
-    it("resolves when the Azure CLI is installed", async () => {
+    it("resolves when the Azure CLI and its ssh extension are installed", async () => {
       mockEnsureAzInstall.mockResolvedValue(true);
 
       await expect(
@@ -187,11 +202,11 @@ describe("azureSshProviderBase", () => {
       ).resolves.toBeUndefined();
     });
 
-    it("rejects with an install prompt when the Azure CLI is missing", async () => {
+    it("rejects with an install prompt when the Azure CLI or its ssh extension is missing", async () => {
       mockEnsureAzInstall.mockResolvedValue(false);
 
       await expect(azureSshProviderBase.ensureInstall()).rejects.toMatch(
-        /installing the Azure CLI/
+        /installing the Azure CLI and its 'ssh' extension/
       );
     });
   });
