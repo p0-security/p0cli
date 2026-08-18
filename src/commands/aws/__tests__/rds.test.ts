@@ -124,10 +124,8 @@ describe("rds generate-db-auth-token", () => {
     vi.clearAllMocks();
   });
 
-  const mockAccessResponse = (
-    delegation: DbPermissionSpec["delegation"]
-  ): void => {
-    mockRequest.mockReturnValue(async () => ({
+  const mockAccessResponse = (delegation: DbPermissionSpec["delegation"]) => {
+    const requestFn = vi.fn(async () => ({
       ok: true,
       message: "approved",
       id: "req-1",
@@ -136,7 +134,19 @@ describe("rds generate-db-auth-token", () => {
       isPreapproved: false,
       request: buildAccess(delegation),
     }));
+    mockRequest.mockReturnValue(requestFn);
+    return requestFn;
   };
+
+  const RDS_DELEGATION: DbPermissionSpec["delegation"] = [
+    {
+      key: "aws-rds",
+      request: {
+        permission: { vpcId: "vpc-1" },
+        delegation: [{ key: "aws", request: AWS_DELEGATE }],
+      },
+    },
+  ];
 
   it("passes the inner aws delegate to awsCloudAuth (array form at both levels)", async () => {
     mockAccessResponse([
@@ -214,6 +224,71 @@ describe("rds generate-db-auth-token", () => {
       const output = await runWithShell("/usr/bin/fish", "mysql");
       expect(output).toContain('set -gx MYSQL_PWD "fake-rds-token"');
       expect(output).toContain("mysql -h $RDS_HOST");
+    });
+  });
+
+  describe("access types", () => {
+    const argumentsOf = (requestFn: Mock) =>
+      requestFn.mock.calls[0]?.[0]?.arguments;
+
+    it("requests role access, forwarding the instance and database", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      await buildRdsYargs().parse(
+        "rds generate-db-auth-token --arch postgres --role admin --instance db-1 --database analytics"
+      );
+
+      expect(argumentsOf(requestFn)).toEqual([
+        "postgres",
+        "role",
+        "admin",
+        "--instance",
+        "db-1",
+        "--database",
+        "analytics",
+      ]);
+    });
+
+    it("requests sql access, passing the script as the policy argument", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      await buildRdsYargs().parse(
+        'rds generate-db-auth-token --arch postgres --sql "SELECT * FROM sales.customers" --instance db-1'
+      );
+
+      expect(argumentsOf(requestFn)).toEqual([
+        "postgres",
+        "sql",
+        "SELECT * FROM sales.customers",
+        "--instance",
+        "db-1",
+      ]);
+    });
+
+    it("rejects a request that names neither a role nor a script", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      const error = await failure(
+        buildRdsYargs(),
+        "rds generate-db-auth-token --arch postgres"
+      );
+
+      expect(error).toBe(
+        "Specify the access to request with either --role or --sql."
+      );
+      expect(requestFn).not.toHaveBeenCalled();
+    });
+
+    it("rejects a request that names both a role and a script", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      const error = await failure(
+        buildRdsYargs(),
+        'rds generate-db-auth-token --arch postgres --role admin --sql "SELECT 1"'
+      );
+
+      expect(error).toBe("Specify either --role or --sql, not both.");
+      expect(requestFn).not.toHaveBeenCalled();
     });
   });
 });

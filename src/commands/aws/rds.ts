@@ -54,7 +54,8 @@ type RdsArgs = yargs.ArgumentsCamelCase<{
   database?: string;
   debug?: boolean;
   instance?: string;
-  role: string;
+  role?: string;
+  sql?: string;
 }>;
 
 export const rds = (
@@ -80,8 +81,12 @@ export const rds = (
             })
             .option("role", {
               type: "string",
-              demandOption: true,
               describe: "Database role to access",
+            })
+            .option("sql", {
+              type: "string",
+              describe:
+                "SQL script to run; P0 grants only the privileges the script requires",
             })
             .option("instance", {
               type: "string",
@@ -100,6 +105,30 @@ export const rds = (
       )
   );
 
+const toAccessArguments = (argv: RdsArgs) => {
+  const instanceArgs = argv.instance ? ["--instance", argv.instance] : [];
+
+  if (argv.sql) {
+    if (argv.role) throw "Specify either --role or --sql, not both.";
+    return [
+      "sql",
+      argv.sql,
+      ...instanceArgs,
+      ...(argv.database ? ["--database", argv.database] : []),
+    ];
+  }
+
+  if (argv.role)
+    return [
+      "role",
+      argv.role,
+      ...instanceArgs,
+      ...(argv.database ? ["--database", argv.database] : []),
+    ];
+
+  throw "Specify the access to request with either --role or --sql.";
+};
+
 const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
   const integration = argv.arch;
 
@@ -109,13 +138,7 @@ const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
     {
       $0: argv.$0,
       _: [],
-      arguments: [
-        integration,
-        "role",
-        argv.role,
-        ...(argv.instance ? ["--instance", argv.instance] : []),
-        ...(argv.database ? ["--database", argv.database] : []),
-      ],
+      arguments: [integration, ...toAccessArguments(argv)],
       wait: true,
     },
     authn,
