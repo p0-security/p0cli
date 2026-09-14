@@ -10,10 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authFetch, tenantUrl } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
-import { postfixPath } from "../../drivers/auth/path";
 import { debug, print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { assertNever, getOperatingSystem } from "../../util";
+import { P0_PATH, assertNever, getOperatingSystem } from "../../util";
 import assert from "node:assert";
 import { exec, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -56,7 +55,16 @@ type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
   server: string;
 }>;
 
-const CLIENT_PATH = postfixPath("claude/mcp-client.json");
+/** Path of the cached MCP client for an organization.
+ *
+ * MCP client registrations are tenant-scoped: the controller stores them
+ * under the tenant that created them, so a client minted against one
+ * organization does not exist for another and the gateway rejects it at
+ * /authorize. Keep a separate cache file per organization, otherwise
+ * switching tenants silently reuses the previous tenant's client.
+ */
+export const clientPath = (orgSlug: string) =>
+  path.join(P0_PATH, "claude", `mcp-client-${path.basename(orgSlug)}.json`);
 
 // In dev use cases the default port (=8080) is likely to be consumed by another listening service.
 // Avoid by defaulting to a random port valid for both Windows and *nix architectures.
@@ -156,8 +164,9 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
     debug: argv.debug,
   });
 
-  await fs.mkdir(path.dirname(CLIENT_PATH), { recursive: true });
-  await fs.writeFile(CLIENT_PATH, JSON.stringify(clientData, null, 2), {
+  const cachePath = clientPath(authn.identity.org.slug);
+  await fs.mkdir(path.dirname(cachePath), { recursive: true });
+  await fs.writeFile(cachePath, JSON.stringify(clientData, null, 2), {
     mode: "400",
   });
 
@@ -165,8 +174,9 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
 };
 
 const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
+  const cachePath = clientPath(authn.identity.org.slug);
   try {
-    const cachedClientData = await fs.readFile(CLIENT_PATH, {
+    const cachedClientData = await fs.readFile(cachePath, {
       encoding: "utf-8",
     });
 
@@ -175,13 +185,13 @@ const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
       debug(
         argv,
         "Using cached client at",
-        CLIENT_PATH,
+        cachePath,
         "(remove this file to use a new MCP client)"
       );
       return client;
     }
   } catch (error: unknown) {
-    debug(argv, `Could not read client data file: String(error)`);
+    debug(argv, `Could not read client data file: ${String(error)}`);
   }
 
   return await createClient(authn, argv);

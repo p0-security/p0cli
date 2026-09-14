@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { spawnClaude } from "../mcp";
+import { clientPath, spawnClaude } from "../mcp";
 import { describe, expect, it } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
@@ -16,6 +16,30 @@ import { describe, expect, it } from "vitest";
 // shell, so the tests work on Windows too.
 const node = (script: string, env: NodeJS.ProcessEnv = process.env) =>
   spawnClaude(process.execPath, ["-e", script], env);
+
+describe("clientPath", () => {
+  it("gives each organization its own cache file", () => {
+    // Registrations are tenant-scoped, so reusing one organization's client
+    // for another fails at the gateway with "no active registration".
+    expect(clientPath("p0-test-agentic")).not.toBe(clientPath("p0-security"));
+  });
+
+  it("is stable for the same organization", () => {
+    expect(clientPath("p0-security")).toBe(clientPath("p0-security"));
+  });
+
+  it("names the file after the organization", () => {
+    expect(clientPath("p0-security")).toMatch(
+      /[\\/]claude[\\/]mcp-client-p0-security\.json$/
+    );
+  });
+
+  it("does not let an organization slug escape the p0 directory", () => {
+    expect(clientPath("../../evil")).toMatch(
+      /[\\/]claude[\\/]mcp-client-evil\.json$/
+    );
+  });
+});
 
 describe("spawnClaude", () => {
   it("resolves when claude exits 0", async () => {
