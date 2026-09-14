@@ -265,6 +265,40 @@ describe("rds generate-db-auth-token", () => {
       ]);
     });
 
+    it("forwards the access reason for role requests", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      await buildRdsYargs().parse(
+        'rds generate-db-auth-token --arch postgres --role admin --instance db-1 --reason "investigating a support ticket"'
+      );
+
+      expect(argumentsOf(requestFn)).toEqual([
+        "postgres",
+        "role",
+        "admin",
+        "--instance",
+        "db-1",
+        "--reason",
+        "investigating a support ticket",
+      ]);
+    });
+
+    it("forwards the access reason for sql requests", async () => {
+      const requestFn = mockAccessResponse(RDS_DELEGATION);
+
+      await buildRdsYargs().parse(
+        'rds generate-db-auth-token --arch postgres --sql "SELECT 1" --reason "investigating a support ticket"'
+      );
+
+      expect(argumentsOf(requestFn)).toEqual([
+        "postgres",
+        "sql",
+        "SELECT 1",
+        "--reason",
+        "investigating a support ticket",
+      ]);
+    });
+
     it("rejects a request that names neither a role nor a script", async () => {
       const requestFn = mockAccessResponse(RDS_DELEGATION);
 
