@@ -266,6 +266,10 @@ const provisionServer = async (
  * callback, so the promise that `promisify` returns never settles. Awaiting
  * it silently abandons the rest of the command and the CLI exits 0 whether
  * or not `claude mcp add` worked.
+ *
+ * Rejects with strings rather than Errors: the top-level yargs `fail` handler
+ * prints whatever it is given, so an Error would show the user a stack trace
+ * through the bundled build output.
  */
 export const spawnClaude = async (
   claudeFile: string,
@@ -276,12 +280,14 @@ export const spawnClaude = async (
     const child = spawn(claudeFile, args, { env, stdio: "inherit" });
     // Without an "error" handler a failure to spawn (e.g. claude is missing
     // or not executable) throws an uncaught exception and crashes the CLI.
-    child.on("error", reject);
+    child.on("error", (error) =>
+      reject(`Could not run "claude": ${error.message}`)
+    );
     child.on("close", (code, signal) => {
       if (signal) {
-        reject(new Error(`"claude mcp add" was terminated by ${signal}`));
+        reject(`"claude mcp add" was terminated by ${signal}`);
       } else if (code !== 0) {
-        reject(new Error(`"claude mcp add" exited with code ${code}`));
+        reject(`"claude mcp add" exited with code ${code}`);
       } else {
         resolve();
       }

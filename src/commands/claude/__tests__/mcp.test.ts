@@ -23,13 +23,13 @@ describe("spawnClaude", () => {
   });
 
   it("rejects when claude exits non-zero", async () => {
-    await expect(node("process.exit(3)")).rejects.toThrow(
+    await expect(node("process.exit(3)")).rejects.toBe(
       '"claude mcp add" exited with code 3'
     );
   });
 
   it("rejects when claude is terminated by a signal", async () => {
-    await expect(node('process.kill(process.pid, "SIGTERM")')).rejects.toThrow(
+    await expect(node('process.kill(process.pid, "SIGTERM")')).rejects.toBe(
       '"claude mcp add" was terminated by SIGTERM'
     );
   });
@@ -37,7 +37,7 @@ describe("spawnClaude", () => {
   it("rejects when claude cannot be spawned", async () => {
     await expect(
       spawnClaude("./no-such-claude-executable", [], process.env)
-    ).rejects.toThrow(/ENOENT/);
+    ).rejects.toMatch(/^Could not run "claude": .*ENOENT/);
   });
 
   it("passes the client secret via the environment", async () => {
