@@ -250,8 +250,40 @@ const provisionServer = async (
   // Spread process.env so the spawned `claude` inherits PATH / HOME /
   // NODE_OPTIONS / etc. (`env: { MCP_CLIENT_SECRET }` alone would replace
   // the whole environment).
-  await promisify(spawn)(claudeFile, args, {
-    env: { ...process.env, MCP_CLIENT_SECRET: client.secret },
-    stdio: "inherit",
+  await spawnClaude(claudeFile, args, {
+    ...process.env,
+    MCP_CLIENT_SECRET: client.secret,
   });
 };
+
+/** Runs `claude` to completion, rejecting unless it exits 0.
+ *
+ * `stdio: "inherit"` so claude's own output, and any prompt it shows, reach
+ * the terminal directly. That rules out the shared `exec` and `asyncSpawn`
+ * helpers, which both capture output over pipes.
+ *
+ * Note this can not be a `promisify(spawn)`: `spawn` does not take a
+ * callback, so the promise that `promisify` returns never settles. Awaiting
+ * it silently abandons the rest of the command and the CLI exits 0 whether
+ * or not `claude mcp add` worked.
+ */
+export const spawnClaude = async (
+  claudeFile: string,
+  args: string[],
+  env: NodeJS.ProcessEnv
+) =>
+  new Promise<void>((resolve, reject) => {
+    const child = spawn(claudeFile, args, { env, stdio: "inherit" });
+    // Without an "error" handler a failure to spawn (e.g. claude is missing
+    // or not executable) throws an uncaught exception and crashes the CLI.
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (signal) {
+        reject(new Error(`"claude mcp add" was terminated by ${signal}`));
+      } else if (code !== 0) {
+        reject(new Error(`"claude mcp add" exited with code ${code}`));
+      } else {
+        resolve();
+      }
+    });
+  });
