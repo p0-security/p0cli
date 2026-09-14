@@ -12,22 +12,24 @@ import { spawnClaude } from "../mcp";
 import { describe, expect, it } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
-// process wiring, which is the thing that was broken.
-const sh = (script: string) => spawnClaude("sh", ["-c", script], process.env);
+// process wiring, which is the thing that was broken. Run node rather than a
+// shell, so the tests work on Windows too.
+const node = (script: string, env: NodeJS.ProcessEnv = process.env) =>
+  spawnClaude(process.execPath, ["-e", script], env);
 
 describe("spawnClaude", () => {
   it("resolves when claude exits 0", async () => {
-    await expect(sh("exit 0")).resolves.toBeUndefined();
+    await expect(node("process.exit(0)")).resolves.toBeUndefined();
   });
 
   it("rejects when claude exits non-zero", async () => {
-    await expect(sh("exit 3")).rejects.toThrow(
+    await expect(node("process.exit(3)")).rejects.toThrow(
       '"claude mcp add" exited with code 3'
     );
   });
 
   it("rejects when claude is terminated by a signal", async () => {
-    await expect(sh("kill -TERM $$")).rejects.toThrow(
+    await expect(node('process.kill(process.pid, "SIGTERM")')).rejects.toThrow(
       '"claude mcp add" was terminated by SIGTERM'
     );
   });
@@ -42,7 +44,7 @@ describe("spawnClaude", () => {
     // The secret is delivered out of band so it never lands on disk; if it
     // stopped reaching the child, auth would fail well after this command.
     await expect(
-      spawnClaude("sh", ["-c", '[ "$MCP_CLIENT_SECRET" = "s3cret" ]'], {
+      node('process.exit(process.env.MCP_CLIENT_SECRET === "s3cret" ? 0 : 1)', {
         ...process.env,
         MCP_CLIENT_SECRET: "s3cret",
       })
