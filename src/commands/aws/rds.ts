@@ -54,6 +54,7 @@ type RdsArgs = yargs.ArgumentsCamelCase<{
   database?: string;
   debug?: boolean;
   instance?: string;
+  reason?: string;
   role?: string;
   sql?: string;
 }>;
@@ -138,7 +139,11 @@ const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
     {
       $0: argv.$0,
       _: [],
-      arguments: [integration, ...toAccessArguments(argv)],
+      arguments: [
+        integration,
+        ...toAccessArguments(argv),
+        ...(argv.reason ? ["--reason", argv.reason] : []),
+      ],
       wait: true,
     },
     authn,
