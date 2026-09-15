@@ -10,10 +10,9 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authFetch, tenantUrl } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
-import { postfixPath } from "../../drivers/auth/path";
 import { debug, print2 } from "../../drivers/stdio";
 import { Authn } from "../../types/identity";
-import { assertNever, getOperatingSystem } from "../../util";
+import { P0_PATH, assertNever, getOperatingSystem } from "../../util";
 import assert from "node:assert";
 import { exec, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -56,7 +55,15 @@ type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
   server: string;
 }>;
 
-const CLIENT_PATH = postfixPath("claude/mcp-client.json");
+/** Path of the cached MCP client for an organization.
+ *
+ * Registrations are tenant-scoped, so a client minted for one organization
+ * does not exist for another and the gateway rejects it at /authorize. One
+ * file per organization, otherwise switching tenants reuses the wrong client.
+ */
+export const clientPath = (orgSlug: string) =>
+  // basename so a slug cannot escape the directory, as in getBootstrapOrgDataPath.
+  path.join(P0_PATH, "claude", `mcp-client-${path.basename(orgSlug)}.json`);
 
 // In dev use cases the default port (=8080) is likely to be consumed by another listening service.
 // Avoid by defaulting to a random port valid for both Windows and *nix architectures.
@@ -156,8 +163,9 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
     debug: argv.debug,
   });
 
-  await fs.mkdir(path.dirname(CLIENT_PATH), { recursive: true });
-  await fs.writeFile(CLIENT_PATH, JSON.stringify(clientData, null, 2), {
+  const cachePath = clientPath(authn.identity.org.slug);
+  await fs.mkdir(path.dirname(cachePath), { recursive: true });
+  await fs.writeFile(cachePath, JSON.stringify(clientData, null, 2), {
     mode: "400",
   });
 
@@ -165,8 +173,9 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
 };
 
 const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
+  const cachePath = clientPath(authn.identity.org.slug);
   try {
-    const cachedClientData = await fs.readFile(CLIENT_PATH, {
+    const cachedClientData = await fs.readFile(cachePath, {
       encoding: "utf-8",
     });
 
@@ -175,13 +184,13 @@ const ensureClient = async (authn: Authn, argv: AddMcpServerArgs) => {
       debug(
         argv,
         "Using cached client at",
-        CLIENT_PATH,
+        cachePath,
         "(remove this file to use a new MCP client)"
       );
       return client;
     }
   } catch (error: unknown) {
-    debug(argv, `Could not read client data file: String(error)`);
+    debug(argv, `Could not read client data file: ${String(error)}`);
   }
 
   return await createClient(authn, argv);
@@ -250,8 +259,41 @@ const provisionServer = async (
   // Spread process.env so the spawned `claude` inherits PATH / HOME /
   // NODE_OPTIONS / etc. (`env: { MCP_CLIENT_SECRET }` alone would replace
   // the whole environment).
-  await promisify(spawn)(claudeFile, args, {
-    env: { ...process.env, MCP_CLIENT_SECRET: client.secret },
-    stdio: "inherit",
+  await spawnClaude(claudeFile, args, {
+    ...process.env,
+    MCP_CLIENT_SECRET: client.secret,
   });
 };
+
+/** Runs `claude` to completion, rejecting unless it exits 0.
+ *
+ * `stdio: "inherit"` so claude's own output, and any prompt it shows, reach
+ * the terminal directly. That rules out the shared `exec` and `asyncSpawn`
+ * helpers, which both capture output over pipes.
+ *
+ * Rejects with strings rather than Errors: the top-level yargs `fail` handler
+ * prints whatever it is given, so an Error would show the user a stack trace
+ * through the bundled build output.
+ */
+export const spawnClaude = async (
+  claudeFile: string,
+  args: string[],
+  env: NodeJS.ProcessEnv
+) =>
+  new Promise<void>((resolve, reject) => {
+    const child = spawn(claudeFile, args, { env, stdio: "inherit" });
+    // Without an "error" handler a failure to spawn (e.g. claude is missing
+    // or not executable) throws an uncaught exception and crashes the CLI.
+    child.on("error", (error) =>
+      reject(`Could not run "claude": ${error.message}`)
+    );
+    child.on("close", (code, signal) => {
+      if (signal) {
+        reject(`"claude mcp add" was terminated by ${signal}`);
+      } else if (code !== 0) {
+        reject(`"claude mcp add" exited with code ${code}`);
+      } else {
+        resolve();
+      }
+    });
+  });
