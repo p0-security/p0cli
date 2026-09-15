@@ -57,13 +57,12 @@ type AddMcpServerArgs = yargs.ArgumentsCamelCase<{
 
 /** Path of the cached MCP client for an organization.
  *
- * MCP client registrations are tenant-scoped: the controller stores them
- * under the tenant that created them, so a client minted against one
- * organization does not exist for another and the gateway rejects it at
- * /authorize. Keep a separate cache file per organization, otherwise
- * switching tenants silently reuses the previous tenant's client.
+ * Registrations are tenant-scoped, so a client minted for one organization
+ * does not exist for another and the gateway rejects it at /authorize. One
+ * file per organization, otherwise switching tenants reuses the wrong client.
  */
 export const clientPath = (orgSlug: string) =>
+  // basename so a slug cannot escape the directory, as in getBootstrapOrgDataPath.
   path.join(P0_PATH, "claude", `mcp-client-${path.basename(orgSlug)}.json`);
 
 // In dev use cases the default port (=8080) is likely to be consumed by another listening service.
