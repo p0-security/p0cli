@@ -262,10 +262,6 @@ const provisionServer = async (
  * the terminal directly. That rules out the shared `exec` and `asyncSpawn`
  * helpers, which both capture output over pipes.
  *
- * This can not be a `promisify(spawn)`: that promise never settles, so
- * awaiting it abandons the rest of the command and the CLI exits 0 whether
- * or not `claude mcp add` worked.
- *
  * Rejects with strings rather than Errors: the top-level yargs `fail` handler
  * prints whatever it is given, so an Error would show the user a stack trace
  * through the bundled build output.
