@@ -262,10 +262,13 @@ const provisionServer = async (
  * the terminal directly. That rules out the shared `exec` and `asyncSpawn`
  * helpers, which both capture output over pipes.
  *
- * Note this can not be a `promisify(spawn)`: `spawn` does not take a
- * callback, so the promise that `promisify` returns never settles. Awaiting
- * it silently abandons the rest of the command and the CLI exits 0 whether
- * or not `claude mcp add` worked.
+ * Note this can not be a `promisify(spawn)`. `promisify` expects a function
+ * whose last argument is an error-first callback, unless the function
+ * provides its own `util.promisify.custom` implementation. `spawn` does
+ * neither: it takes no callback and reports completion through events, so
+ * the promise never settles. Awaiting it silently abandons the rest of the
+ * command and the CLI exits 0 whether or not `claude mcp add` worked.
+ * (`exec` does define `promisify.custom`, which is why it works above.)
  *
  * Rejects with strings rather than Errors: the top-level yargs `fail` handler
  * prints whatever it is given, so an Error would show the user a stack trace
