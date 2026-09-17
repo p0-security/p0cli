@@ -32,6 +32,12 @@ vi.mock("../../drivers/stdio", async (importOriginal) => ({
   print2: vi.fn(),
 }));
 vi.mock("../../plugins/ssh");
+// The command-flow tests below exercise request provisioning and SSH setup. Keep
+// the provider utility check out of these tests so they do not depend on
+// host-installed cloud CLI binaries or the host operating system.
+vi.mock("../../plugins/aws/ssm/install", () => ({
+  ensureSsmInstall: vi.fn().mockResolvedValue(true),
+}));
 vi.mock("../../common/keys");
 
 const mockSshOrScp = sshOrScp as Mock;
