@@ -33,6 +33,17 @@ vi.mock("../../drivers/stdio", async (importOriginal) => ({
 }));
 vi.mock("../../plugins/ssh");
 vi.mock("../../common/keys");
+// The AWS SSH provider's ensureInstall() shells out to `which` to check for
+// the AWS CLI and Session Manager plugin on the host, and throws on
+// non-darwin platforms if they're missing. That makes this suite depend on
+// the tools happening to be installed on whatever machine runs the tests.
+// Mock the shared installer so these command-level tests exercise the
+// request/streaming/ssh-invocation logic under test, independent of the
+// host's installed tooling and platform.
+vi.mock("../../common/install", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../common/install")>()),
+  ensureInstall: vi.fn().mockResolvedValue(true),
+}));
 
 const mockSshOrScp = sshOrScp as Mock;
 const mockPrint1 = print1 as Mock;
