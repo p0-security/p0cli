@@ -8,8 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { clientPath, spawnClaude } from "../mcp";
-import { debug } from "../../../drivers/stdio";
+import { clientPath, provisionServer, spawnClaude } from "../mcp";
 import { describe, expect, it, vi } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
@@ -43,16 +42,38 @@ describe("clientPath", () => {
 });
 
 describe("MCP client secret debug output", () => {
-  it("reports that the secret is set without logging its value", () => {
+  it("reports that the secret is set without logging its value", async () => {
     const secret = "sentinel-oauth-client-secret";
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const runClaude = vi.fn().mockResolvedValue(undefined);
 
-    debug({ debug: true }, "Client secret", "set");
+    try {
+      await provisionServer(
+        { debug: true, callbackPort: 52566, scope: undefined, server: "server" },
+        {
+          client: {
+            id: "client-id",
+            redirectUri: "http://localhost:52566",
+            secret,
+          },
+          server: { id: "client-id", url: "https://example.com" },
+        },
+        { server: { id: "server-id", url: "https://example.com" } },
+        "claude",
+        runClaude
+      );
 
-    expect(error).toHaveBeenCalledWith("Client secret", "set");
-    expect(error).not.toHaveBeenCalledWith("Client secret", secret);
-    expect(error.mock.calls.flat().join(" ")).not.toContain(secret);
-    error.mockRestore();
+      expect(error).toHaveBeenCalledWith("Client secret", "set");
+      expect(error.mock.calls.flat().join(" ")).not.toContain(secret);
+      expect(runClaude).toHaveBeenCalledWith(
+        "claude",
+        expect.any(Array),
+        expect.objectContaining({ MCP_CLIENT_SECRET: secret })
+      );
+      expect(runClaude.mock.calls[0][1]).not.toContain(secret);
+    } finally {
+      error.mockRestore();
+    }
   });
 });
 
