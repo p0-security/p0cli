@@ -8,8 +8,8 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { clientPath, spawnClaude } from "../mcp";
-import { describe, expect, it } from "vitest";
+import { clientPath, provisionServer, spawnClaude } from "../mcp";
+import { describe, expect, it, vi } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
 // process wiring, which is the thing that was broken. Run node rather than a
@@ -38,6 +38,43 @@ describe("clientPath", () => {
     expect(clientPath("../../evil")).toMatch(
       /[\\/]claude[\\/]mcp-client-evil\.json$/
     );
+  });
+});
+
+describe("provisionServer", () => {
+  it("reports whether the client secret is set without logging it", async () => {
+    const debugOutput = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await provisionServer(
+        {
+          debug: true,
+          callbackPort: 52566,
+          scope: undefined,
+          server: "demo",
+          _: [],
+          $0: "p0",
+        },
+        {
+          client: {
+            id: "client-id",
+            redirectUri: "http://localhost:52566",
+            secret: "s3cret",
+          },
+          server: { id: "server-id", url: "https://example.test/mcp" },
+        },
+        { server: { id: "server-id", url: "https://example.test/mcp" } },
+        {
+          getClaudeFile: async () => "claude",
+          spawnClaude: async () => {},
+        }
+      );
+
+      expect(debugOutput).toHaveBeenCalledWith("Client secret", true);
+      expect(debugOutput.mock.calls.flat().join(" ")).not.toContain("s3cret");
+    } finally {
+      debugOutput.mockRestore();
+    }
   });
 });
 
