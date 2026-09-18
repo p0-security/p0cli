@@ -75,7 +75,7 @@ describe("MCP client secret debug output", () => {
         expect.any(Array),
         expect.objectContaining({ MCP_CLIENT_SECRET: secret })
       );
-      expect(runClaude.mock.calls[0][1]).not.toContain(secret);
+      expect(runClaude.mock.calls[0]![1]).not.toContain(secret);
     } finally {
       error.mockRestore();
     }
