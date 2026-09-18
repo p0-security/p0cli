@@ -49,7 +49,12 @@ describe("MCP client secret debug output", () => {
 
     try {
       await provisionServer(
-        { debug: true, callbackPort: 52566, scope: undefined, server: "server" },
+        {
+          debug: true,
+          callbackPort: 52566,
+          scope: undefined,
+          server: "server",
+        },
         {
           client: {
             id: "client-id",
