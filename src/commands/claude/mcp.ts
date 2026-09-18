@@ -254,7 +254,7 @@ const provisionServer = async (
     server.id,
     server.url,
   ];
-  debug(argv, "Client secret", client.secret);
+  debug(argv, "Client secret", "set");
   debug(argv, ["claude", ...args].join(" "));
   // Spread process.env so the spawned `claude` inherits PATH / HOME /
   // NODE_OPTIONS / etc. (`env: { MCP_CLIENT_SECRET }` alone would replace

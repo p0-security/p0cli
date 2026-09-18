@@ -9,7 +9,8 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { clientPath, spawnClaude } from "../mcp";
-import { describe, expect, it } from "vitest";
+import { debug } from "../../../drivers/stdio";
+import { describe, expect, it, vi } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
 // process wiring, which is the thing that was broken. Run node rather than a
@@ -38,6 +39,20 @@ describe("clientPath", () => {
     expect(clientPath("../../evil")).toMatch(
       /[\\/]claude[\\/]mcp-client-evil\.json$/
     );
+  });
+});
+
+describe("MCP client secret debug output", () => {
+  it("reports that the secret is set without logging its value", () => {
+    const secret = "sentinel-oauth-client-secret";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    debug({ debug: true }, "Client secret", "set");
+
+    expect(error).toHaveBeenCalledWith("Client secret", "set");
+    expect(error).not.toHaveBeenCalledWith("Client secret", secret);
+    expect(error.mock.calls.flat().join(" ")).not.toContain(secret);
+    error.mockRestore();
   });
 });
 
