@@ -146,6 +146,26 @@ const getHostname = async () => {
   }
 };
 
+/**
+ * Builds the body of `POST /agentic/clients`.
+ *
+ * The controller validates this request against the OpenAPI contract in
+ * `@p0-security/api-specs`, so the shape here is not ours to choose. It is
+ * separate from the request so that a test can check it against that
+ * contract; see `__tests__/mcp.test.ts`.
+ */
+export const toCreateClientRequest = (args: {
+  hostname: string;
+  version: string;
+  callbackPort?: number;
+}): CreateMcpClientReq => ({
+  hostname: args.hostname,
+  platform: "claude-code",
+  type: "client_credential_post",
+  version: args.version,
+  redirectUri: `http://localhost:${args.callbackPort ?? REDIRECT_PORT}`,
+});
+
 const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
   const version = (await promisify(exec)("claude --version")).stdout;
   const hostname = await getHostname();
@@ -153,13 +173,13 @@ const createClient = async (authn: Authn, argv: AddMcpServerArgs) => {
   const clientData = await authFetch<CreateMcpClientResp>(authn, {
     url: `${tenantUrl(authn.identity.org.slug)}/agentic/clients`,
     method: "POST",
-    body: JSON.stringify({
-      hostname,
-      platform: "claude-code",
-      type: "client_credential_post",
-      version,
-      redirectUri: `http://localhost:${argv.callbackPort ?? REDIRECT_PORT}`,
-    } satisfies CreateMcpClientReq),
+    body: JSON.stringify(
+      toCreateClientRequest({
+        hostname,
+        version,
+        callbackPort: argv.callbackPort,
+      })
+    ),
     debug: argv.debug,
   });
 
