@@ -94,7 +94,9 @@ const fetchSsoWebToken = async (
             then log out of Okta in your browser and re-execute the p0 command again to reauthenticate."
           );
           if (debug) {
-            print2("Fetch SSO Web Token Error Information: " + data);
+            print2(
+              "Fetch SSO Web Token Error Information: " + JSON.stringify(data)
+            );
           }
           throw data.error_description;
         } else {
