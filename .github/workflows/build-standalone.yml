@@ -456,3 +456,18 @@ jobs:
           files: build/sea/p0-debian-${{ env.VERSION }}.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Posts a summary to #github-deploys and @-mentions the release author on
+  # failure. always() so it still fires (and reports what broke) when any build
+  # job failed or was cancelled — these builds used to fail silently.
+  notify:
+    needs: [validate, build_macos, build_windows, build_debian]
+    if: always()
+    permissions:
+      contents: read
+      actions: read # to list this run's jobs for the per-stage summary
+    uses: ./.github/workflows/notify-slack.yml
+    with:
+      pipeline: standalone builds
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

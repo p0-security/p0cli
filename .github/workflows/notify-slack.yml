@@ -1,0 +1,218 @@
+on:
+  workflow_call:
+    inputs:
+      pipeline:
+        description: "Human name of the deploy pipeline, e.g. 'npm publish' or 'standalone builds'. Appears in the Slack headline."
+        required: true
+        type: string
+    secrets:
+      # Explicitly declared (not inherited) so this leaf only ever sees the one
+      # secret it needs. The channel ID and user map are `vars.*` variables, which
+      # are auto-available to reusable workflows and need no passing.
+      SLACK_BOT_TOKEN:
+        required: true
+
+name: Deploy summary notification
+
+# No id-token needed (not talking to GCP). actions:read lists this run's jobs for
+# the per-stage summary.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      ACTOR: ${{ github.actor }}
+      PIPELINE: ${{ inputs.pipeline }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Release context. Empty on a workflow_dispatch run (build-standalone can be
+      # dispatched manually), in which case the headline degrades to the actor.
+      TAG: ${{ github.event.release.tag_name }}
+      RELEASE_NAME: ${{ github.event.release.name }}
+      RELEASE_URL: ${{ github.event.release.html_url }}
+      RELEASE_AUTHOR: ${{ github.event.release.author.login }}
+      SLACK_USER_MAP: ${{ vars.SLACK_USER_MAP }}
+    steps:
+      - id: build
+        run: |
+          # Retries transient GitHub API failures 3x, matching the convention in
+          # app's notify-slack.yml.
+          gh_api_retry() {
+            for i in 1 2 3; do
+              if OUT=$(gh api "$1" --paginate --jq "$2" 2>&1); then
+                echo "$OUT"
+                return 0
+              fi
+              [ "$i" -lt 3 ] && echo "gh api $1 failed (attempt $i/3), retrying in 5s..." >&2 && sleep 5
+            done
+            echo "gh api $1 failed after 3 attempts: $OUT" >&2
+            return 1
+          }
+
+          # Every job in this run. The notify job's own entry is excluded: the job
+          # list is fetched WHILE this job is still executing, so its own entry is
+          # always status "in_progress" with a null completed_at, which would both
+          # blow up the date arithmetic and force OVERALL to "incomplete" forever.
+          JOBS=$(gh_api_retry "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" '.jobs[]' | jq -s '.')
+
+          # p0cli's deploy jobs are flat and cleanly named (no nested reusable
+          # workflows or prod matrix), so no bucketing is needed — one line per
+          # completed job, in start order.
+          STAGES=$(jq -c '
+            map(select(.status == "completed"
+                       and (.name | test("^notify( |/|$)") | not)
+                       and .started_at != null and .completed_at != null))
+            | sort_by(.started_at)
+            | map({
+                name: .name,
+                conclusion: .conclusion,
+                url: .html_url,
+                minutes: ((((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60) | round),
+              })
+          ' <<< "$JOBS")
+
+          OVERALL=$(jq -r '
+            if any(.[]; .conclusion == "failure") then "failure"
+            elif any(.[]; .conclusion == "cancelled") then "incomplete"
+            else "success"
+            end' <<< "$STAGES")
+          FAILED_LABELS=$(jq -r '[.[] | select(.conclusion == "failure") | .name] | join(", ")' <<< "$STAGES")
+          # Wall-clock span of the run (the build jobs run in parallel), computed
+          # from the raw jobs so it matches what a viewer sees in the UI.
+          TOTAL_MIN=$(jq -r '
+            map(select(.status == "completed"
+                       and (.name | test("^notify( |/|$)") | not)
+                       and .started_at != null and .completed_at != null))
+            | if length == 0 then 0 else
+                (map(.started_at | fromdateiso8601) | min) as $s
+                | (map(.completed_at | fromdateiso8601) | max) as $e
+                | (($e - $s) / 60 | round)
+              end' <<< "$JOBS")
+
+          case "$OVERALL" in
+            failure) EMOJI=":x:" ;;
+            incomplete) EMOJI=":warning:" ;;
+            *) EMOJI=":white_check_mark:" ;;
+          esac
+
+          case "$OVERALL" in
+            failure) STATUS_WORD="FAILED" ;;
+            incomplete) STATUS_WORD="was cancelled" ;;
+            *) STATUS_WORD="succeeded" ;;
+          esac
+
+          # Headline: release-centric, with a workflow_dispatch fallback.
+          if [ -n "$TAG" ]; then
+            TITLE="${RELEASE_NAME:-$TAG}"
+            HEADLINE_TEXT="$EMOJI p0cli $PIPELINE for $TAG ($TITLE) $STATUS_WORD."
+            HEADLINE_MRKDWN="$EMOJI p0cli *$PIPELINE* for *<$RELEASE_URL|$TAG>* $STATUS_WORD."
+          else
+            HEADLINE_TEXT="$EMOJI p0cli $PIPELINE (manual run by $ACTOR) $STATUS_WORD."
+            HEADLINE_MRKDWN="$HEADLINE_TEXT"
+          fi
+
+          # Direct link to the first job to fail.
+          FAILED_JOB_URL=$(jq -r '
+            [.[] | select(.conclusion == "failure")] | .[0].url // ""' <<< "$STAGES")
+
+          # @-mention the release author on failure, via the SLACK_USER_MAP repo
+          # variable (GitHub login -> Slack member ID), same pattern as app. Falls
+          # back to plain "@login" text (renders, does not ping) if the login isn't
+          # in the map.
+          #   NB: `${SLACK_USER_MAP:-{}}` looks equivalent but is a bash brace-
+          #   counting trap — when the var IS set, bash still appends an extra "}"
+          #   from the default word. Do the "default to {}" check as a separate
+          #   statement instead.
+          MAP_JSON="$SLACK_USER_MAP"
+          [ -z "$MAP_JSON" ] && MAP_JSON='{}'
+          # --arg (not --argjson): a malformed SLACK_USER_MAP variable would make
+          # --argjson hard-error and, under Actions' implicit `bash -e -o pipefail`,
+          # kill the whole step. fromjson? swallows a parse failure instead, so a
+          # bad map loses only the mention, not the notification.
+          MENTION=$(jq -rn --arg login "$RELEASE_AUTHOR" --arg map "$MAP_JSON" '
+            (($map | fromjson? // {}) | .[$login] // "") as $id
+            | if $login == "" then ""
+              elif $id != "" then "<@" + $id + ">"
+              else "@" + $login
+              end')
+
+          MENTION_LINE=""
+          if [ "$OVERALL" = "failure" ] && [ -n "$MENTION" ]; then
+            MENTION_LINE=":bell: $MENTION — the p0cli $PIPELINE deploy broke: $FAILED_LABELS"
+            [ -n "$FAILED_JOB_URL" ] && MENTION_LINE="$MENTION_LINE (<$FAILED_JOB_URL|view failed job>)"
+          fi
+
+          HEADLINE_BLOCKS=$(jq -nc --arg h "$HEADLINE_MRKDWN" --arg m "$MENTION_LINE" '
+            [{type:"section", text:{type:"mrkdwn", text:$h}}]
+            + (if $m != "" then [{type:"section", text:{type:"mrkdwn", text:$m}}] else [] end)')
+
+          DETAIL_LINES=$(jq -r '
+            .[] |
+            (if .conclusion == "failure" then "❌"
+             elif .conclusion == "cancelled" then "🚫"
+             elif .conclusion == "skipped" then "⏭️"
+             else "✅" end) as $e |
+            "\($e) *\(.name)* — \(.conclusion) (\(.minutes)m)"
+          ' <<< "$STAGES" | paste -sd '\n' -)
+          # Slack's chat.postMessage rejects a section with empty mrkdwn text; with
+          # errors: true that would fail this step outright.
+          [ -z "$DETAIL_LINES" ] && DETAIL_LINES="(no per-stage data)"
+
+          FOOTER="by $ACTOR · <$RUN_URL|view run> · total ${TOTAL_MIN}m"
+
+          DETAIL_BLOCKS=$(jq -nc --arg lines "$DETAIL_LINES" --arg footer "$FOOTER" '
+            [{type:"section", text:{type:"mrkdwn", text:$lines}},
+             {type:"context", elements:[{type:"mrkdwn", text:$footer}]}]')
+
+          # Heredoc form, not "key=value" lines: a stray newline in a "key=value"
+          # write silently corrupts every output after it.
+          {
+            echo "headline_text<<HEADLINE_TEXT_EOF"
+            echo "$HEADLINE_TEXT"
+            echo "HEADLINE_TEXT_EOF"
+            echo "headline_blocks<<HEADLINE_BLOCKS_EOF"
+            echo "$HEADLINE_BLOCKS"
+            echo "HEADLINE_BLOCKS_EOF"
+            echo "detail_blocks<<DETAIL_BLOCKS_EOF"
+            echo "$DETAIL_BLOCKS"
+            echo "DETAIL_BLOCKS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post headline to #github-deploys
+        id: post_headline
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          # errors defaults to false, which would leave this step (and the job)
+          # green even on a Slack-side rejection (bad channel, missing scope, rate
+          # limit) with no message ever posted — exactly the failure mode to avoid
+          # in a deploy notifier.
+          errors: true
+          # v3 API: channel lives INSIDE the payload; there is no channel-id input.
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            text: ${{ toJson(steps.build.outputs.headline_text) }}
+            blocks: ${{ steps.build.outputs.headline_blocks }}
+
+      - name: Post per-stage detail as a threaded reply
+        # Only thread off a real parent message. If the headline step failed or was
+        # skipped, ts is empty and posting anyway would land as a stray top-level
+        # message instead of a reply.
+        if: steps.post_headline.outputs.ts != ''
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            thread_ts: "${{ steps.post_headline.outputs.ts }}"
+            text: "Per-stage deploy summary"
+            blocks: ${{ steps.build.outputs.detail_blocks }}
