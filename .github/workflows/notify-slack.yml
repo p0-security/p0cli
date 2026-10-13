@@ -43,57 +43,69 @@ jobs:
         run: |
           # Retries transient GitHub API failures 3x, matching the convention in
           # app's notify-slack.yml.
+          # stderr goes to a file, never into OUT: a gh deprecation/rate-limit
+          # warning merged into stdout would make the downstream `jq -s` choke on
+          # non-JSON and, under `bash -eo pipefail`, kill the whole step. The file
+          # is surfaced only in the failure diagnostic.
+          ERR_FILE="${RUNNER_TEMP:-/tmp}/gh_api_err"
           gh_api_retry() {
             for i in 1 2 3; do
-              if OUT=$(gh api "$1" --paginate --jq "$2" 2>&1); then
+              if OUT=$(gh api "$1" --paginate --jq "$2" 2>"$ERR_FILE"); then
                 echo "$OUT"
                 return 0
               fi
-              [ "$i" -lt 3 ] && echo "gh api $1 failed (attempt $i/3), retrying in 5s..." >&2 && sleep 5
+              [ "$i" -lt 3 ] && echo "gh api $1 failed (attempt $i/3): $(cat "$ERR_FILE"), retrying in 5s..." >&2 && sleep 5
             done
-            echo "gh api $1 failed after 3 attempts: $OUT" >&2
+            echo "gh api $1 failed after 3 attempts: $(cat "$ERR_FILE")" >&2
             return 1
           }
 
-          # Every job in this run. The notify job's own entry is excluded: the job
-          # list is fetched WHILE this job is still executing, so its own entry is
-          # always status "in_progress" with a null completed_at, which would both
-          # blow up the date arithmetic and force OVERALL to "incomplete" forever.
+          # Every completed job in this run EXCEPT this notify job: its own entry is
+          # fetched WHILE it is still executing (status "in_progress", null
+          # completed_at), which would skew both the status rollup and the wall-clock
+          # math. Computed once and reused so the status and the per-stage detail can
+          # never disagree about which jobs count.
           JOBS=$(gh_api_retry "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" '.jobs[]' | jq -s '.')
-
-          # p0cli's deploy jobs are flat and cleanly named (no nested reusable
-          # workflows or prod matrix), so no bucketing is needed — one line per
-          # completed job, in start order.
-          STAGES=$(jq -c '
+          COMPLETED=$(jq -c '
             map(select(.status == "completed"
-                       and (.name | test("^notify( |/|$)") | not)
-                       and .started_at != null and .completed_at != null))
-            | sort_by(.started_at)
+                       and (.name | test("^notify( |/|$)") | not)))' <<< "$JOBS")
+
+          # One line per completed job, in start order. A job cancelled while still
+          # queued has null timestamps, so minutes is computed null-safely rather
+          # than filtering the job out — dropping it would hide a cancelled deploy
+          # from both the status and the detail entirely.
+          STAGES=$(jq -c '
+            sort_by(.started_at // "")
             | map({
                 name: .name,
                 conclusion: .conclusion,
                 url: .html_url,
-                minutes: ((((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60) | round),
+                minutes: (if (.started_at != null and .completed_at != null)
+                          then ((((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60) | round)
+                          else null end),
               })
-          ' <<< "$JOBS")
+          ' <<< "$COMPLETED")
 
-          OVERALL=$(jq -r '
-            if any(.[]; .conclusion == "failure") then "failure"
-            elif any(.[]; .conclusion == "cancelled") then "incomplete"
-            else "success"
-            end' <<< "$STAGES")
-          FAILED_LABELS=$(jq -r '[.[] | select(.conclusion == "failure") | .name] | join(", ")' <<< "$STAGES")
+          # A deploy "succeeded" only if every job succeeded or was skipped. A plain
+          # cancellation is reported as incomplete (:warning:); anything else that
+          # is not success — failure, timed_out, action_required, neutral, stale —
+          # is a failure, which is the whole point of this notifier.
+          IS_FAILED='(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "cancelled")'
+          OVERALL=$(jq -r "
+            if any(.[]; $IS_FAILED) then \"failure\"
+            elif any(.[]; .conclusion == \"cancelled\") then \"incomplete\"
+            else \"success\"
+            end" <<< "$STAGES")
+          FAILED_LABELS=$(jq -r "[.[] | select($IS_FAILED) | .name] | join(\", \")" <<< "$STAGES")
           # Wall-clock span of the run (the build jobs run in parallel), computed
-          # from the raw jobs so it matches what a viewer sees in the UI.
+          # from the jobs that actually started so it matches what the UI shows.
           TOTAL_MIN=$(jq -r '
-            map(select(.status == "completed"
-                       and (.name | test("^notify( |/|$)") | not)
-                       and .started_at != null and .completed_at != null))
+            map(select(.started_at != null and .completed_at != null))
             | if length == 0 then 0 else
                 (map(.started_at | fromdateiso8601) | min) as $s
                 | (map(.completed_at | fromdateiso8601) | max) as $e
                 | (($e - $s) / 60 | round)
-              end' <<< "$JOBS")
+              end' <<< "$COMPLETED")
 
           case "$OVERALL" in
             failure) EMOJI=":x:" ;;
@@ -117,9 +129,9 @@ jobs:
             HEADLINE_MRKDWN="$HEADLINE_TEXT"
           fi
 
-          # Direct link to the first job to fail.
-          FAILED_JOB_URL=$(jq -r '
-            [.[] | select(.conclusion == "failure")] | .[0].url // ""' <<< "$STAGES")
+          # Direct link to the first job that did not succeed (same predicate as
+          # OVERALL, so a timed_out job still gets a link).
+          FAILED_JOB_URL=$(jq -r "[.[] | select($IS_FAILED)] | .[0].url // \"\"" <<< "$STAGES")
 
           # @-mention the release author on failure, via the SLACK_USER_MAP repo
           # variable (GitHub login -> Slack member ID), same pattern as app. Falls
@@ -152,14 +164,18 @@ jobs:
             [{type:"section", text:{type:"mrkdwn", text:$h}}]
             + (if $m != "" then [{type:"section", text:{type:"mrkdwn", text:$m}}] else [] end)')
 
+          # Default emoji is ❌ so it covers every non-success/skip/cancel
+          # conclusion (failure, timed_out, action_required, …), matching OVERALL.
+          # Minutes are omitted for a job that never started (null timestamps).
           DETAIL_LINES=$(jq -r '
             .[] |
-            (if .conclusion == "failure" then "❌"
-             elif .conclusion == "cancelled" then "🚫"
+            (if .conclusion == "success" then "✅"
              elif .conclusion == "skipped" then "⏭️"
-             else "✅" end) as $e |
-            "\($e) *\(.name)* — \(.conclusion) (\(.minutes)m)"
-          ' <<< "$STAGES" | paste -sd '\n' -)
+             elif .conclusion == "cancelled" then "🚫"
+             else "❌" end) as $e |
+            (if .minutes != null then " (\(.minutes)m)" else "" end) as $m |
+            "\($e) *\(.name)* — \(.conclusion // "unknown")\($m)"
+          ' <<< "$STAGES")
           # Slack's chat.postMessage rejects a section with empty mrkdwn text; with
           # errors: true that would fail this step outright.
           [ -z "$DETAIL_LINES" ] && DETAIL_LINES="(no per-stage data)"
