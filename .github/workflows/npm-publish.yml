@@ -25,7 +25,9 @@ jobs:
 
   # Posts a summary to #github-deploys and @-mentions the release author on
   # failure. always() so it still fires (and reports what broke) when the publish
-  # job failed or was cancelled — this pipeline used to fail silently.
+  # job itself fails or is cancelled — this pipeline used to fail silently. Note:
+  # if the whole run is cancelled (manual cancel / concurrency eviction) GitHub
+  # cancels this job too, so that one case still goes unreported.
   notify:
     needs: [publish-npm]
     if: always()

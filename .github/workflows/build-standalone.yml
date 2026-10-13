@@ -459,7 +459,9 @@ jobs:
 
   # Posts a summary to #github-deploys and @-mentions the release author on
   # failure. always() so it still fires (and reports what broke) when any build
-  # job failed or was cancelled — these builds used to fail silently.
+  # job fails or is cancelled — these builds used to fail silently. Note: if the
+  # whole run is cancelled (manual cancel / concurrency eviction) GitHub cancels
+  # this job too, so that one case still goes unreported.
   notify:
     needs: [validate, build_macos, build_windows, build_debian]
     if: always()
