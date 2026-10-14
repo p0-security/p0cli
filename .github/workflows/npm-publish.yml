@@ -36,4 +36,4 @@ jobs:
     with:
       pipeline: npm publish
     secrets:
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_BOT_TOKEN: ${{ secrets.P0_SLACK_DEPLOY_BOT_TOKEN }}
