@@ -22,3 +22,18 @@ jobs:
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+  # Summary + failure alert to #github-deploys. always() so it reports a failed
+  # publish too. Caveat: a whole-run cancel also cancels this job, so that case
+  # goes unreported.
+  notify:
+    needs: [publish-npm]
+    if: always()
+    permissions:
+      contents: read
+      actions: read # to list this run's jobs for the per-stage summary
+    uses: ./.github/workflows/notify-slack.yml
+    with:
+      pipeline: npm publish
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.P0_SLACK_DEPLOY_BOT_TOKEN }}

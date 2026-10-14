@@ -1,0 +1,82 @@
+on:
+  workflow_call:
+    inputs:
+      pipeline:
+        description: "Human name of the deploy pipeline, e.g. 'npm publish' or 'standalone builds'. Appears in the Slack headline."
+        required: true
+        type: string
+    secrets:
+      # The channel ID and user map are `vars.*`, auto-available to reusable
+      # workflows, so only the token is passed.
+      SLACK_BOT_TOKEN:
+        required: true
+
+name: Deploy summary notification
+
+permissions:
+  contents: read
+  actions: read # list this run's jobs for the per-stage summary
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      ACTOR: ${{ github.actor }}
+      PIPELINE: ${{ inputs.pipeline }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Empty on a workflow_dispatch run; the headline then degrades to the actor.
+      TAG: ${{ github.event.release.tag_name }}
+      RELEASE_NAME: ${{ github.event.release.name }}
+      RELEASE_URL: ${{ github.event.release.html_url }}
+      RELEASE_AUTHOR: ${{ github.event.release.author.login }}
+      SLACK_USER_MAP: ${{ vars.SLACK_USER_MAP }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        run: ./.github/scripts/notify-slack-summary.sh
+
+      - name: Post headline to #github-deploys
+        id: post_headline
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          # Without this, a Slack-side rejection leaves the job green and nothing posted.
+          errors: true
+          # v3 API: channel goes INSIDE payload, there is no channel-id input.
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            text: ${{ toJson(steps.build.outputs.headline_text) }}
+            blocks: ${{ steps.build.outputs.headline_blocks }}
+
+      - name: Post per-stage detail as a threaded reply
+        # Empty ts (headline step failed/skipped) would post as a stray top-level
+        # message instead of a reply.
+        if: steps.post_headline.outputs.ts != ''
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            thread_ts: "${{ steps.post_headline.outputs.ts }}"
+            text: "Per-stage deploy summary"
+            blocks: ${{ steps.build.outputs.detail_blocks }}
+
+      - name: Fallback alert if the notifier itself failed
+        # Backstop if the build step or a post dies. Uses only static context
+        # values (no API, no jq, no step outputs) so it can't fail the same way.
+        if: failure()
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            text: ":rotating_light: p0cli ${{ inputs.pipeline }}${{ github.event.release.tag_name && format(' for {0}', github.event.release.tag_name) || '' }} — deploy status UNKNOWN: the notifier itself failed. Check the run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
