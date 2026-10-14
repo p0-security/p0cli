@@ -40,6 +40,12 @@ jobs:
       SLACK_USER_MAP: ${{ vars.SLACK_USER_MAP }}
     steps:
       - id: build
+        # shell: bash (not the implicit default) so the step runs with
+        # `-eo pipefail`. The default `run` shell is `bash -e {0}` WITHOUT pipefail,
+        # under which a failed `gh_api_retry | jq -s` would still exit 0 (jq on empty
+        # input), leaving JOBS=[] and the job green — the exact silent failure this
+        # notifier exists to prevent.
+        shell: bash
         run: |
           # Retries transient GitHub API failures 3x, matching the convention in
           # app's notify-slack.yml.
@@ -86,19 +92,18 @@ jobs:
               })
           ' <<< "$COMPLETED")
 
-          # A deploy "succeeded" only if every job succeeded or was skipped. A plain
-          # cancellation is reported as incomplete (:warning:); anything else that
-          # is not success — failure, timed_out, action_required, neutral, stale —
-          # is a failure, which is the whole point of this notifier.
-          IS_FAILED='(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "cancelled")'
-          # "success" requires that at least one job actually succeeded. An empty
-          # job set, or a run where every job was skipped/cancelled and none
-          # succeeded, is reported as incomplete (:warning:) — never a green
-          # checkmark, which would be the silent false-positive this notifier exists
-          # to prevent.
+          # A job counts as failed unless it succeeded or was skipped. "cancelled"
+          # IS counted as a failure: a run-level cancel also cancels this notify job,
+          # so any cancelled job this notifier can observe is a per-job timeout or
+          # eviction (GitHub reports a timeout-minutes overrun as "cancelled", not
+          # "timed_out") — i.e. a build that produced no artifact, which must ping.
+          IS_FAILED='(.conclusion != "success" and .conclusion != "skipped")'
+          # "success" requires at least one job to have actually succeeded. An empty
+          # job set, or a run where every job was skipped and none succeeded, is
+          # reported as incomplete (:warning:) — never a green checkmark, which would
+          # be the silent false-positive this notifier exists to prevent.
           OVERALL=$(jq -r "
             if any(.[]; $IS_FAILED) then \"failure\"
-            elif any(.[]; .conclusion == \"cancelled\") then \"incomplete\"
             elif any(.[]; .conclusion == \"success\") then \"success\"
             else \"incomplete\"
             end" <<< "$STAGES")
@@ -135,8 +140,8 @@ jobs:
             HEADLINE_MRKDWN="$HEADLINE_TEXT"
           fi
 
-          # Direct link to the first job that did not succeed (same predicate as
-          # OVERALL, so a timed_out job still gets a link).
+          # Direct link to the first job that did not succeed (failed, cancelled, or
+          # timed out), using the same predicate as OVERALL.
           FAILED_JOB_URL=$(jq -r "[.[] | select($IS_FAILED)] | .[0].url // \"\"" <<< "$STAGES")
 
           # @-mention the release author on failure, via the SLACK_USER_MAP repo
@@ -163,10 +168,17 @@ jobs:
               else "@" + $login
               end')
 
+          # Ping on failure AND incomplete: "incomplete" now means no job succeeded
+          # (all skipped / nothing ran), which for a release still means no artifact
+          # was produced and someone should look.
           MENTION_LINE=""
-          if [ "$OVERALL" = "failure" ] && [ -n "$MENTION" ]; then
-            MENTION_LINE=":bell: $MENTION — the p0cli $PIPELINE deploy broke: $FAILED_LABELS"
-            [ -n "$FAILED_JOB_URL" ] && MENTION_LINE="$MENTION_LINE (<$FAILED_JOB_URL|view failed job>)"
+          if [ -n "$MENTION" ] && { [ "$OVERALL" = "failure" ] || [ "$OVERALL" = "incomplete" ]; }; then
+            if [ -n "$FAILED_LABELS" ]; then
+              MENTION_LINE=":bell: $MENTION — the p0cli $PIPELINE deploy did not succeed: $FAILED_LABELS"
+            else
+              MENTION_LINE=":bell: $MENTION — the p0cli $PIPELINE deploy did not complete (no jobs succeeded)"
+            fi
+            [ -n "$FAILED_JOB_URL" ] && MENTION_LINE="$MENTION_LINE (<$FAILED_JOB_URL|view job>)"
           fi
 
           HEADLINE_BLOCKS=$(jq -nc --arg h "$HEADLINE_MRKDWN" --arg m "$MENTION_LINE" '
@@ -246,3 +258,19 @@ jobs:
             thread_ts: "${{ steps.post_headline.outputs.ts }}"
             text: "Per-stage deploy summary"
             blocks: ${{ steps.build.outputs.detail_blocks }}
+
+      - name: Fallback alert if the notifier itself failed
+        # Backstop for the summary being lost entirely — the build step dying (API
+        # down after retries, a jq error) or the headline post failing. Uses only
+        # static context values (no API call, no jq, no step outputs), so it cannot
+        # fail the same way and the channel always hears that a deploy finished with
+        # an unknown result. A deploy that actually succeeded never reaches here.
+        if: failure()
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
+            text: ":rotating_light: p0cli ${{ inputs.pipeline }}${{ github.event.release.tag_name && format(' for {0}', github.event.release.tag_name) || '' }} — deploy status UNKNOWN: the notifier itself failed. Check the run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
