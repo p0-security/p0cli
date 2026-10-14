@@ -19,7 +19,6 @@ import { getAwsConfig } from "../aws/config";
 import { parseArn } from "../aws/utils";
 import { K8sConfig, K8sPermissionSpec } from "./types";
 import { pick } from "lodash";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 const KUBECONFIG_PREFIX = "p0";
@@ -110,7 +109,7 @@ export const requestAccessToCluster = async (
 
   const code = await decodeProvisionStatus(response.request);
   if (!code) {
-    sys.exit(1);
+    process.exit(1);
   }
   return response.request;
 };

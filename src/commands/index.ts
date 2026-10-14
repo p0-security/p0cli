@@ -119,6 +119,6 @@ export const getCli = async () =>
         print2(`\n${getHelpMessage()}`);
       }
 
-      // Use exitProcess instead of sys.exit for consistent span handling
+      // Use exitProcess instead of process.exit for consistent span handling
       exitProcess(1);
     });

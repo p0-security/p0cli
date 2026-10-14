@@ -25,7 +25,6 @@ import path from "node:path";
 import process from "node:process";
 import type { Readable } from "node:stream";
 import open from "open";
-import { sys } from "typescript";
 
 /**
  * Creates a clean environment for child processes by removing FIPS OpenSSL configuration
@@ -178,7 +177,7 @@ export const throwAssertNever = (value: never) => {
 export const conditionalAbortBeforeThrow =
   (abortBeforeThrow: boolean) => (err: any) => {
     if (abortBeforeThrow) {
-      sys.exit(1);
+      process.exit(1);
     }
     throw err;
   };

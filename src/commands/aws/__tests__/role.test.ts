@@ -21,12 +21,11 @@ vi.mock("fs/promises");
 vi.mock("../../../drivers/auth");
 vi.mock("../../../drivers/stdio");
 vi.mock("../../../drivers/api");
-vi.mock("typescript", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("typescript")>()),
-  sys: {
-    writeOutputIsTTY: () => true,
-  },
-}));
+// Credentials print in their TTY format
+Object.defineProperty(process.stdout, "isTTY", {
+  value: true,
+  configurable: true,
+});
 vi.mock("../../shared/request", () => ({
   provisionRequest: vi.fn(),
 }));

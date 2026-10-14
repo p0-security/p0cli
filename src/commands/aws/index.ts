@@ -14,7 +14,6 @@ import { getFirstAwsConfig } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
 import { rds } from "./rds";
 import { role } from "./role";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 const awsArgs = async (yargs: yargs.Argv) => {
@@ -53,7 +52,7 @@ const awsArgs = async (yargs: yargs.Argv) => {
     // this occurs during command building
 
     print2(error);
-    sys.exit(1);
+    process.exit(1);
     throw error; // This will never be reached, but is needed to satisfy TypeScript
   }
 };

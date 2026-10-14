@@ -56,10 +56,8 @@ vi.mock("../ssh-cleanup", () => ({
 vi.mock("tmp-promise", () => ({
   default: { fileSync: vi.fn().mockReturnValue({ name: "/tmp/req.json" }) },
 }));
-vi.mock("typescript", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("typescript")>()),
-  sys: { exit: vi.fn() },
-}));
+// Keep process.exit from ending the test run
+vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
 const mockAuthenticate = authenticate as Mock;
 const mockPrepareRequest = prepareRequest as Mock;

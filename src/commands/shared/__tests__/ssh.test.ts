@@ -22,7 +22,6 @@ import {
   newSshRequestErrorHandler,
   validateSshInstall,
 } from "../ssh";
-import { sys } from "typescript";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
 vi.mock("../../../drivers/api");
@@ -30,14 +29,13 @@ vi.mock("../../../drivers/stdio", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../drivers/stdio")>()),
   print2: vi.fn(),
 }));
-vi.mock("typescript", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("typescript")>()),
-  sys: { exit: vi.fn() },
-}));
+// Keep process.exit from ending the test run
+const mockExit = vi
+  .spyOn(process, "exit")
+  .mockImplementation(() => undefined as never);
 
 const mockFetchIntegrationConfig = fetchIntegrationConfig as Mock;
 const mockPrint2 = print2 as Mock;
-const mockExit = sys.exit as Mock;
 
 const mockAuthn = {} as Authn;
 

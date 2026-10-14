@@ -11,7 +11,6 @@ You should have received a copy of the GNU General Public License along with @p0
 import { print1, print2 } from "../../drivers/stdio";
 import { AwsCredentialFields, AwsCredentials } from "../../plugins/aws/types";
 import { newShellFormatter } from "../../util";
-import { sys } from "typescript";
 
 const CREDENTIAL_FIELDS: (keyof AwsCredentialFields)[] = [
   "AWS_ACCESS_KEY_ID",
@@ -24,7 +23,7 @@ export const printAwsCredentials = (
   awsCredentials: AwsCredentials,
   command: string
 ) => {
-  const isTty = sys.writeOutputIsTTY?.();
+  const isTty = process.stdout.isTTY;
   const indent = isTty ? "  " : "";
   const formatter = newShellFormatter();
 
