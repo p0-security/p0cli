@@ -1,26 +1,19 @@
 #!/usr/bin/env bash
 #
-# Build the Slack "deploy summary" payload for a release deploy run and write it
-# to $GITHUB_OUTPUT (headline_text, headline_blocks, detail_blocks) for the
-# notify-slack.yml reusable workflow to post. Reports a failure when any job did
-# not succeed, and @-mentions the release author (or the manual-run actor).
+# Build the Slack deploy-summary payload from this run's jobs and write it to
+# $GITHUB_OUTPUT (headline_text, headline_blocks, detail_blocks) for
+# notify-slack.yml to post.
 #
-# Reads from the environment (all set by the workflow's `env:` block):
-#   GH_TOKEN GH_REPO RUN_ID ACTOR PIPELINE RUN_URL
-#   TAG RELEASE_NAME RELEASE_URL RELEASE_AUTHOR   (empty on workflow_dispatch)
-#   SLACK_USER_MAP                                (GitHub login -> Slack ID JSON)
+# Env (set by the workflow's `env:` block): GH_TOKEN GH_REPO RUN_ID ACTOR
+# PIPELINE RUN_URL SLACK_USER_MAP, and TAG RELEASE_NAME RELEASE_URL
+# RELEASE_AUTHOR (empty on workflow_dispatch).
 #
-# -eo pipefail (not -u): a failed `gh_api_retry | jq -s` must propagate out of
-# the pipe and fail the step rather than silently yielding JOBS=[] and a green
-# job — the exact silent failure this notifier exists to prevent.
+# pipefail matters: a failed `gh_api_retry | jq -s` must fail the step, not
+# yield JOBS=[] and a green job — the silent failure this notifier prevents.
 set -eo pipefail
 
-# Retries transient GitHub API failures 3x, matching the convention in app's
-# notify-slack.yml.
-# stderr goes to a file, never into OUT: a gh deprecation/rate-limit warning
-# merged into stdout would make the downstream `jq -s` choke on non-JSON and,
-# under pipefail, kill the whole step. The file is surfaced only in the failure
-# diagnostic.
+# stderr to a file, not 2>&1: a gh warning mixed into stdout would make `jq -s`
+# choke on non-JSON. Surfaced only in the failure diagnostic.
 ERR_FILE="${RUNNER_TEMP:-/tmp}/gh_api_err"
 gh_api_retry() {
   for i in 1 2 3; do
@@ -34,20 +27,15 @@ gh_api_retry() {
   return 1
 }
 
-# Every completed job in this run EXCEPT this notify job: its own entry is
-# fetched WHILE it is still executing (status "in_progress", null completed_at),
-# which would skew both the status rollup and the wall-clock math. Computed once
-# and reused so the status and the per-stage detail can never disagree about
-# which jobs count.
 JOBS=$(gh_api_retry "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" '.jobs[]' | jq -s '.')
+# Exclude this notify job: it's still in_progress while we read the list, which
+# would skew the rollup and break the date math.
 COMPLETED=$(jq -c '
   map(select(.status == "completed"
              and (.name | test("^notify( |/|$)") | not)))' <<< "$JOBS")
 
-# One line per completed job, in start order. A job cancelled while still queued
-# has null timestamps, so minutes is computed null-safely rather than filtering
-# the job out — dropping it would hide a cancelled deploy from both the status
-# and the detail entirely.
+# minutes is null-safe: a job cancelled before it starts has null timestamps,
+# and must still appear (dropping it would hide a cancelled deploy).
 STAGES=$(jq -c '
   sort_by(.started_at // "")
   | map({
@@ -60,24 +48,19 @@ STAGES=$(jq -c '
     })
 ' <<< "$COMPLETED")
 
-# A job counts as failed unless it succeeded or was skipped. "cancelled" IS
-# counted as a failure: a run-level cancel also cancels this notify job, so any
-# cancelled job this notifier can observe is a per-job timeout or eviction
-# (GitHub reports a timeout-minutes overrun as "cancelled", not "timed_out") —
-# i.e. a build that produced no artifact, which must ping.
+# "cancelled" counts as failed: a run-level cancel also cancels this job, so any
+# cancelled job we can see is a per-job timeout/eviction (GitHub reports a
+# timeout-minutes overrun as "cancelled", not "timed_out").
 IS_FAILED='(.conclusion != "success" and .conclusion != "skipped")'
-# "success" requires at least one job to have actually succeeded. An empty job
-# set, or a run where every job was skipped and none succeeded, is reported as
-# incomplete (:warning:) — never a green checkmark, which would be the silent
-# false-positive this notifier exists to prevent.
+# "success" needs a real success: empty / all-skipped reports incomplete, never
+# a false green.
 OVERALL=$(jq -r "
   if any(.[]; $IS_FAILED) then \"failure\"
   elif any(.[]; .conclusion == \"success\") then \"success\"
   else \"incomplete\"
   end" <<< "$STAGES")
 FAILED_LABELS=$(jq -r "[.[] | select($IS_FAILED) | .name] | join(\", \")" <<< "$STAGES")
-# Wall-clock span of the run (the build jobs run in parallel), computed from the
-# jobs that actually started so it matches what the UI shows.
+# Wall-clock span, not sum: the build jobs run in parallel.
 TOTAL_MIN=$(jq -r '
   map(select(.started_at != null and .completed_at != null))
   | if length == 0 then 0 else
@@ -98,7 +81,6 @@ case "$OVERALL" in
   *) STATUS_WORD="succeeded" ;;
 esac
 
-# Headline: release-centric, with a workflow_dispatch fallback.
 if [ -n "$TAG" ]; then
   TITLE="${RELEASE_NAME:-$TAG}"
   HEADLINE_TEXT="$EMOJI p0cli $PIPELINE for $TAG ($TITLE) $STATUS_WORD."
@@ -108,24 +90,15 @@ else
   HEADLINE_MRKDWN="$HEADLINE_TEXT"
 fi
 
-# Direct link to the first job that did not succeed (failed, cancelled, or timed
-# out), using the same predicate as OVERALL.
 FAILED_JOB_URL=$(jq -r "[.[] | select($IS_FAILED)] | .[0].url // \"\"" <<< "$STAGES")
 
-# @-mention the release author on failure, via the SLACK_USER_MAP repo variable
-# (GitHub login -> Slack member ID), same pattern as app. Falls back to plain
-# "@login" text (renders, does not ping) if the login isn't in the map.
-#   NB: `${SLACK_USER_MAP:-{}}` looks equivalent but is a bash brace-counting
-#   trap — when the var IS set, bash still appends an extra "}" from the default
-#   word. Do the "default to {}" check as a separate statement instead.
+# Separate statement, not `${SLACK_USER_MAP:-{}}`: that brace form appends a
+# stray "}" when the var is set.
 MAP_JSON="$SLACK_USER_MAP"
 [ -z "$MAP_JSON" ] && MAP_JSON='{}'
-# --arg (not --argjson): a malformed SLACK_USER_MAP variable would make
-# --argjson hard-error and, under pipefail, kill the whole step. fromjson?
-# swallows a parse failure instead, so a bad map loses only the mention, not the
-# notification.
-# The release author if this was a release, else whoever triggered the manual
-# run — so a failed workflow_dispatch deploy still pings someone.
+# --arg + fromjson? (not --argjson): a malformed map loses only the mention
+# instead of hard-erroring the step. Unmapped login -> "@login" (renders, no
+# ping). Falls back to the actor so a manual-run failure still pings.
 MENTION_LOGIN="${RELEASE_AUTHOR:-$ACTOR}"
 MENTION=$(jq -rn --arg login "$MENTION_LOGIN" --arg map "$MAP_JSON" '
   (($map | fromjson? // {}) | .[$login] // "") as $id
@@ -134,9 +107,7 @@ MENTION=$(jq -rn --arg login "$MENTION_LOGIN" --arg map "$MAP_JSON" '
     else "@" + $login
     end')
 
-# Ping on failure AND incomplete: "incomplete" now means no job succeeded (all
-# skipped / nothing ran), which for a release still means no artifact was
-# produced and someone should look.
+# Ping on incomplete too: for a release it means no artifact was produced.
 MENTION_LINE=""
 if [ -n "$MENTION" ] && { [ "$OVERALL" = "failure" ] || [ "$OVERALL" = "incomplete" ]; }; then
   if [ -n "$FAILED_LABELS" ]; then
@@ -151,9 +122,7 @@ HEADLINE_BLOCKS=$(jq -nc --arg h "$HEADLINE_MRKDWN" --arg m "$MENTION_LINE" '
   [{type:"section", text:{type:"mrkdwn", text:$h}}]
   + (if $m != "" then [{type:"section", text:{type:"mrkdwn", text:$m}}] else [] end)')
 
-# Default emoji is ❌ so it covers every non-success/skip/cancel conclusion
-# (failure, timed_out, action_required, …), matching OVERALL. Minutes are
-# omitted for a job that never started (null timestamps).
+# Default ❌ catches every non-success/skip/cancel conclusion (timed_out, …).
 DETAIL_LINES=$(jq -r '
   .[] |
   (if .conclusion == "success" then "✅"
@@ -165,21 +134,19 @@ DETAIL_LINES=$(jq -r '
    else " (\(.minutes)m)" end) as $m |
   "\($e) *\(.name)* — \(.conclusion // "unknown")\($m)"
 ' <<< "$STAGES")
-# Slack's chat.postMessage rejects a section with empty mrkdwn text; with
-# errors: true that would fail the posting step outright.
+# Slack rejects a section with empty text, which would fail the posting step.
 [ -z "$DETAIL_LINES" ] && DETAIL_LINES="(no per-stage data)"
 
-# "<1m" rather than "0m" for a sub-minute run (round() floors 0–29s to 0).
 TOTAL_DISPLAY="${TOTAL_MIN}m"
-[ "$TOTAL_MIN" = "0" ] && TOTAL_DISPLAY="<1m"
+[ "$TOTAL_MIN" = "0" ] && TOTAL_DISPLAY="<1m" # round() floors 0–29s to 0
 FOOTER="by $ACTOR · <$RUN_URL|view run> · total $TOTAL_DISPLAY"
 
 DETAIL_BLOCKS=$(jq -nc --arg lines "$DETAIL_LINES" --arg footer "$FOOTER" '
   [{type:"section", text:{type:"mrkdwn", text:$lines}},
    {type:"context", elements:[{type:"mrkdwn", text:$footer}]}]')
 
-# Heredoc form, not "key=value" lines: a stray newline in a "key=value" write
-# silently corrupts every output after it.
+# Heredoc, not key=value: a stray newline in a key=value write corrupts every
+# output after it.
 {
   echo "headline_text<<HEADLINE_TEXT_EOF"
   echo "$HEADLINE_TEXT"

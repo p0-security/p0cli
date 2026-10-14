@@ -6,19 +6,16 @@ on:
         required: true
         type: string
     secrets:
-      # Explicitly declared (not inherited) so this leaf only ever sees the one
-      # secret it needs. The channel ID and user map are `vars.*` variables, which
-      # are auto-available to reusable workflows and need no passing.
+      # The channel ID and user map are `vars.*`, auto-available to reusable
+      # workflows, so only the token is passed.
       SLACK_BOT_TOKEN:
         required: true
 
 name: Deploy summary notification
 
-# No id-token needed (not talking to GCP). actions:read lists this run's jobs for
-# the per-stage summary.
 permissions:
   contents: read
-  actions: read
+  actions: read # list this run's jobs for the per-stage summary
 
 jobs:
   notify:
@@ -31,8 +28,7 @@ jobs:
       ACTOR: ${{ github.actor }}
       PIPELINE: ${{ inputs.pipeline }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      # Release context. Empty on a workflow_dispatch run (build-standalone can be
-      # dispatched manually), in which case the headline degrades to the actor.
+      # Empty on a workflow_dispatch run; the headline then degrades to the actor.
       TAG: ${{ github.event.release.tag_name }}
       RELEASE_NAME: ${{ github.event.release.name }}
       RELEASE_URL: ${{ github.event.release.html_url }}
@@ -40,10 +36,6 @@ jobs:
       SLACK_USER_MAP: ${{ vars.SLACK_USER_MAP }}
     steps:
       - uses: actions/checkout@v4
-      # Builds the Slack payload (headline_text/headline_blocks/detail_blocks) from
-      # this run's jobs. Lives in a standalone script — same action-calls-script
-      # convention as app's deploy-guard — so the logic is readable and shellcheck-
-      # able instead of buried in inline YAML.
       - id: build
         run: ./.github/scripts/notify-slack-summary.sh
 
@@ -53,20 +45,16 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          # errors defaults to false, which would leave this step (and the job)
-          # green even on a Slack-side rejection (bad channel, missing scope, rate
-          # limit) with no message ever posted — exactly the failure mode to avoid
-          # in a deploy notifier.
+          # Without this, a Slack-side rejection leaves the job green and nothing posted.
           errors: true
-          # v3 API: channel lives INSIDE the payload; there is no channel-id input.
+          # v3 API: channel goes INSIDE payload, there is no channel-id input.
           payload: |
             channel: "${{ vars.SLACK_GITHUB_DEPLOYS_CHANNEL_ID }}"
             text: ${{ toJson(steps.build.outputs.headline_text) }}
             blocks: ${{ steps.build.outputs.headline_blocks }}
 
       - name: Post per-stage detail as a threaded reply
-        # Only thread off a real parent message. If the headline step failed or was
-        # skipped, ts is empty and posting anyway would land as a stray top-level
+        # Empty ts (headline step failed/skipped) would post as a stray top-level
         # message instead of a reply.
         if: steps.post_headline.outputs.ts != ''
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
@@ -81,11 +69,8 @@ jobs:
             blocks: ${{ steps.build.outputs.detail_blocks }}
 
       - name: Fallback alert if the notifier itself failed
-        # Backstop for the summary being lost entirely — the build step dying (API
-        # down after retries, a jq error) or the headline post failing. Uses only
-        # static context values (no API call, no jq, no step outputs), so it cannot
-        # fail the same way and the channel always hears that a deploy finished with
-        # an unknown result. A deploy that actually succeeded never reaches here.
+        # Backstop if the build step or a post dies. Uses only static context
+        # values (no API, no jq, no step outputs) so it can't fail the same way.
         if: failure()
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
