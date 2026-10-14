@@ -222,12 +222,18 @@ const getClaudeFile = async () => {
   }
 };
 
-const provisionServer = async (
+type ProvisionServerDeps = {
+  getClaudeFile?: () => Promise<string>;
+  spawnClaude?: typeof spawnClaude;
+};
+
+export const provisionServer = async (
   argv: AddMcpServerArgs,
   { client }: CreateMcpClientResp,
-  { server }: GetMcpServerResp
+  { server }: GetMcpServerResp,
+  deps: ProvisionServerDeps = {}
 ) => {
-  const claudeFile = await getClaudeFile();
+  const claudeFile = await (deps.getClaudeFile ?? getClaudeFile)();
   assert(client.secret, "No client secret");
   debug(argv, "Server", server);
   // Claude Code's `mcp add-json` doesn't accept oauth fields in its JSON
@@ -254,12 +260,12 @@ const provisionServer = async (
     server.id,
     server.url,
   ];
-  debug(argv, "Client secret", client.secret);
+  debug(argv, "Client secret", Boolean(client.secret));
   debug(argv, ["claude", ...args].join(" "));
   // Spread process.env so the spawned `claude` inherits PATH / HOME /
   // NODE_OPTIONS / etc. (`env: { MCP_CLIENT_SECRET }` alone would replace
   // the whole environment).
-  await spawnClaude(claudeFile, args, {
+  await (deps.spawnClaude ?? spawnClaude)(claudeFile, args, {
     ...process.env,
     MCP_CLIENT_SECRET: client.secret,
   });
