@@ -28,7 +28,6 @@ import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import fs from "fs";
 import path from "path";
 import tmp from "tmp-promise";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 const ENV_PREFIX = "P0_SSH";
@@ -113,7 +112,7 @@ export const sshResolveAction = async (
       if (args.debug) {
         print2(err);
       }
-      sys.exit(1);
+      process.exit(1);
     }
 
     return silentlyExit(err);

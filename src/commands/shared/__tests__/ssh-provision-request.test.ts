@@ -31,10 +31,8 @@ vi.mock("..", async (importOriginal) => ({
   ...(await importOriginal<typeof import("..")>()),
   decodeProvisionStatus: vi.fn(),
 }));
-vi.mock("typescript", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("typescript")>()),
-  sys: { exit: vi.fn() },
-}));
+// Keep process.exit from ending the test run
+vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
 const mockInnerRequest = vi.fn();
 const mockRequest = request as Mock;

@@ -22,7 +22,6 @@ import {
 } from "../../types/request";
 import { sleep } from "../../util";
 import { trace } from "@opentelemetry/api";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export const PROVISIONING_ACCESS_MESSAGE =
@@ -204,7 +203,7 @@ export const request =
           shouldLogMessage
         );
         if (code) {
-          sys.exit(code);
+          process.exit(code);
           return undefined;
         }
         return {

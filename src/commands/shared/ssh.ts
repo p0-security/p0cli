@@ -34,7 +34,6 @@ import {
 import { assertNever } from "../../util";
 import { request } from "./request";
 import { pick } from "lodash";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export type BaseSshCommandArgs = {
@@ -237,7 +236,7 @@ export const provisionRequest = async (
     response.request
   );
 
-  if (!result) sys.exit(1);
+  if (!result) process.exit(1);
 
   return {
     requestId: id,
@@ -297,7 +296,7 @@ export const newSshRequestErrorHandler =
         );
       }
     }
-    sys.exit(1);
+    process.exit(1);
   };
 
 export const setupSshConnection = async (

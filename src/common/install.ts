@@ -14,7 +14,6 @@ import { osSafeCommand, spawnWithCleanEnv } from "../util";
 import { asyncSpawn } from "./subprocess";
 import { compact } from "lodash";
 import os from "node:os";
-import { sys } from "typescript";
 import which from "which";
 
 export const checkToolVersion = async (
@@ -205,7 +204,7 @@ export const ensureInstall = async <
     );
   }
 
-  const interactive = !!sys.writeOutputIsTTY?.() && (await queryInteractive());
+  const interactive = !!process.stdout.isTTY && (await queryInteractive());
 
   for (const item of toInstall) {
     if (interactive) await guidedInstall(platform, item, installData);

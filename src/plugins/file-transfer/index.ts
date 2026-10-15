@@ -21,7 +21,6 @@ import { FileTransferPermissionSpec } from "./types";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pick } from "lodash";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 export const MAX_SECONDS_TO_EXPIRE_GET_URL = 5 * 60;
@@ -61,7 +60,7 @@ export const provisionTransferRequest = async (
   const result = await decodeProvisionStatus<FileTransferPermissionSpec>(
     response.request
   );
-  if (!result) sys.exit(1);
+  if (!result) process.exit(1);
 
   const { id: requestId } = response;
   const { status, principal } = response.request;

@@ -25,7 +25,6 @@ import {
 import { decodeProvisionStatus } from "../shared";
 import { request } from "../shared/request";
 import { writeAwsConfigProfile, writeAwsTempCredentials } from "./files";
-import { sys } from "typescript";
 import yargs from "yargs";
 
 // TODO: Move to shared location
@@ -158,7 +157,7 @@ const requestRdsAccess = async (argv: RdsArgs, authn: Authn) => {
 
   const code = await decodeProvisionStatus(access);
   if (!code) {
-    sys.exit(1);
+    process.exit(1);
   }
 
   return access;
@@ -270,5 +269,5 @@ On CloudShell, you can execute:
   if (!process.stderr.isTTY || !process.stdout.isTTY) {
     print1(result.stdout);
   }
-  if (result.code !== null) sys.exit(result.code);
+  if (result.code !== null) process.exit(result.code);
 };
