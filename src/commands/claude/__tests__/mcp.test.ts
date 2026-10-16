@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { clientPath, spawnClaude } from "../mcp";
+import { clientPath, spawnClaude, toCreateClientRequest } from "../mcp";
 import { describe, expect, it } from "vitest";
 
 // Stands in for the `claude` executable: these exercise the real child
@@ -73,5 +73,67 @@ describe("spawnClaude", () => {
         MCP_CLIENT_SECRET: "s3cret",
       })
     ).resolves.toBeUndefined();
+  });
+});
+
+// The fields the controller requires of a `client_credential_post`
+// registration, and the platforms it accepts. Copied from
+// `McpConfidentialClientCreateRequest` in
+// `@p0-security/api-specs/specs/controller/tenant/mcp/v1/openapi.yaml`, which
+// is the contract the controller validates this request against.
+const REQUIRED_FIELDS = [
+  "hostname",
+  "platform",
+  "redirectUri",
+  "type",
+  "version",
+] as const;
+const PLATFORMS = ["claude-code", "claude-agents", "custom"];
+
+describe("toCreateClientRequest", () => {
+  const request = toCreateClientRequest({
+    hostname: "my-laptop",
+    version: "1.2.3",
+    callbackPort: 8080,
+  });
+
+  it("sends every field the controller requires", () => {
+    // A missing field fails the whole command with a schema error from the
+    // controller, which is what happened when the two last drifted apart.
+    expect(Object.keys(request).sort()).toEqual([...REQUIRED_FIELDS].sort());
+  });
+
+  it("sends no field the controller does not define", () => {
+    for (const field of Object.keys(request)) {
+      expect(REQUIRED_FIELDS).toContain(field);
+    }
+  });
+
+  it("selects the confidential-client variant", () => {
+    // `type` is the discriminator. Without it the controller cannot tell which
+    // variant of the union to check the rest of the body against.
+    expect(request.type).toBe("client_credential_post");
+  });
+
+  it("names a platform the controller accepts", () => {
+    expect(PLATFORMS).toContain(request.platform);
+  });
+
+  it("sends every value as a string", () => {
+    for (const value of Object.values(request)) {
+      expect(typeof value).toBe("string");
+    }
+  });
+
+  it("points the redirect at the callback port", () => {
+    expect(request.redirectUri).toBe("http://localhost:8080");
+  });
+
+  it("falls back to the default callback port", () => {
+    const fallback = toCreateClientRequest({
+      hostname: "my-laptop",
+      version: "1.2.3",
+    });
+    expect(fallback.redirectUri).toMatch(/^http:\/\/localhost:\d+$/);
   });
 });
