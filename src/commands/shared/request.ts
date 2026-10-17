@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { retryWithSleep } from "../../common/retry";
+import { AnsiSgr } from "../../drivers/ansi";
 import { fetchCommand, fetchStreamingStatus } from "../../drivers/api";
 import { authenticate } from "../../drivers/auth";
 import { RETRY_OPTIONS } from "../../drivers/constants";
@@ -116,6 +117,16 @@ const resolveCode = (
   }
 };
 
+/** Prints the non-fatal warnings P0 returned for a created request
+ *
+ * Older P0 servers don't send warnings, so a missing list prints nothing.
+ */
+const printWarnings = (warnings: string[] | undefined) => {
+  for (const warning of warnings ?? []) {
+    print2(`${AnsiSgr.Yellow}Warning: ${warning}${AnsiSgr.Reset}`);
+  }
+};
+
 export const request =
   (command: "grant" | "request") =>
   async <T>(
@@ -179,16 +190,24 @@ export const request =
       return processResponse(await executeApiRequest(fetchCommandPromise));
     };
 
+    const printResponse = (
+      data: RequestResponse<T>,
+      shouldLogMessage: boolean
+    ) => {
+      if (shouldLogMessage) print2(data.message);
+      if (options?.message !== "quiet") printWarnings(data.warnings);
+    };
+
     const invokeRequest = async () => {
       const { data, shouldLogMessage } = await executeAndProcessApiRequest();
-      if (shouldLogMessage) print2(data.message);
+      printResponse(data, shouldLogMessage);
       return data;
     };
 
     const executeStreamingRequest = async () => {
       const { data, shouldLogMessage } = await executeAndProcessApiRequest();
+      printResponse(data, shouldLogMessage);
       if (shouldLogMessage) {
-        print2(data.message);
         print2("Will wait up to 5 minutes for this request to complete...");
       }
       const fetchStreamingStatusGenerator = fetchStreamingStatus<

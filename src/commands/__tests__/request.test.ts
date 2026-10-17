@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { AnsiSgr } from "../../drivers/ansi";
 import { fetchCommand, fetchStreamingStatus } from "../../drivers/api";
 import { print1, print2 } from "../../drivers/stdio";
 import { failure } from "../../testing/yargs";
@@ -69,6 +70,26 @@ describe("request", () => {
         });
       }
     );
+
+    describe("warnings", () => {
+      const warning =
+        "This grants access to the Namespace object only. To get access to resources inside app, request `* / app / *`.";
+
+      it("should print each warning after the request response", async () => {
+        mockFetch({ warnings: [warning] });
+        await requestCommand(yargs()).parse(command);
+        expect(mockPrint2.mock.calls).toEqual([
+          ["a message"],
+          [`${AnsiSgr.Yellow}Warning: ${warning}${AnsiSgr.Reset}`],
+        ]);
+      });
+
+      it("should print only the response when the server sends no warnings", async () => {
+        mockFetch();
+        await requestCommand(yargs()).parse(command);
+        expect(mockPrint2.mock.calls).toEqual([["a message"]]);
+      });
+    });
 
     it("should wait for access", async () => {
       /**

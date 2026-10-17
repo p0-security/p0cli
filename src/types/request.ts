@@ -59,4 +59,6 @@ export type RequestResponse<T> = {
   isPreexisting: boolean;
   isPersistent: boolean;
   isPreapproved: boolean;
+  /** Non-fatal warnings about this request, for the requester */
+  warnings?: string[];
 };
