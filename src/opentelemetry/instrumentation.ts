@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { p0VersionInfo } from "../version";
 import { BufferedSpanExporter } from "./buffered-exporter";
+import { TokenRefreshingExporter } from "./token-exporter";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { DnsInstrumentation } from "@opentelemetry/instrumentation-dns";
 import { NetInstrumentation } from "@opentelemetry/instrumentation-net";
@@ -36,13 +37,20 @@ const sdk = new NodeSDK({
   ],
 });
 
-export const setExporterAfterLogin = async (url: string, token: string) => {
-  const realExporter = new OTLPTraceExporter({
-    url,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+export const setExporterAfterLogin = (
+  url: string,
+  getToken: () => Promise<string>
+) => {
+  const realExporter = new TokenRefreshingExporter(
+    getToken,
+    (token) =>
+      new OTLPTraceExporter({
+        url,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+  );
 
   bufferedExporter.setDelegateAndExport(realExporter);
 };

@@ -170,9 +170,9 @@ export const deleteIdentity = async () => {
 };
 
 /** Set up trace exporter to authenticated collector endpoint */
-const setOpentelemetryExporter = async (authn: Authn): Promise<void> => {
+const setOpentelemetryExporter = (authn: Authn) => {
   const url = tracesUrl(authn.identity.org.slug);
-  await setExporterAfterLogin(url, await authn.getToken());
+  setExporterAfterLogin(url, () => authn.getToken());
 };
 
 export const authenticate = async (options?: {
@@ -203,6 +203,6 @@ export const authenticate = async (options?: {
     };
   }
 
-  await setOpentelemetryExporter(authn);
+  setOpentelemetryExporter(authn);
   return authn;
 };
