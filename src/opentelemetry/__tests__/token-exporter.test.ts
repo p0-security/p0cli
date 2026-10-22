@@ -72,4 +72,17 @@ describe("TokenRefreshingExporter", () => {
     expect(result.code).toBe(ExportResultCode.FAILED);
     expect(makeExporter).not.toHaveBeenCalled();
   });
+
+  it("fails the export when building the exporter throws", async () => {
+    const exporter = new TokenRefreshingExporter(
+      () => Promise.resolve("token"),
+      () => {
+        throw new Error("bad config");
+      }
+    );
+
+    const result = await exportOnce(exporter);
+
+    expect(result.code).toBe(ExportResultCode.FAILED);
+  });
 });

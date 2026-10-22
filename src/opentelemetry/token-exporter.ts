@@ -31,19 +31,20 @@ export class TokenRefreshingExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void
   ): void {
-    this.getToken().then(
-      (token) => {
+    this.getToken()
+      .then((token) => {
         if (!this.delegate || token !== this.token) {
+          const next = this.makeExporter(token);
           // Shutting down lets in-flight exports finish with the old token
           void this.delegate?.shutdown().catch(() => {});
           this.token = token;
-          this.delegate = this.makeExporter(token);
+          this.delegate = next;
         }
         this.delegate.export(spans, resultCallback);
-      },
-      // Traces are best-effort telemetry; drop them if no token is available
-      () => resultCallback({ code: ExportResultCode.FAILED })
-    );
+      })
+      // Traces are best-effort telemetry; drop them rather than let an
+      // unhandled rejection exit the CLI
+      .catch(() => resultCallback({ code: ExportResultCode.FAILED }));
   }
 
   async forceFlush(): Promise<void> {
