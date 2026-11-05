@@ -17,6 +17,7 @@ import { allowCommand } from "./allow";
 import { awsCommand } from "./aws";
 import { claudeCommand } from "./claude";
 import { fileTransferCommand } from "./file-transfer";
+import { gitCommand } from "./git";
 import { grantCommand } from "./grant";
 import { kubeconfigCommand } from "./kubeconfig";
 import { loginCommand } from "./login";
@@ -50,6 +51,7 @@ const commands = [
   kubeconfigCommand,
   printBearerTokenCommand,
   fileTransferCommand,
+  gitCommand,
 ];
 
 const buildArgv = async () => {
@@ -74,7 +76,7 @@ const buildArgv = async () => {
 };
 
 // Skip the version check for these non-interactive commands
-const skipVersionCheckFor = ["ssh-proxy", "ssh-resolve"];
+const skipVersionCheckFor = ["ssh-proxy", "ssh-resolve", "git"];
 
 async function conditionalCheckVersion(argv: yargs.ArgumentsCamelCase) {
   const invokedCommand = argv._[0];
