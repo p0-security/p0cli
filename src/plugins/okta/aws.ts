@@ -10,11 +10,12 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { parseXml } from "../../common/xml";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
-import { AwsFederatedLogin, AwsItem } from "../aws/types";
+import { AwsFederatedLogin, AwsFederationConfig, AwsItem } from "../aws/types";
 import { fetchSamlAssertionForAws } from "./login";
 import { flatten } from "lodash";
 
@@ -64,6 +65,26 @@ const isFederatedLogin = (
 ): config is AwsItem & { login: AwsFederatedLogin } =>
   config.login?.type === "federated";
 
+/** Gets the Okta app ID and the AWS SAML provider name of a federated login */
+const oktaFederationApp = async (
+  authn: Authn,
+  login: AwsFederatedLogin,
+  debug?: boolean
+) => {
+  if (login.federation === undefined)
+    return {
+      appId: login.provider.appId,
+      samlProvider: login.provider.identityProvider,
+    };
+  const { config } = await fetchIntegrationConfig<{
+    config: AwsFederationConfig;
+  }>(authn, "aws-federation", debug);
+  const provider = config?.federation?.[login.federation]?.provider;
+  if (provider?.type !== "okta")
+    throw `Federation app ${login.federation} is not an Okta app.`;
+  return { appId: provider.appId, samlProvider: login.samlProvider };
+};
+
 /** Retrieves the configured Okta SAML response for the specified account
  *
  * If no account is passed, and the organization only has one account configured,
@@ -77,14 +98,15 @@ const initOktaSaml = async (
   const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
-  const samlResponse = await fetchSamlAssertionForAws(
-    identity,
+  const { appId, samlProvider } = await oktaFederationApp(
+    authn,
     config.login,
     debug
   );
+  const samlResponse = await fetchSamlAssertionForAws(identity, appId, debug);
   return {
     samlResponse,
-    config,
+    samlProvider,
     account: config.id,
   };
 };
@@ -102,7 +124,7 @@ export const assumeRoleWithOktaSaml = async (
       // Add retry logic to handle this race condition.
       return await retryWithSleep(
         async () => {
-          const { account, config, samlResponse } = await initOktaSaml(
+          const { account, samlProvider, samlResponse } = await initOktaSaml(
             authn,
             args.accountId,
             debug
@@ -116,7 +138,7 @@ export const assumeRoleWithOktaSaml = async (
             partition,
             role: args.role,
             saml: {
-              providerName: config.login.provider.identityProvider,
+              providerName: samlProvider,
               response: samlResponse,
             },
           });

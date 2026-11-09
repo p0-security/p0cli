@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { parseXml } from "../../../common/xml";
+import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithSaml } from "../../aws/assumeRole";
 import { getAwsConfig } from "../../aws/config";
@@ -18,6 +19,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
 vi.mock("../../../drivers/auth");
+vi.mock("../../../drivers/api", () => ({
+  fetchIntegrationConfig: vi.fn(),
+}));
 vi.mock("../../aws/config", () => ({
   getAwsConfig: vi.fn(),
 }));
@@ -163,5 +167,106 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
         role: "p0-grants/P0GrantsRole12",
       })
     );
+  });
+});
+
+describe("assumeRoleWithOktaSaml federation app", () => {
+  const mockAuthn = {
+    identity: { org: { slug: "test-org" } },
+  } as unknown as Authn;
+
+  const useLogin = (login: object) =>
+    vi.mocked(getAwsConfig).mockResolvedValue({
+      identity: {} as any,
+      config: { id: "1234", login } as any,
+    });
+
+  const useFederation = (provider: object) =>
+    vi.mocked(fetchIntegrationConfig).mockResolvedValue({
+      config: { federation: { "okta-prod": { provider, state: "installed" } } },
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchSamlAssertionForAws).mockResolvedValue("base64-saml");
+    vi.mocked(parseXml).mockReturnValue({
+      "saml2p:Response": {
+        "saml2:Assertion": {
+          "saml2:AttributeStatement": {
+            "saml2:Attribute": [
+              {
+                _attributes: {
+                  Name: "https://aws.amazon.com/SAML/Attributes/Role",
+                },
+                "saml2:AttributeValue": [
+                  "arn:aws:iam::1234:saml-provider/okta-saml,arn:aws:iam::1234:role/Admin",
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  it("uses the app ID of the federation item and the SAML provider of the login", async () => {
+    useLogin({
+      type: "federated",
+      federation: "okta-prod",
+      samlProvider: "okta-saml",
+    });
+    useFederation({ type: "okta", appId: "0oa123" });
+
+    await assumeRoleWithOktaSaml(mockAuthn, { role: "Admin" }, false);
+
+    expect(fetchIntegrationConfig).toHaveBeenCalledWith(
+      mockAuthn,
+      "aws-federation",
+      false
+    );
+    expect(fetchSamlAssertionForAws).toHaveBeenCalledWith(
+      expect.anything(),
+      "0oa123",
+      false
+    );
+    expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        saml: { providerName: "okta-saml", response: "base64-saml" },
+      })
+    );
+  });
+
+  it("uses the inline provider of a login without a federation item", async () => {
+    useLogin({
+      type: "federated",
+      provider: { type: "okta", appId: "0oa456", identityProvider: "legacy" },
+    });
+
+    await assumeRoleWithOktaSaml(mockAuthn, { role: "Admin" }, false);
+
+    expect(fetchIntegrationConfig).not.toHaveBeenCalled();
+    expect(fetchSamlAssertionForAws).toHaveBeenCalledWith(
+      expect.anything(),
+      "0oa456",
+      false
+    );
+    expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        saml: { providerName: "legacy", response: "base64-saml" },
+      })
+    );
+  });
+
+  it("rejects a federation item that is not an Okta app", async () => {
+    useLogin({
+      type: "federated",
+      federation: "okta-prod",
+      samlProvider: "okta-saml",
+    });
+    useFederation({ type: "pingone" });
+
+    await expect(
+      assumeRoleWithOktaSaml(mockAuthn, { role: "Admin" }, false)
+    ).rejects.toBe("Federation app okta-prod is not an Okta app.");
   });
 });

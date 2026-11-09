@@ -41,16 +41,33 @@ export type AwsIdcLogin = {
   identityStoreId: string;
 };
 
-export type AwsFederatedLogin = {
-  type: "federated";
-  provider: {
-    type: "okta";
-    appId: string;
-    identityProvider: string;
-    method: {
-      type: "saml";
-    };
+type AwsFederatedOktaProvider = {
+  type: "okta";
+  appId: string;
+  identityProvider: string;
+  method: {
+    type: "saml";
   };
+};
+
+/** A login that holds its federation app inline */
+type AwsLegacyFederatedLogin = {
+  type: "federated";
+  federation?: undefined;
+  provider: AwsFederatedOktaProvider;
+};
+
+/** A login that refers to an `aws-federation` item */
+type AwsItemFederatedLogin = {
+  type: "federated";
+  federation: string;
+  samlProvider: string;
+};
+
+export type AwsFederatedLogin = AwsItemFederatedLogin | AwsLegacyFederatedLogin;
+
+export type AwsFederationConfig = {
+  federation: Record<string, { provider: { type: "okta"; appId: string } }>;
 };
 
 export type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
