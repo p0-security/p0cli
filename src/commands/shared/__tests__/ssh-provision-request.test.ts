@@ -121,4 +121,17 @@ describe("provisionRequest", () => {
     const requestArgs = mockInnerRequest.mock.calls[0]![0].arguments;
     expect(requestArgs).not.toContain("--duration");
   });
+
+  it("should forward an empty duration so the backend can reject it", async () => {
+    await provisionRequest(
+      mockAuthn,
+      { ...baseArgs, duration: "" },
+      "my-instance"
+    );
+
+    const requestArgs = mockInnerRequest.mock.calls[0]![0].arguments;
+    const durationIndex = requestArgs.indexOf("--duration");
+    expect(durationIndex).toBeGreaterThan(-1);
+    expect(requestArgs[durationIndex + 1]).toBe("");
+  });
 });

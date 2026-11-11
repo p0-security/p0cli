@@ -190,7 +190,7 @@ export const provisionRequest = async (
             ? ["--sudo"]
             : []),
           ...(args.reason ? ["--reason", args.reason] : []),
-          ...(args.duration ? ["--duration", args.duration] : []),
+          ...(args.duration !== undefined ? ["--duration", args.duration] : []),
           ...(args.parent ? ["--parent", args.parent] : []),
         ],
         wait: true,
