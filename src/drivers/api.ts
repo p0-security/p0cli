@@ -74,6 +74,17 @@ export const fetchStreamingStatus = async function* <T>(
   );
 };
 
+// JSON.stringify prints Error instances as {} and throws on circular values
+const formatDebugError = (error: unknown) => {
+  try {
+    return error instanceof Error
+      ? (error.stack ?? error.message)
+      : (JSON.stringify(error) ?? String(error));
+  } catch {
+    return "[unserializable error]";
+  }
+};
+
 export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
@@ -94,7 +105,7 @@ export const fetchCommand = async <T>(
     if (debug) print2(`Command response: ${JSON.stringify(data)}`);
     return data;
   } catch (error) {
-    if (debug) print2(`Command error: ${JSON.stringify(error)}`);
+    if (debug) print2(`Command error: ${formatDebugError(error)}`);
     throw error;
   }
 };
