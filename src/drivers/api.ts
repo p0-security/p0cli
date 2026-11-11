@@ -78,16 +78,26 @@ export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
-) =>
-  authFetch<T>(authn, {
-    url: commandUrl(authn.identity.org.slug),
-    method: "POST",
-    body: JSON.stringify({
-      argv,
-      scriptName: path.basename(args.$0),
-    }),
-    debug: args.debug,
-  });
+) => {
+  const { debug } = args;
+  if (debug) print2(`Sending command: ${JSON.stringify(argv)}`);
+  try {
+    const data = await authFetch<T>(authn, {
+      url: commandUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        argv,
+        scriptName: path.basename(args.$0),
+      }),
+      debug,
+    });
+    if (debug) print2(`Command response: ${JSON.stringify(data)}`);
+    return data;
+  } catch (error) {
+    if (debug) print2(`Command error: ${JSON.stringify(error)}`);
+    throw error;
+  }
+};
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
 export const fetchAdminLsCommand = async <T>(
