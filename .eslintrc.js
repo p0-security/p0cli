@@ -1,4 +1,7 @@
 module.exports = {
+  // Stop ESLint from also loading a parent directory's config, e.g. the main
+  // checkout's when linting from a git worktree nested inside it
+  root: true,
   env: {
     browser: false,
     es2021: true,
