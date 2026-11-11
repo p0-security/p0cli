@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 
 /** Implements a local auth server, which can receive auth tokens from an OIDC app */
-import { sleep } from "../../util";
+import { getAppName, sleep } from "../../util";
 import express from "express";
 import { noop } from "lodash";
 import { readFile } from "node:fs/promises";
@@ -89,7 +89,8 @@ export const withRedirectServer = async <S, T, U>(
 
   app.use(redirectRouter);
 
-  const server = app.listen(options?.port ?? 0);
+  const port = options?.port ?? 0;
+  const server = app.listen(port);
 
   // Set up cleanup handler for process interruption
   const cleanup = async () => {
@@ -109,11 +110,18 @@ export const withRedirectServer = async <S, T, U>(
   process.once("SIGTERM", signalHandler);
 
   // Wait for server to start listening or fail
+  // Rejects only this promise: redirectPromise is never awaited when listen fails,
+  // so rejecting it would surface as an unhandled rejection
   await new Promise<void>((resolve, reject) => {
     server.once("listening", () => resolve());
-    server.once("error", (error) => {
-      redirectReject(error);
-      reject(error);
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        reject(
+          `Login failed: port ${port} is already in use, probably by another \`${getAppName()} login\` waiting for browser approval.\nFinish or cancel that login (Ctrl+C in its terminal), then run this command again.`
+        );
+      } else {
+        reject(error);
+      }
     });
   });
 
