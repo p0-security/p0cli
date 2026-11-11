@@ -11,12 +11,14 @@ You should have received a copy of the GNU General Public License along with @p0
 import * as config from "../../drivers/config";
 import { defaultConfig } from "../../drivers/env";
 import { Authn } from "../../types/identity";
-import { fetchWithStreaming, requestStatusUrl } from "../api";
+import { fetchCommand, fetchWithStreaming, requestStatusUrl } from "../api";
+import { print2 } from "../stdio";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
 vi.mock("../config");
 vi.mock("../env");
+vi.mock("../stdio");
 vi.mock("../../version", () => ({
   getUserAgent: () => "P0 CLI/1.0.0 (npm build; linux; x64; node/v20.0.0)",
 }));
@@ -476,5 +478,67 @@ describe("fetchWithStreaming", () => {
         signal: expect.any(AbortSignal),
       })
     );
+  });
+});
+
+describe("fetchCommand", () => {
+  const mockAuthn: Authn = {
+    getToken: vi.fn().mockResolvedValue("mock-token"),
+    identity: {
+      org: { slug: "test-org" },
+    },
+  } as unknown as Authn;
+  const debugArgs = { $0: "p0", _: [], debug: true };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(mockAuthn.getToken).mockResolvedValue("mock-token");
+    vi.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const mockSuccess = () =>
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, message: "done" }),
+    } as Response);
+
+  it("prints argv and response when debug is set", async () => {
+    mockSuccess();
+    await fetchCommand(mockAuthn, debugArgs, ["allow", "x"]);
+    expect(print2).toHaveBeenCalledWith('Sending command: ["allow","x"]');
+    expect(print2).toHaveBeenCalledWith(
+      'Command response: {"ok":true,"message":"done"}'
+    );
+    const printed = JSON.stringify(vi.mocked(print2).mock.calls);
+    expect(printed).not.toContain("mock-token");
+    expect(printed).not.toContain("Bearer");
+  });
+
+  it("prints the error when debug is set", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: "Resource not found" }),
+    } as Response);
+    await expect(
+      fetchCommand(mockAuthn, debugArgs, ["allow", "x"])
+    ).rejects.toThrow("Resource not found");
+    expect(print2).toHaveBeenCalledWith('Command error: "Resource not found"');
+    const printed = JSON.stringify(vi.mocked(print2).mock.calls);
+    expect(printed).not.toContain("mock-token");
+    expect(printed).not.toContain("Bearer");
+  });
+
+  it("prints nothing when debug is not set", async () => {
+    mockSuccess();
+    await fetchCommand(mockAuthn, { $0: "p0", _: [], debug: undefined }, [
+      "allow",
+      "x",
+    ]);
+    expect(print2).not.toHaveBeenCalled();
   });
 });

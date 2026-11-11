@@ -74,20 +74,41 @@ export const fetchStreamingStatus = async function* <T>(
   );
 };
 
+// JSON.stringify prints Error instances as {} and throws on circular values
+const formatDebugError = (error: unknown) => {
+  try {
+    return error instanceof Error
+      ? (error.stack ?? error.message)
+      : (JSON.stringify(error) ?? String(error));
+  } catch {
+    return "[unserializable error]";
+  }
+};
+
 export const fetchCommand = async <T>(
   authn: Authn,
   args: yargs.ArgumentsCamelCase<{ debug?: boolean }>,
   argv: string[]
-) =>
-  authFetch<T>(authn, {
-    url: commandUrl(authn.identity.org.slug),
-    method: "POST",
-    body: JSON.stringify({
-      argv,
-      scriptName: path.basename(args.$0),
-    }),
-    debug: args.debug,
-  });
+) => {
+  const { debug } = args;
+  if (debug) print2(`Sending command: ${JSON.stringify(argv)}`);
+  try {
+    const data = await authFetch<T>(authn, {
+      url: commandUrl(authn.identity.org.slug),
+      method: "POST",
+      body: JSON.stringify({
+        argv,
+        scriptName: path.basename(args.$0),
+      }),
+      debug,
+    });
+    if (debug) print2(`Command response: ${JSON.stringify(data)}`);
+    return data;
+  } catch (error) {
+    if (debug) print2(`Command error: ${formatDebugError(error)}`);
+    throw error;
+  }
+};
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */
 export const fetchAdminLsCommand = async <T>(

@@ -25,6 +25,7 @@ const allowArgs = <T>(yargs: yargs.Argv<T>) =>
       default: false,
       describe: "Block until the command is completed",
     })
+    .option("debug", { type: "boolean", describe: "Print debug information." })
     .option("arguments", {
       array: true,
       string: true,
@@ -32,7 +33,7 @@ const allowArgs = <T>(yargs: yargs.Argv<T>) =>
     });
 
 export const allowCommand = (yargs: yargs.Argv) =>
-  yargs.command<{ arguments: string[] }>(
+  yargs.command<{ arguments: string[]; debug?: boolean }>(
     "allow [arguments..]",
     "Create standing access for a resource",
     allowArgs,
@@ -45,10 +46,11 @@ export const allow = async (
   args: yargs.ArgumentsCamelCase<{
     arguments: string[];
     wait?: boolean;
+    debug?: boolean;
   }>,
   authn?: Authn
 ): Promise<AllowResponse | undefined> => {
-  const resolvedAuthn = authn ?? (await authenticate());
+  const resolvedAuthn = authn ?? (await authenticate({ debug: args.debug }));
   const data = await fetchCommand<AllowResponse>(resolvedAuthn, args, [
     "allow",
     ...args.arguments,
