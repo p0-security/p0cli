@@ -103,4 +103,22 @@ describe("provisionRequest", () => {
     const retryArgs = mockInnerRequest.mock.calls[1]![0].arguments;
     expect(retryArgs).not.toContain("--sudo");
   });
+
+  it("should forward duration as --duration", async () => {
+    const args = { ...baseArgs, duration: "10 minutes" };
+
+    await provisionRequest(mockAuthn, args, "my-instance");
+
+    const requestArgs = mockInnerRequest.mock.calls[0]![0].arguments;
+    const durationIndex = requestArgs.indexOf("--duration");
+    expect(durationIndex).toBeGreaterThan(-1);
+    expect(requestArgs[durationIndex + 1]).toBe("10 minutes");
+  });
+
+  it("should not send --duration when duration is not set", async () => {
+    await provisionRequest(mockAuthn, baseArgs, "my-instance");
+
+    const requestArgs = mockInnerRequest.mock.calls[0]![0].arguments;
+    expect(requestArgs).not.toContain("--duration");
+  });
 });
