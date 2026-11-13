@@ -37,6 +37,12 @@ export const scpCommand = (yargs: yargs.Argv) =>
           describe: "Reason access is needed",
           type: "string",
         })
+        .option("duration", {
+          type: "string",
+          // Copied from the P0 backend
+          describe:
+            "Requested duration for access (format like '10 minutes', '2 hours', '5 days', or '1 week')",
+        })
         .option("account", {
           type: "string",
           describe: "The account on which the instance is located",
