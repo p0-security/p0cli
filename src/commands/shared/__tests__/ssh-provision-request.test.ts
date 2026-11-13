@@ -122,16 +122,17 @@ describe("provisionRequest", () => {
     expect(requestArgs).not.toContain("--duration");
   });
 
-  it("should forward an empty duration so the backend can reject it", async () => {
-    await provisionRequest(
-      mockAuthn,
-      { ...baseArgs, duration: "" },
-      "my-instance"
-    );
+  // P0 treats an empty duration as unset, so sending one would grant the default duration
+  it.each(["", "  "])(
+    "should reject an empty duration (%j) without requesting access",
+    async (duration) => {
+      await expect(
+        provisionRequest(mockAuthn, { ...baseArgs, duration }, "my-instance")
+      ).rejects.toBe(
+        "The --duration value is empty. Use a number followed by a unit, like '10 minutes' or '2 hours'."
+      );
 
-    const requestArgs = mockInnerRequest.mock.calls[0]![0].arguments;
-    const durationIndex = requestArgs.indexOf("--duration");
-    expect(durationIndex).toBeGreaterThan(-1);
-    expect(requestArgs[durationIndex + 1]).toBe("");
-  });
+      expect(mockInnerRequest).not.toHaveBeenCalled();
+    }
+  );
 });
