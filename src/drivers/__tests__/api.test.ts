@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import * as config from "../../drivers/config";
 import { defaultConfig } from "../../drivers/env";
 import { Authn } from "../../types/identity";
-import { fetchWithStreaming, requestStatusUrl } from "../api";
+import { fetchWithStreaming, requestStatusUrl, revokeRequest } from "../api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
@@ -475,6 +475,53 @@ describe("fetchWithStreaming", () => {
       expect.objectContaining({
         signal: expect.any(AbortSignal),
       })
+    );
+  });
+});
+
+describe("revokeRequest", () => {
+  const mockAuthn = {
+    getToken: vi.fn(),
+    identity: { org: { slug: "test-org" } },
+  } as unknown as Authn;
+
+  beforeEach(() => {
+    vi.mocked(mockAuthn.getToken).mockResolvedValue("mock-token");
+    vi.spyOn(config, "getTenantConfig").mockReturnValue(defaultConfig);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts to the request's revoke endpoint", async () => {
+    const mockFetch = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ message: "Success" })));
+
+    await revokeRequest(mockAuthn, "request/1");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${defaultConfig.appUrl}/o/test-org/permission-requests/request%2F1/revoke`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer mock-token",
+        }),
+      })
+    );
+  });
+
+  it("throws the error the server returns", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "This access is no longer active" }),
+        { status: 400 }
+      )
+    );
+
+    await expect(revokeRequest(mockAuthn, "request-1")).rejects.toBe(
+      "This access is no longer active"
     );
   });
 });

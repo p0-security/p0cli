@@ -36,6 +36,8 @@ const commandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/`;
 export const requestStatusUrl = (tenant: string, requestId: string) =>
   `${commandUrl(tenant)}${requestId}/poll`;
 const adminLsCommandUrl = (tenant: string) => `${tenantUrl(tenant)}/command/ls`;
+const revokeRequestUrl = (tenant: string, requestId: string) =>
+  `${tenantUrl(tenant)}/permission-requests/${encodeURIComponent(requestId)}/revoke`;
 export const tracesUrl = (tenant: string) => `${tenantUrl(tenant)}/traces`;
 
 export const fetchOrgData = async <T>(orgId: string) =>
@@ -87,6 +89,24 @@ export const fetchCommand = async <T>(
       scriptName: path.basename(args.$0),
     }),
     debug: args.debug,
+  });
+
+// Revoking only submits the revocation, so the server answers quickly. The cap
+// keeps a slow or unreachable server from holding up the CLI on its way out.
+const REVOKE_REQUEST_TIMEOUT_MS = 10_000;
+
+/** Revokes an access request. Requestors can always revoke their own requests. */
+export const revokeRequest = async (
+  authn: Authn,
+  requestId: string,
+  debug?: boolean
+) =>
+  authFetch<{ message: string }>(authn, {
+    url: revokeRequestUrl(authn.identity.org.slug, requestId),
+    method: "POST",
+    body: JSON.stringify({}),
+    maxTimeoutMs: REVOKE_REQUEST_TIMEOUT_MS,
+    debug,
   });
 
 /** Special admin 'ls' command that can retrieve results for all users. Requires 'owner' permission. */

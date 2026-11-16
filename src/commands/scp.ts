@@ -12,7 +12,12 @@ import { authenticate } from "../drivers/auth";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import { sshOrScp } from "../plugins/ssh";
 import { SshRequest, SupportedSshProviders } from "../types/ssh";
-import { getDefaultSudo, prepareRequest, ScpCommandArgs } from "./shared/ssh";
+import {
+  getDefaultSudo,
+  prepareRequest,
+  ScpCommandArgs,
+  withAutoRelease,
+} from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
 
@@ -52,6 +57,10 @@ export const scpCommand = (yargs: yargs.Argv) =>
             "Add user to sudoers file. Set P0_SSH_SUDO=1 to enable by default.",
           default: getDefaultSudo(),
         })
+        .option("auto-release", {
+          type: "boolean",
+          describe: "Relinquish access when the transfer ends",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
@@ -86,6 +95,9 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       if (args.sudo) {
         span.setAttribute("sudo", args.sudo);
       }
+      if (args.autoRelease) {
+        span.setAttribute("autoRelease", args.autoRelease);
+      }
 
       // Clean up any stale SSH config files before proceeding
       await cleanupStaleSshConfigs(args.debug);
@@ -117,19 +129,21 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       // replace the host with the linuxUserName@instanceId
       const { source, destination } = replaceHostWithInstance(request, args);
 
-      const exitCode = await sshOrScp({
-        authn,
-        request,
-        requestId,
-        cmdArgs: {
-          ...args,
-          source,
-          destination,
-        },
-        privateKey,
-        sshProvider,
-        sshHostKeys,
-      });
+      const exitCode = await withAutoRelease(authn, args, requestId, () =>
+        sshOrScp({
+          authn,
+          request,
+          requestId,
+          cmdArgs: {
+            ...args,
+            source,
+            destination,
+          },
+          privateKey,
+          sshProvider,
+          sshHostKeys,
+        })
+      );
 
       // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
       // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173

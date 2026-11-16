@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { decodeProvisionStatus } from ".";
 import { createKeyPair } from "../../common/keys";
-import { fetchIntegrationConfig } from "../../drivers/api";
+import { fetchIntegrationConfig, revokeRequest } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
 import { print2 } from "../../drivers/stdio";
 import { traceSpan } from "../../opentelemetry/otel-helpers";
@@ -41,6 +41,7 @@ export type BaseSshCommandArgs = {
   reason?: string;
   parent?: string;
   provider?: SupportedSshProvider;
+  autoRelease?: boolean;
   debug?: boolean;
   sshOptions?: string[];
 };
@@ -161,6 +162,44 @@ export const validateSshInstall = async (
 export const getDefaultSudo = (): boolean => {
   const sudo = process.env.P0_SSH_SUDO;
   return !!sudo && sudo !== "0" && sudo.toLowerCase?.() !== "false";
+};
+
+/** Runs an SSH or SCP session, then relinquishes its access request if
+ * `--auto-release` was passed.
+ *
+ * The request is relinquished however the session ends, and whether or not
+ * this command created it. A failed relinquish is reported to the user, but
+ * never changes the outcome of the session.
+ */
+export const withAutoRelease = async <T>(
+  authn: Authn,
+  args: Pick<BaseSshCommandArgs, "autoRelease" | "debug">,
+  requestId: string,
+  session: () => Promise<T>
+): Promise<T> => {
+  try {
+    return await session();
+  } finally {
+    if (args.autoRelease) {
+      await releaseRequest(authn, requestId, args.debug);
+    }
+  }
+};
+
+const releaseRequest = async (
+  authn: Authn,
+  requestId: string,
+  debug?: boolean
+) => {
+  try {
+    await revokeRequest(authn, requestId, debug);
+    print2("Access relinquished");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    print2(
+      `Could not relinquish access: ${message}\nYour access stays active until it expires or is revoked.`
+    );
+  }
 };
 
 export const provisionRequest = async (

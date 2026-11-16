@@ -12,7 +12,12 @@ import { authenticate } from "../drivers/auth";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import { sshOrScp } from "../plugins/ssh";
 import { getAppName } from "../util";
-import { getDefaultSudo, prepareRequest, SshCommandArgs } from "./shared/ssh";
+import {
+  getDefaultSudo,
+  prepareRequest,
+  SshCommandArgs,
+  withAutoRelease,
+} from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
 
@@ -57,6 +62,10 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "The cloud provider where the instance is hosted",
           choices: ["aws", "azure", "gcloud", "self-hosted"],
         })
+        .option("auto-release", {
+          type: "boolean",
+          describe: "Relinquish access when the session ends",
+        })
         .option("debug", {
           type: "boolean",
           describe: "Print debug information.",
@@ -95,6 +104,9 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       if (args.sudo) {
         span.setAttribute("sudo", args.sudo);
       }
+      if (args.autoRelease) {
+        span.setAttribute("autoRelease", args.autoRelease);
+      }
 
       // Clean up any stale SSH config files before proceeding
       await cleanupStaleSshConfigs(args.debug);
@@ -118,15 +130,17 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       const { request, requestId, privateKey, sshProvider, sshHostKeys } =
         await prepareRequest(authn, args, args.destination);
 
-      const exitCode = await sshOrScp({
-        authn,
-        request,
-        requestId,
-        cmdArgs: args,
-        privateKey,
-        sshProvider,
-        sshHostKeys,
-      });
+      const exitCode = await withAutoRelease(authn, args, requestId, () =>
+        sshOrScp({
+          authn,
+          request,
+          requestId,
+          cmdArgs: args,
+          privateKey,
+          sshProvider,
+          sshHostKeys,
+        })
+      );
 
       // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
       // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
