@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { parseXml } from "../../../common/xml";
+import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithSaml } from "../../aws/assumeRole";
 import { getAwsConfig } from "../../aws/config";
@@ -18,6 +19,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
 vi.mock("../../../drivers/auth");
+vi.mock("../../../drivers/api", () => ({
+  fetchIntegrationConfig: vi.fn(),
+}));
 vi.mock("../../aws/config", () => ({
   getAwsConfig: vi.fn(),
 }));
@@ -163,5 +167,75 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
         role: "p0-grants/P0GrantsRole12",
       })
     );
+  });
+
+  describe("with an AWS IAM Federation login", () => {
+    const federationSaml = {
+      "saml2p:Response": {
+        "saml2:Assertion": {
+          "saml2:AttributeStatement": {
+            "saml2:Attribute": [
+              {
+                _attributes: {
+                  Name: "https://aws.amazon.com/SAML/Attributes/Role",
+                },
+                "saml2:AttributeValue": [
+                  `arn:aws:iam::${MOCK_ACCOUNT_ID}:saml-provider/other,arn:aws:iam::${MOCK_ACCOUNT_ID}:role/Other`,
+                  `arn:aws:iam::${MOCK_ACCOUNT_ID}:saml-provider/P0Federation-prod,arn:aws:iam::${MOCK_ACCOUNT_ID}:role/admin/Admin`,
+                ],
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const mockFederation = (provider: { type: string; app: string }) =>
+      vi.mocked(fetchIntegrationConfig).mockResolvedValue({
+        config: { federation: { prod: { provider } } },
+      });
+
+    beforeEach(() => {
+      vi.mocked(getAwsConfig).mockResolvedValue({
+        identity: {} as any,
+        config: {
+          id: MOCK_ACCOUNT_ID,
+          login: { type: "aws-iam-federation", federation: "prod" },
+        } as any,
+      });
+      vi.mocked(parseXml).mockReturnValue(federationSaml);
+    });
+
+    it("signs in to the federation's Okta app with the role's SAML provider", async () => {
+      mockFederation({ type: "okta", app: "0oa1234567890abcdefg" });
+
+      await assumeRoleWithOktaSaml(mockAuthn, { role: "admin/Admin" }, false);
+
+      expect(fetchIntegrationConfig).toHaveBeenCalledWith(
+        mockAuthn,
+        "aws-iam-federation",
+        false
+      );
+      expect(fetchSamlAssertionForAws).toHaveBeenCalledWith(
+        {},
+        "0oa1234567890abcdefg",
+        false
+      );
+      expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: "admin/Admin",
+          saml: { providerName: "P0Federation-prod", response: "base64-saml" },
+        })
+      );
+    });
+
+    it("refuses a PingOne federation", async () => {
+      mockFederation({ type: "pingone", app: "app-id" });
+
+      await expect(
+        assumeRoleWithOktaSaml(mockAuthn, { role: "admin/Admin" }, false)
+      ).rejects.toMatch("can't sign in to AWS through pingone");
+      expect(fetchSamlAssertionForAws).not.toHaveBeenCalled();
+    });
   });
 });

@@ -76,7 +76,8 @@ export const awsSshProvider: SshProvider<
 
     return config.login?.type === "idc"
       ? await assumeRoleWithIdc(request as AwsSshIdcRequest)
-      : config.login?.type === "federated"
+      : config.login?.type === "federated" ||
+          config.login?.type === "aws-iam-federation"
         ? await assumeRoleWithOktaSaml(
             authn,
             request as AwsSshRoleRequest,

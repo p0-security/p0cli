@@ -33,7 +33,7 @@ export const getAndValidateK8sIntegration = async (
     awsAccountId: string;
     awsClusterArn: string;
   };
-  awsLoginType: "federated" | "idc";
+  awsLoginType: "aws-iam-federation" | "federated" | "idc";
 }> => {
   const configDoc = await fetchIntegrationConfig<{ config: K8sConfig }>(
     authn,

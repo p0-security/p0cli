@@ -10,11 +10,17 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { retryWithSleep } from "../../common/retry";
 import { parseXml } from "../../common/xml";
+import { fetchIntegrationConfig } from "../../drivers/api";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithSaml } from "../aws/assumeRole";
 import { getAwsConfig } from "../aws/config";
-import { AwsFederatedLogin, AwsItem } from "../aws/types";
+import {
+  AwsFederatedLogin,
+  AwsIamFederationConfig,
+  AwsIamFederationLogin,
+  AwsItem,
+} from "../aws/types";
 import { fetchSamlAssertionForAws } from "./login";
 import { flatten } from "lodash";
 
@@ -44,25 +50,53 @@ const rolesFromSaml = (account: string, saml: string) => {
   );
   // Format:
   //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
-  const arns = (
+  const pairs = (
     flatten([roleAttribute?.["saml2:AttributeValue"]]) as string[]
-  )?.map((r) => r.split(",")[1]!);
-  const matched = arns
-    .map((arn) => ({ arn, match: ROLE_ARN_PATTERN.exec(arn) }))
+  )?.map((r) => r.split(","));
+  const arns = pairs.map((pair) => pair[1]!);
+  const matched = pairs
+    .map(([provider, arn]) => ({
+      provider: provider!,
+      arn: arn!,
+      match: ROLE_ARN_PATTERN.exec(arn!),
+    }))
     .filter(
-      (x): x is { arn: string; match: RegExpExecArray } =>
+      (x): x is { provider: string; arn: string; match: RegExpExecArray } =>
         x.match !== null && x.match[2] === account
     );
   // Partition must flow to STS so we hit the right endpoint and emit ARNs in the matching partition.
   const partition = matched[0]?.match[1] ?? "aws";
-  const roles = matched.map(({ arn }) => arn.split("/").slice(1).join("/"));
-  return { arns, roles, partition };
+  const afterType = (arn: string) => arn.split("/").slice(1).join("/");
+  const roles = matched.map(({ arn }) => afterType(arn));
+  const samlProviders: Record<string, string> = Object.fromEntries(
+    matched.map(({ provider, arn }) => [afterType(arn), afterType(provider)])
+  );
+  return { arns, roles, partition, samlProviders };
 };
 
 const isFederatedLogin = (
   config: AwsItem
-): config is AwsItem & { login: AwsFederatedLogin } =>
-  config.login?.type === "federated";
+): config is AwsItem & {
+  login: AwsFederatedLogin | AwsIamFederationLogin;
+} =>
+  config.login?.type === "federated" ||
+  config.login?.type === "aws-iam-federation";
+
+/** Gets the Okta app ID of an AWS IAM Federation */
+const federationOktaAppId = async (
+  authn: Authn,
+  federation: string,
+  debug?: boolean
+) => {
+  const { config } = await fetchIntegrationConfig<{
+    config: AwsIamFederationConfig;
+  }>(authn, "aws-iam-federation", debug);
+  const provider = config?.federation?.[federation]?.provider;
+  if (!provider) throw `AWS IAM Federation ${federation} is not installed.`;
+  if (provider.type !== "okta")
+    throw `The P0 CLI can't sign in to AWS through ${provider.type}. Sign in to AWS from your identity provider's app portal.`;
+  return provider.app;
+};
 
 /** Retrieves the configured Okta SAML response for the specified account
  *
@@ -77,11 +111,11 @@ const initOktaSaml = async (
   const { identity, config } = await getAwsConfig(authn, account, debug);
   if (!isFederatedLogin(config))
     throw `Account ${config.label ?? config.id} is not configured for Okta SAML login.`;
-  const samlResponse = await fetchSamlAssertionForAws(
-    identity,
-    config.login,
-    debug
-  );
+  const appId =
+    config.login.type === "federated"
+      ? config.login.provider.appId
+      : await federationOktaAppId(authn, config.login.federation, debug);
+  const samlResponse = await fetchSamlAssertionForAws(identity, appId, debug);
   return {
     samlResponse,
     config,
@@ -107,7 +141,10 @@ export const assumeRoleWithOktaSaml = async (
             args.accountId,
             debug
           );
-          const { roles, partition } = rolesFromSaml(account, samlResponse);
+          const { roles, partition, samlProviders } = rolesFromSaml(
+            account,
+            samlResponse
+          );
           if (!roles.includes(args.role)) {
             throw `Role ${args.role} not available. Available roles:\n${roles.map((r) => `  ${r}`).join("\n")}`;
           }
@@ -116,7 +153,10 @@ export const assumeRoleWithOktaSaml = async (
             partition,
             role: args.role,
             saml: {
-              providerName: config.login.provider.identityProvider,
+              providerName:
+                config.login.type === "federated"
+                  ? config.login.provider.identityProvider
+                  : samlProviders[args.role]!,
               response: samlResponse,
             },
           });

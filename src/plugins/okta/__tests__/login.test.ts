@@ -14,7 +14,6 @@ import {
   getProviderType,
 } from "../../../types/authUtils";
 import { Identity } from "../../../types/identity";
-import { AwsFederatedLogin } from "../../aws/types";
 import { fetchSamlAssertionForAws } from "../login";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,16 +30,6 @@ const mockIdentity = {
     expires_at: Date.now() + 3600000,
   },
 } as unknown as Identity;
-
-const mockConfig: AwsFederatedLogin = {
-  type: "federated",
-  provider: {
-    type: "okta",
-    appId: "mock-app-id",
-    identityProvider: "mock-idp",
-    method: { type: "saml" },
-  },
-};
 
 describe("fetchSsoWebToken", () => {
   beforeEach(() => {
@@ -70,7 +59,7 @@ describe("fetchSsoWebToken", () => {
     );
 
     await expect(
-      fetchSamlAssertionForAws(mockIdentity, mockConfig)
+      fetchSamlAssertionForAws(mockIdentity, "mock-app-id")
     ).rejects.toThrow("400 Bad Request");
 
     expect(mockJson).toHaveBeenCalledOnce();

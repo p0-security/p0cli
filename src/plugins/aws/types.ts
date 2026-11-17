@@ -53,7 +53,23 @@ export type AwsFederatedLogin = {
   };
 };
 
-export type AwsLogin = AwsFederatedLogin | AwsIamLogin | AwsIdcLogin;
+export type AwsIamFederationLogin = {
+  type: "aws-iam-federation";
+  federation: string;
+};
+
+export type AwsIamFederationConfig = {
+  federation: Record<
+    string,
+    { provider: { type: "okta" | "pingone"; app: string } }
+  >;
+};
+
+export type AwsLogin =
+  | AwsFederatedLogin
+  | AwsIamFederationLogin
+  | AwsIamLogin
+  | AwsIdcLogin;
 
 export type AwsItemConfig = {
   label?: string;
