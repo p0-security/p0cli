@@ -60,7 +60,9 @@ const fetchSsoWebToken = async (
   const providerDomain = getProviderDomain(org);
   const clientId = getClientId(org);
 
-  if (providerType !== "okta" || !providerDomain || !clientId) {
+  if (providerType !== "okta")
+    throw "The P0 CLI can get AWS credentials through Okta only if your organization signs in to P0 with Okta. Sign in to AWS from your Okta dashboard instead.";
+  if (!providerDomain || !clientId) {
     throw "Invalid provider configuration for Okta token exchange";
   }
 

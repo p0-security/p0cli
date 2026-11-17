@@ -39,6 +39,17 @@ describe("fetchSsoWebToken", () => {
     vi.mocked(getClientId).mockReturnValue("mock-client-id");
   });
 
+  it("refuses an organization that doesn't sign in to P0 with Okta", async () => {
+    vi.mocked(getProviderType).mockReturnValue(undefined);
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      fetchSamlAssertionForAws(mockIdentity, "mock-app-id")
+    ).rejects.toMatch("signs in to P0 with Okta");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("does not read response body twice on 400 with non-invalid_grant error", async () => {
     const mockJson = vi.fn().mockResolvedValue({
       error: "access_denied",
