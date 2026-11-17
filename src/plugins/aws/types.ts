@@ -108,11 +108,31 @@ type AwsResourcePermission = {
 // TODO: Remove after P0 backend data model update
 type AwsResourceGenerated = { name: string };
 
+type AwsIamFederationPoolSpec = PermissionSpec<
+  "aws-iam-federation",
+  Record<string, unknown>,
+  { arn: string }
+>;
+
+type AwsIamFederationSpec = PermissionSpec<
+  "aws-iam-federation",
+  Record<string, unknown>,
+  undefined,
+  {
+    "okta-aws-iam-federation"?: PermissionSpec<
+      "okta-aws-iam-federation",
+      Record<string, unknown>,
+      undefined,
+      { "aws-iam-federation"?: AwsIamFederationPoolSpec }
+    >;
+  }
+>;
+
 export type AwsResourcePermissionSpec = PermissionSpec<
   "aws",
   AwsResourcePermission,
   AwsResourceGenerated,
-  Record<string, never>
+  { "aws-iam-federation"?: AwsIamFederationSpec }
 >;
 
 export type AwsSshGenerated = {
