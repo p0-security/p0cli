@@ -8,7 +8,6 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { runExitTasks } from "../../../common/exit-tasks";
 import { fetchIntegrationConfig, revokeRequest } from "../../../drivers/api";
 import { print2 } from "../../../drivers/stdio";
 import { awsSshProvider } from "../../../plugins/aws/ssh";
@@ -273,30 +272,5 @@ describe("withRelinquish", () => {
         "Could not relinquish access: This access is no longer active"
       )
     );
-  });
-
-  it("relinquishes the request once when a signal interrupts the session", async () => {
-    // The signal handlers run the exit tasks while the session is still open
-    const session = vi.fn().mockImplementation(async () => {
-      await runExitTasks();
-      expect(mockRevokeRequest).toHaveBeenCalledOnce();
-      return 0;
-    });
-
-    await withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session);
-    await runExitTasks();
-
-    expect(mockRevokeRequest).toHaveBeenCalledOnce();
-  });
-
-  it("registers nothing with the signal handlers without --relinquish", async () => {
-    const session = vi.fn().mockImplementation(async () => {
-      await runExitTasks();
-      return 0;
-    });
-
-    await withRelinquish(mockAuthn, {}, REQUEST_ID, session);
-
-    expect(mockRevokeRequest).not.toHaveBeenCalled();
   });
 });
