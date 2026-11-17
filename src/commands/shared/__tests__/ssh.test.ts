@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { runExitTasks } from "../../../common/exit-tasks";
 import { fetchIntegrationConfig, revokeRequest } from "../../../drivers/api";
 import { print2 } from "../../../drivers/stdio";
 import { awsSshProvider } from "../../../plugins/aws/ssh";
@@ -21,7 +22,7 @@ import {
   newSshProvider,
   newSshRequestErrorHandler,
   validateSshInstall,
-  withAutoRelease,
+  withRelinquish,
 } from "../ssh";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
@@ -218,14 +219,14 @@ describe("newSshRequestErrorHandler", () => {
   });
 });
 
-describe("withAutoRelease", () => {
+describe("withRelinquish", () => {
   const REQUEST_ID = "request-id";
 
-  it("leaves the request alone without --auto-release", async () => {
+  it("leaves the request alone without --relinquish", async () => {
     const session = vi.fn().mockResolvedValue(0);
 
     await expect(
-      withAutoRelease(mockAuthn, {}, REQUEST_ID, session)
+      withRelinquish(mockAuthn, {}, REQUEST_ID, session)
     ).resolves.toBe(0);
 
     expect(mockRevokeRequest).not.toHaveBeenCalled();
@@ -238,7 +239,7 @@ describe("withAutoRelease", () => {
     });
 
     await expect(
-      withAutoRelease(mockAuthn, { autoRelease: true }, REQUEST_ID, session)
+      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).resolves.toBe(0);
 
     expect(mockRevokeRequest).toHaveBeenCalledExactlyOnceWith(
@@ -253,7 +254,7 @@ describe("withAutoRelease", () => {
     const session = vi.fn().mockRejectedValue("Access did not propagate");
 
     await expect(
-      withAutoRelease(mockAuthn, { autoRelease: true }, REQUEST_ID, session)
+      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).rejects.toBe("Access did not propagate");
 
     expect(mockRevokeRequest).toHaveBeenCalledOnce();
@@ -264,7 +265,7 @@ describe("withAutoRelease", () => {
     mockRevokeRequest.mockRejectedValueOnce("This access is no longer active");
 
     await expect(
-      withAutoRelease(mockAuthn, { autoRelease: true }, REQUEST_ID, session)
+      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).resolves.toBe(3);
 
     expect(mockPrint2).toHaveBeenCalledWith(
@@ -272,5 +273,30 @@ describe("withAutoRelease", () => {
         "Could not relinquish access: This access is no longer active"
       )
     );
+  });
+
+  it("relinquishes the request once when a signal interrupts the session", async () => {
+    // The signal handlers run the exit tasks while the session is still open
+    const session = vi.fn().mockImplementation(async () => {
+      await runExitTasks();
+      expect(mockRevokeRequest).toHaveBeenCalledOnce();
+      return 0;
+    });
+
+    await withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session);
+    await runExitTasks();
+
+    expect(mockRevokeRequest).toHaveBeenCalledOnce();
+  });
+
+  it("registers nothing with the signal handlers without --relinquish", async () => {
+    const session = vi.fn().mockImplementation(async () => {
+      await runExitTasks();
+      return 0;
+    });
+
+    await withRelinquish(mockAuthn, {}, REQUEST_ID, session);
+
+    expect(mockRevokeRequest).not.toHaveBeenCalled();
   });
 });

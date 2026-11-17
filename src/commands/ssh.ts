@@ -16,7 +16,7 @@ import {
   getDefaultSudo,
   prepareRequest,
   SshCommandArgs,
-  withAutoRelease,
+  withRelinquish,
 } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
@@ -62,7 +62,7 @@ export const sshCommand = (yargs: yargs.Argv) =>
           describe: "The cloud provider where the instance is hosted",
           choices: ["aws", "azure", "gcloud", "self-hosted"],
         })
-        .option("auto-release", {
+        .option("relinquish", {
           type: "boolean",
           describe: "Relinquish access when the session ends",
         })
@@ -104,8 +104,8 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       if (args.sudo) {
         span.setAttribute("sudo", args.sudo);
       }
-      if (args.autoRelease) {
-        span.setAttribute("autoRelease", args.autoRelease);
+      if (args.relinquish) {
+        span.setAttribute("relinquish", args.relinquish);
       }
 
       // Clean up any stale SSH config files before proceeding
@@ -130,7 +130,7 @@ const sshAction = async (args: yargs.ArgumentsCamelCase<SshCommandArgs>) => {
       const { request, requestId, privateKey, sshProvider, sshHostKeys } =
         await prepareRequest(authn, args, args.destination);
 
-      const exitCode = await withAutoRelease(authn, args, requestId, () =>
+      const exitCode = await withRelinquish(authn, args, requestId, () =>
         sshOrScp({
           authn,
           request,

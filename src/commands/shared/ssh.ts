@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { decodeProvisionStatus } from ".";
+import { beforeSignalExit } from "../../common/exit-tasks";
 import { createKeyPair } from "../../common/keys";
 import { fetchIntegrationConfig, revokeRequest } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
@@ -33,7 +34,7 @@ import {
 } from "../../types/ssh";
 import { assertNever } from "../../util";
 import { request } from "./request";
-import { pick } from "lodash";
+import { once, pick } from "lodash";
 import yargs from "yargs";
 
 export type BaseSshCommandArgs = {
@@ -41,7 +42,7 @@ export type BaseSshCommandArgs = {
   reason?: string;
   parent?: string;
   provider?: SupportedSshProvider;
-  autoRelease?: boolean;
+  relinquish?: boolean;
   debug?: boolean;
   sshOptions?: string[];
 };
@@ -165,28 +166,35 @@ export const getDefaultSudo = (): boolean => {
 };
 
 /** Runs an SSH or SCP session, then relinquishes its access request if
- * `--auto-release` was passed.
+ * `--relinquish` was passed.
  *
  * The request is relinquished however the session ends, and whether or not
  * this command created it. A failed relinquish is reported to the user, but
  * never changes the outcome of the session.
  */
-export const withAutoRelease = async <T>(
+export const withRelinquish = async <T>(
   authn: Authn,
-  args: Pick<BaseSshCommandArgs, "autoRelease" | "debug">,
+  args: Pick<BaseSshCommandArgs, "debug" | "relinquish">,
   requestId: string,
   session: () => Promise<T>
 ): Promise<T> => {
+  if (!args.relinquish) return await session();
+
+  const relinquish = once(() =>
+    relinquishRequest(authn, requestId, args.debug)
+  );
+  // A SIGINT or SIGTERM exits the process without waiting for the `finally`
+  // below, so the signal handlers also run the relinquish before they exit.
+  const unregister = beforeSignalExit(relinquish);
   try {
     return await session();
   } finally {
-    if (args.autoRelease) {
-      await releaseRequest(authn, requestId, args.debug);
-    }
+    await relinquish();
+    unregister();
   }
 };
 
-const releaseRequest = async (
+const relinquishRequest = async (
   authn: Authn,
   requestId: string,
   debug?: boolean

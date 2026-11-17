@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { runExitTasks } from "../common/exit-tasks";
 import { p0VersionInfo } from "../version";
 import { BufferedSpanExporter } from "./buffered-exporter";
 import { TokenRefreshingExporter } from "./token-exporter";
@@ -60,7 +61,7 @@ export const startTracing = () => {
 };
 
 const shutdownSdk = () => {
-  void sdk.shutdown().finally(() => {
+  void Promise.allSettled([sdk.shutdown(), runExitTasks()]).finally(() => {
     // NOTE: Cannot use exitProcess() here - this IS the span flushing mechanism itself
     process.exit();
   });

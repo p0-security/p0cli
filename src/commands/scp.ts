@@ -16,7 +16,7 @@ import {
   getDefaultSudo,
   prepareRequest,
   ScpCommandArgs,
-  withAutoRelease,
+  withRelinquish,
 } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
@@ -57,7 +57,7 @@ export const scpCommand = (yargs: yargs.Argv) =>
             "Add user to sudoers file. Set P0_SSH_SUDO=1 to enable by default.",
           default: getDefaultSudo(),
         })
-        .option("auto-release", {
+        .option("relinquish", {
           type: "boolean",
           describe: "Relinquish access when the transfer ends",
         })
@@ -95,8 +95,8 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       if (args.sudo) {
         span.setAttribute("sudo", args.sudo);
       }
-      if (args.autoRelease) {
-        span.setAttribute("autoRelease", args.autoRelease);
+      if (args.relinquish) {
+        span.setAttribute("relinquish", args.relinquish);
       }
 
       // Clean up any stale SSH config files before proceeding
@@ -129,7 +129,7 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       // replace the host with the linuxUserName@instanceId
       const { source, destination } = replaceHostWithInstance(request, args);
 
-      const exitCode = await withAutoRelease(authn, args, requestId, () =>
+      const exitCode = await withRelinquish(authn, args, requestId, () =>
         sshOrScp({
           authn,
           request,

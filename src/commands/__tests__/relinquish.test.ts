@@ -75,7 +75,7 @@ const MOCK_RESPONSE = {
 describe.each([
   ["ssh", sshCommand, "ssh some-instance"],
   ["scp", scpCommand, "scp some-instance:/remote/file /local/file"],
-])("%s --auto-release", (_, command, argv) => {
+])("%s --relinquish", (_, command, argv) => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIntegrationConfig.mockResolvedValue({
@@ -100,7 +100,7 @@ describe.each([
   });
 
   it("relinquishes the request after the session", async () => {
-    await command(yargs()).fail(noop).parse(`${argv} --auto-release`);
+    await command(yargs()).fail(noop).parse(`${argv} --relinquish`);
 
     expect(mockRevokeRequest).toHaveBeenCalledExactlyOnceWith(
       await authenticate(),
