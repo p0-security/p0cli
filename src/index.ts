@@ -15,7 +15,6 @@ import { startTracing } from "./opentelemetry/instrumentation";
 startTracing();
 
 import { getCli } from "./commands";
-import { exitAfterTasks } from "./common/exit-tasks";
 import { loadConfig } from "./drivers/config";
 import { print2 } from "./drivers/stdio";
 import { trace } from "@opentelemetry/api";
@@ -93,18 +92,17 @@ const run = async () => {
 };
 
 // Global error handlers, to avoid ungraceful crashes and to log errors that aren't caught elsewhere.
-// We still exit with a non-zero code to indicate failure, once any work a command
-// registered to outlive an early exit has finished.
+// We still exit with a non-zero code to indicate failure.
 process.on("uncaughtException", (error) => {
   print2("Uncaught Exception: " + error.message);
   // NOTE: Consideration of exitProcess() is reserved for future in-depth analysis
-  exitAfterTasks(1);
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
   print2("Unhandled Rejection: " + (reason instanceof Error ? reason.message : String(reason)));
   // NOTE: Consideration of exitProcess() is reserved for future in-depth analysis
-  exitAfterTasks(1);
+  process.exit(1);
 });
 
 if (require.main === module || isSea()) {
