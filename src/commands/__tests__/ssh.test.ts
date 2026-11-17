@@ -33,6 +33,10 @@ vi.mock("../../drivers/stdio", async (importOriginal) => ({
 }));
 vi.mock("../../plugins/ssh");
 vi.mock("../../common/keys");
+// The AWS CLI and Session Manager plugin aren't installed everywhere tests run
+vi.mock("../../plugins/aws/ssm/install", () => ({
+  ensureSsmInstall: vi.fn().mockResolvedValue(true),
+}));
 
 const mockSshOrScp = sshOrScp as Mock;
 const mockPrint1 = print1 as Mock;
@@ -143,6 +147,34 @@ describe("ssh", () => {
       );
       expect(hiddenFilenameRequestArgs).toMatchSnapshot("args");
       await expect(promise).resolves.toBeDefined();
+    });
+
+    it("should forward --duration to p0 request", async () => {
+      mockStreaming(isPersistent);
+      await sshCommand(yargs())
+        .fail(noop)
+        .parse([
+          "ssh",
+          "some-instance",
+          "--provider",
+          "aws",
+          "--duration",
+          "10 minutes",
+        ]);
+      const requestArgs = mockFetchCommand.mock.calls[0]?.[1].arguments;
+      const durationIndex = requestArgs.indexOf("--duration");
+      expect(durationIndex).toBeGreaterThan(-1);
+      expect(requestArgs[durationIndex + 1]).toBe("10 minutes");
+    });
+
+    it("should not send --duration without the flag", async () => {
+      mockStreaming(isPersistent);
+      await sshCommand(yargs())
+        .fail(noop)
+        .parse(["ssh", "some-instance", "--provider", "aws"]);
+      const requestArgs = mockFetchCommand.mock.calls[0]?.[1].arguments;
+      expect(requestArgs).toContain("--public-key");
+      expect(requestArgs).not.toContain("--duration");
     });
 
     it("should wait for access grant/provisioning", async () => {

@@ -39,6 +39,7 @@ import yargs from "yargs";
 export type BaseSshCommandArgs = {
   sudo?: boolean;
   reason?: string;
+  duration?: string;
   parent?: string;
   provider?: SupportedSshProvider;
   debug?: boolean;
@@ -169,6 +170,11 @@ export const provisionRequest = async (
   destination: string,
   options?: SshRequestOptions
 ) => {
+  // P0 treats an empty duration as unset and grants the default duration
+  if (args.duration !== undefined && !args.duration.trim()) {
+    throw "The --duration value is empty. Use a number followed by a unit, like '10 minutes' or '2 hours'.";
+  }
+
   await validateSshInstall(authn, args);
 
   const { publicKey, privateKey } = await createKeyPair();
@@ -189,6 +195,7 @@ export const provisionRequest = async (
             ? ["--sudo"]
             : []),
           ...(args.reason ? ["--reason", args.reason] : []),
+          ...(args.duration !== undefined ? ["--duration", args.duration] : []),
           ...(args.parent ? ["--parent", args.parent] : []),
         ],
         wait: true,
