@@ -13,22 +13,51 @@ type ExitTask = () => Promise<unknown>;
 
 const exitTasks = new Set<ExitTask>();
 
-/** Registers work that must finish before a signal ends the process.
+// Closing the terminal sends SIGHUP, and Ctrl+\ sends SIGQUIT. Both end the
+// process on the spot unless something is listening. SIGINT and SIGTERM are
+// not listed because tracing already listens for them, and runs the tasks.
+const UNHANDLED_EXIT_SIGNALS = ["SIGHUP", "SIGQUIT"] as const;
+
+/** Registers work that must finish before the process exits early.
  *
- * A SIGINT or SIGTERM exits the CLI as soon as tracing has shut down, which
- * cuts off anything a command still has in flight. A task registered here is
- * run, and waited for, before that exit.
+ * A signal or an uncaught error ends the CLI before a command has run to its
+ * end, which cuts off anything the command still has in flight. A task
+ * registered here is run, and waited for, before that exit.
  *
  * @returns a function that unregisters the task
  */
-export const beforeSignalExit = (task: ExitTask) => {
+export const beforeEarlyExit = (task: ExitTask) => {
+  if (exitTasks.size === 0) {
+    for (const signal of UNHANDLED_EXIT_SIGNALS) {
+      process.on(signal, onUnhandledExitSignal);
+    }
+  }
   exitTasks.add(task);
+
   return () => {
     exitTasks.delete(task);
+    if (exitTasks.size === 0) {
+      for (const signal of UNHANDLED_EXIT_SIGNALS) {
+        process.removeListener(signal, onUnhandledExitSignal);
+      }
+    }
   };
 };
+
+// Signal listeners are called with the signal's name, which is not an exit code
+const onUnhandledExitSignal = () => exitAfterTasks();
 
 /** Runs every registered task, resolving once all of them have settled */
 export const runExitTasks = async () => {
   await Promise.allSettled([...exitTasks].map(async (task) => await task()));
+};
+
+/** Exits the process once every registered task has settled
+ *
+ * @param exitCode the code to exit with; defaults to `process.exitCode`
+ */
+export const exitAfterTasks = (exitCode?: number) => {
+  // Other handlers may exit first, so they need to report the same code
+  if (exitCode !== undefined) process.exitCode = exitCode;
+  void runExitTasks().finally(() => process.exit(exitCode));
 };
