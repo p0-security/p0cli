@@ -118,4 +118,12 @@ describe.each([
     expect(mockSshOrScp).toHaveBeenCalledOnce();
     expect(mockRevokeRequest).not.toHaveBeenCalled();
   });
+
+  it("lets a signal interrupt the session", async () => {
+    await command(yargs()).fail(noop).parse(argv);
+
+    expect(mockSshOrScp).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ interrupted: expect.any(AbortSignal) })
+    );
+  });
 });

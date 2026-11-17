@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { exitSignalsIntercepted } from "../../../common/exit-signals";
 import { fetchIntegrationConfig, revokeRequest } from "../../../drivers/api";
 import { print2 } from "../../../drivers/stdio";
 import { awsSshProvider } from "../../../plugins/aws/ssh";
@@ -21,7 +22,7 @@ import {
   newSshProvider,
   newSshRequestErrorHandler,
   validateSshInstall,
-  withRelinquish,
+  withCleanExit,
 } from "../ssh";
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
@@ -218,14 +219,14 @@ describe("newSshRequestErrorHandler", () => {
   });
 });
 
-describe("withRelinquish", () => {
+describe("withCleanExit", () => {
   const REQUEST_ID = "request-id";
 
   it("leaves the request alone without --relinquish", async () => {
     const session = vi.fn().mockResolvedValue(0);
 
     await expect(
-      withRelinquish(mockAuthn, {}, REQUEST_ID, session)
+      withCleanExit(mockAuthn, {}, REQUEST_ID, session)
     ).resolves.toBe(0);
 
     expect(mockRevokeRequest).not.toHaveBeenCalled();
@@ -238,7 +239,7 @@ describe("withRelinquish", () => {
     });
 
     await expect(
-      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
+      withCleanExit(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).resolves.toBe(0);
 
     expect(mockRevokeRequest).toHaveBeenCalledExactlyOnceWith(
@@ -253,7 +254,7 @@ describe("withRelinquish", () => {
     const session = vi.fn().mockRejectedValue("Access did not propagate");
 
     await expect(
-      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
+      withCleanExit(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).rejects.toBe("Access did not propagate");
 
     expect(mockRevokeRequest).toHaveBeenCalledOnce();
@@ -264,7 +265,7 @@ describe("withRelinquish", () => {
     mockRevokeRequest.mockRejectedValueOnce("This access is no longer active");
 
     await expect(
-      withRelinquish(mockAuthn, { relinquish: true }, REQUEST_ID, session)
+      withCleanExit(mockAuthn, { relinquish: true }, REQUEST_ID, session)
     ).resolves.toBe(3);
 
     expect(mockPrint2).toHaveBeenCalledWith(
@@ -272,5 +273,61 @@ describe("withRelinquish", () => {
         "Could not relinquish access: This access is no longer active"
       )
     );
+  });
+
+  describe("on an exit signal", () => {
+    // Stands in for the signal arriving: runs the listener the command holds
+    const sendSignal = (signal: NodeJS.Signals) =>
+      (process.listeners(signal).at(-1) as () => void)();
+
+    /** A session that only ends once it is interrupted */
+    const sessionUntilInterrupted = (interrupted: AbortSignal) =>
+      new Promise<number>((resolve) =>
+        interrupted.addEventListener("abort", () => resolve(0))
+      );
+
+    it.each(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)(
+      "interrupts the session on %s, then relinquishes the request",
+      async (signal) => {
+        const result = withCleanExit(
+          mockAuthn,
+          { relinquish: true },
+          REQUEST_ID,
+          sessionUntilInterrupted
+        );
+        expect(mockRevokeRequest).not.toHaveBeenCalled();
+
+        sendSignal(signal);
+
+        await expect(result).resolves.toBe(0);
+        expect(mockRevokeRequest).toHaveBeenCalledOnce();
+      }
+    );
+
+    it("keeps hold of the signals until the request is relinquished", async () => {
+      mockRevokeRequest.mockImplementationOnce(async () => {
+        expect(exitSignalsIntercepted()).toBe(true);
+      });
+
+      await withCleanExit(
+        mockAuthn,
+        { relinquish: true },
+        REQUEST_ID,
+        async () => 0
+      );
+
+      expect(mockRevokeRequest).toHaveBeenCalledOnce();
+      expect(exitSignalsIntercepted()).toBe(false);
+    });
+
+    it("hands the signals back when the session fails", async () => {
+      await expect(
+        withCleanExit(mockAuthn, {}, REQUEST_ID, async () => {
+          throw "Access did not propagate";
+        })
+      ).rejects.toBe("Access did not propagate");
+
+      expect(exitSignalsIntercepted()).toBe(false);
+    });
   });
 });

@@ -9,6 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { decodeProvisionStatus } from ".";
+import { interceptExitSignals } from "../../common/exit-signals";
 import { createKeyPair } from "../../common/keys";
 import { fetchIntegrationConfig, revokeRequest } from "../../drivers/api";
 import { getContactMessage } from "../../drivers/config";
@@ -164,25 +165,31 @@ export const getDefaultSudo = (): boolean => {
   return !!sudo && sudo !== "0" && sudo.toLowerCase?.() !== "false";
 };
 
-/** Runs an SSH or SCP session, then relinquishes its access request if
- * `--relinquish` was passed.
+/** Runs an SSH or SCP session through to the command's single way out.
  *
- * The request is relinquished however the session ends, and whether or not
- * this command created it. A failed relinquish is reported to the user, but
- * never changes the outcome of the session.
+ * A signal that would end the process interrupts the session instead. The
+ * session then returns as it does when it ends by itself, so the command always
+ * gets to finish what it owes before it exits.
+ *
+ * With `--relinquish`, that is relinquishing the session's access request,
+ * however the session ended and whether or not this command created the
+ * request. A failed relinquish is reported to the user, but never changes the
+ * outcome of the session.
  */
-export const withRelinquish = async <T>(
+export const withCleanExit = async <T>(
   authn: Authn,
   args: Pick<BaseSshCommandArgs, "debug" | "relinquish">,
   requestId: string,
-  session: () => Promise<T>
+  session: (interrupted: AbortSignal) => Promise<T>
 ): Promise<T> => {
+  const { interrupted, release } = interceptExitSignals();
   try {
-    return await session();
+    return await session(interrupted);
   } finally {
     if (args.relinquish) {
       await relinquishRequest(authn, requestId, args.debug);
     }
+    release();
   }
 };
 

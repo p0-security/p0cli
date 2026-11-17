@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { exitSignalsIntercepted } from "../common/exit-signals";
 import { p0VersionInfo } from "../version";
 import { BufferedSpanExporter } from "./buffered-exporter";
 import { TokenRefreshingExporter } from "./token-exporter";
@@ -66,8 +67,14 @@ const shutdownSdk = () => {
   });
 };
 
+// A command that intercepts the exit signals stops on its own and exits once
+// it has cleaned up, so the process must not be exited from under it.
+const shutdownSdkUnlessIntercepted = () => {
+  if (!exitSignalsIntercepted()) shutdownSdk();
+};
+
 // These handlers are necessary to ensure spans are flushed when the CLI exits.
-process.on("SIGINT", shutdownSdk);
-process.on("SIGTERM", shutdownSdk);
+process.on("SIGINT", shutdownSdkUnlessIntercepted);
+process.on("SIGTERM", shutdownSdkUnlessIntercepted);
 process.on("beforeExit", shutdownSdk);
 process.on("uncaughtException", shutdownSdk);

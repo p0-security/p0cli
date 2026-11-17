@@ -16,7 +16,7 @@ import {
   getDefaultSudo,
   prepareRequest,
   ScpCommandArgs,
-  withRelinquish,
+  withCleanExit,
 } from "./shared/ssh";
 import { cleanupStaleSshConfigs } from "./shared/ssh-cleanup";
 import yargs from "yargs";
@@ -129,20 +129,25 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       // replace the host with the linuxUserName@instanceId
       const { source, destination } = replaceHostWithInstance(request, args);
 
-      const exitCode = await withRelinquish(authn, args, requestId, () =>
-        sshOrScp({
-          authn,
-          request,
-          requestId,
-          cmdArgs: {
-            ...args,
-            source,
-            destination,
-          },
-          privateKey,
-          sshProvider,
-          sshHostKeys,
-        })
+      const exitCode = await withCleanExit(
+        authn,
+        args,
+        requestId,
+        (interrupted) =>
+          sshOrScp({
+            authn,
+            request,
+            requestId,
+            cmdArgs: {
+              ...args,
+              source,
+              destination,
+            },
+            privateKey,
+            sshProvider,
+            sshHostKeys,
+            interrupted,
+          })
       );
 
       // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)

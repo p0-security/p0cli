@@ -197,12 +197,28 @@ type SpawnSshNodeOptions = {
   isAccessPropagationPreTest?: boolean;
   audit?: (action: "end" | "start") => void;
   onHostKeyMismatch?: () => Promise<boolean>;
+  /** Aborted when a signal asks the CLI to stop. No SSH process is started after that. */
+  interrupted?: AbortSignal;
 };
+
+/** Resolves once the signal aborts, and never if there is no signal */
+const aborted = (signal: AbortSignal | undefined) =>
+  new Promise<undefined>((resolve) => {
+    if (signal?.aborted) resolve(undefined);
+    signal?.addEventListener("abort", () => resolve(undefined), { once: true });
+  });
 
 async function spawnSshNode(
   options: SpawnSshNodeOptions
 ): Promise<number | null> {
   return new Promise((resolve, reject) => {
+    // An interrupted session ends the same way as one whose SSH process was
+    // killed by the signal, see the signal handlers below
+    if (options.interrupted?.aborted) {
+      resolve(0);
+      return;
+    }
+
     const provider = newSshProvider(options.request);
 
     if (options.debug) {
@@ -310,7 +326,7 @@ async function spawnSshNode(
           return;
         }
 
-        delay(RETRY_DELAY_MS)
+        Promise.race([delay(RETRY_DELAY_MS), aborted(options.interrupted)])
           .then(() => spawnSshNode(options))
           .then((code) => resolve(code))
           .catch(reject);
@@ -551,7 +567,8 @@ const preTestAccessPropagationIfNeeded = async <
   setupData: SshAdditionalSetup | undefined,
   endTime: number,
   abortController: AbortController,
-  sshHostKeys: SshHostKeyInfo
+  sshHostKeys: SshHostKeyInfo,
+  interrupted: AbortSignal | undefined
 ) => {
   const testCmdArgs = sshProvider.preTestAccessPropagationArgs(cmdArgs);
 
@@ -576,6 +593,7 @@ const preTestAccessPropagationIfNeeded = async <
       request,
       endTime: endTime,
       isAccessPropagationPreTest: true,
+      interrupted,
     });
   }
   return null;
@@ -589,6 +607,9 @@ export const sshOrScp = async (args: {
   privateKey: string;
   sshProvider: SshProvider<any, any, any, any>;
   sshHostKeys: SshHostKeyInfo;
+  /** Aborted when a signal asks the CLI to stop. The session then winds down
+   * and returns, instead of the process being exited from under it. */
+  interrupted?: AbortSignal;
 }) => {
   return await traceSpan("ssh.connect", async (span) => {
     const sshSessionId = randomUUID();
@@ -600,6 +621,7 @@ export const sshOrScp = async (args: {
       privateKey,
       sshProvider,
       sshHostKeys,
+      interrupted,
     } = args;
     const { debug } = cmdArgs;
 
@@ -613,8 +635,13 @@ export const sshOrScp = async (args: {
 
     const abortController = new AbortController();
 
-    const credential: AwsCredentials | undefined =
-      await sshProvider.cloudProviderLogin(authn, request, debug);
+    // A login can wait on the user for minutes, so do not make an interrupt
+    // wait for it. Nothing is set up yet that would need tearing down.
+    const credential: AwsCredentials | undefined = await Promise.race([
+      sshProvider.cloudProviderLogin(authn, request, debug),
+      aborted(interrupted),
+    ]);
+    if (interrupted?.aborted) return 0;
 
     const setupData = await sshProvider.setup?.(authn, request, {
       requestId,
@@ -659,7 +686,8 @@ export const sshOrScp = async (args: {
         setupData,
         endTime,
         abortController,
-        sshHostKeys
+        sshHostKeys,
+        interrupted
       );
       if (preTestExitCode !== null && preTestExitCode !== 0) {
         span.setAttribute("ssh.exitCode", preTestExitCode);
@@ -709,6 +737,7 @@ export const sshOrScp = async (args: {
         request,
         endTime: endTime,
         onHostKeyMismatch: request.type === "aws" ? refreshHostKeys : undefined,
+        interrupted,
       });
 
       if (sessionExitCode !== null && sessionExitCode !== 0) {
