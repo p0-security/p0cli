@@ -404,3 +404,96 @@ describe("sudo pre-test access propagation", () => {
     expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
 });
+
+// `p0 ssh` and `p0 scp` intercept the exit signals: a signal aborts
+// `interrupted` instead of exiting the process, and the session has to wind
+// down and return by itself so the command can finish on its usual path.
+describe("interrupted sessions", () => {
+  const teardown = vi.fn(async () => {});
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSpawn.mockImplementation(() => makeFakeChild());
+  });
+
+  const provider = (overrides?: object) =>
+    ({
+      cloudProviderLogin: vi.fn(async () => undefined),
+      setup: vi.fn(async () => ({ sshOptions: [], teardown })),
+      proxyCommand: vi.fn(() => ["nc", "localhost", "22"]),
+      reproCommands: () => undefined,
+      preTestAccessPropagationArgs: () => undefined,
+      propagationTimeoutMs: 60_000,
+      ...overrides,
+    }) as any;
+
+  const runSsh = (sshProvider: any, interrupted: AbortSignal) =>
+    sshOrScp({
+      authn: {} as any,
+      request: { type: "aws", id: "i-abc123", linuxUserName: "user" } as any,
+      requestId: "req-1",
+      cmdArgs: { destination: "i-abc123", arguments: [] } as any,
+      privateKey: "pk",
+      sshProvider,
+      sshHostKeys: undefined,
+      interrupted,
+    });
+
+  it("returns without connecting when interrupted during the cloud login", async () => {
+    const interrupt = new AbortController();
+    // A login that is still waiting on the user
+    const sshProvider = provider({
+      cloudProviderLogin: vi.fn(() => new Promise(() => {})),
+    });
+
+    const session = runSsh(sshProvider, interrupt.signal);
+    interrupt.abort();
+
+    await expect(session).resolves.toBe(0);
+    expect(sshProvider.setup).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it("tears down without connecting when interrupted during setup", async () => {
+    const interrupt = new AbortController();
+    const sshProvider = provider({
+      setup: vi.fn(async () => {
+        interrupt.abort();
+        return { sshOptions: [], teardown };
+      }),
+    });
+
+    await expect(runSsh(sshProvider, interrupt.signal)).resolves.toBe(0);
+
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(teardown).toHaveBeenCalledOnce();
+  });
+
+  it("stops retrying when interrupted while access is still propagating", async () => {
+    const interrupt = new AbortController();
+    // AWS prints this until the key has propagated, and the session is retried
+    mockSpawn.mockImplementation(() =>
+      makeFailingChild(
+        "kex_exchange_identification: Connection closed by remote host\n",
+        255
+      )
+    );
+
+    const session = runSsh(provider(), interrupt.signal);
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledOnce());
+    interrupt.abort();
+
+    await expect(session).resolves.toBe(0);
+    expect(mockSpawn).toHaveBeenCalledOnce();
+    expect(teardown).toHaveBeenCalledOnce();
+  });
+
+  it("runs the session as usual when it is not interrupted", async () => {
+    const interrupt = new AbortController();
+
+    await expect(runSsh(provider(), interrupt.signal)).resolves.toBe(0);
+
+    expect(mockSpawn).toHaveBeenCalledOnce();
+    expect(teardown).toHaveBeenCalledOnce();
+  });
+});

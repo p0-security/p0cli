@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { interruptOnExitSignal } from "../common/exit-signals";
 import { authenticate } from "../drivers/auth";
 import { exitProcess, traceSpan } from "../opentelemetry/otel-helpers";
 import { sshOrScp } from "../plugins/ssh";
@@ -117,19 +118,24 @@ const scpAction = async (args: yargs.ArgumentsCamelCase<ScpCommandArgs>) => {
       // replace the host with the linuxUserName@instanceId
       const { source, destination } = replaceHostWithInstance(request, args);
 
-      const exitCode = await sshOrScp({
-        authn,
-        request,
-        requestId,
-        cmdArgs: {
-          ...args,
-          source,
-          destination,
-        },
-        privateKey,
-        sshProvider,
-        sshHostKeys,
-      });
+      // A signal interrupts the transfer instead of exiting the process, so
+      // that the session winds down and this command exits the usual way below
+      const exitCode = await interruptOnExitSignal((interrupted) =>
+        sshOrScp({
+          authn,
+          request,
+          requestId,
+          cmdArgs: {
+            ...args,
+            source,
+            destination,
+          },
+          privateKey,
+          sshProvider,
+          sshHostKeys,
+          interrupted,
+        })
+      );
 
       // Force exit to prevent hanging due to orphaned child processes (e.g., session-manager-plugin)
       // holding open file descriptors. See: https://github.com/aws/amazon-ssm-agent/issues/173
