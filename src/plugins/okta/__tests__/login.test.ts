@@ -14,7 +14,6 @@ import {
   getProviderType,
 } from "../../../types/authUtils";
 import { Identity } from "../../../types/identity";
-import { AwsFederatedLogin } from "../../aws/types";
 import { fetchSamlAssertionForAws } from "../login";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,22 +31,23 @@ const mockIdentity = {
   },
 } as unknown as Identity;
 
-const mockConfig: AwsFederatedLogin = {
-  type: "federated",
-  provider: {
-    type: "okta",
-    appId: "mock-app-id",
-    identityProvider: "mock-idp",
-    method: { type: "saml" },
-  },
-};
-
 describe("fetchSsoWebToken", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getProviderType).mockReturnValue("okta");
     vi.mocked(getProviderDomain).mockReturnValue("example.okta.com");
     vi.mocked(getClientId).mockReturnValue("mock-client-id");
+  });
+
+  it("refuses an organization that doesn't sign in to P0 with Okta", async () => {
+    vi.mocked(getProviderType).mockReturnValue(undefined);
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    await expect(
+      fetchSamlAssertionForAws(mockIdentity, "mock-app-id")
+    ).rejects.toMatch("signs in to P0 with Okta");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("does not read response body twice on 400 with non-invalid_grant error", async () => {
@@ -70,7 +70,7 @@ describe("fetchSsoWebToken", () => {
     );
 
     await expect(
-      fetchSamlAssertionForAws(mockIdentity, mockConfig)
+      fetchSamlAssertionForAws(mockIdentity, "mock-app-id")
     ).rejects.toThrow("400 Bad Request");
 
     expect(mockJson).toHaveBeenCalledOnce();

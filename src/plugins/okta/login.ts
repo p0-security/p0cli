@@ -24,7 +24,6 @@ import {
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
-import { AwsFederatedLogin } from "../aws/types";
 import {
   oidcLogin,
   oidcLoginSteps,
@@ -61,7 +60,9 @@ const fetchSsoWebToken = async (
   const providerDomain = getProviderDomain(org);
   const clientId = getClientId(org);
 
-  if (providerType !== "okta" || !providerDomain || !clientId) {
+  if (providerType !== "okta")
+    throw "The P0 CLI can get AWS credentials through Okta only if your organization signs in to P0 with Okta. Sign in to AWS from your Okta dashboard instead.";
+  if (!providerDomain || !clientId) {
     throw "Invalid provider configuration for Okta token exchange";
   }
 
@@ -184,21 +185,16 @@ export const oktaLogin = async (org: OrgData) =>
  *    SAML assertion from the resulting HTML response.
  *
  * @param identity - The user's P0 identity containing OIDC tokens from login
- * @param config - AWS federated login configuration with Okta app details
+ * @param appId - ID of the Okta AWS Account Federation app
  * @returns Base64-encoded SAML assertion for AWS authentication
  * @throws Error if Okta session has expired or been terminated
  */
-// TODO: Inject Okta app
 export const fetchSamlAssertionForAws = async (
   identity: Identity,
-  config: AwsFederatedLogin,
+  appId: string,
   debug?: boolean
 ): Promise<string> => {
-  const webTokenResponse = await fetchSsoWebToken(
-    config.provider.appId,
-    identity,
-    debug
-  );
+  const webTokenResponse = await fetchSsoWebToken(appId, identity, debug);
   const samlResponse = await fetchSamlResponse(identity.org, webTokenResponse);
   if (!samlResponse) {
     throw "No SAML assertion obtained from Okta.";
