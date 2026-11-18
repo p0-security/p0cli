@@ -15,7 +15,7 @@ import { assumeRoleWithIdc } from "./idc";
 import { AwsCredentials, AwsResourcePermissionSpec } from "./types";
 
 /** Gets the role, as `path/Name`, of a grant through an AWS IAM Federation pool */
-const federationPoolRole = (aws: AwsResourcePermissionSpec) => {
+export const federationPoolRole = (aws: AwsResourcePermissionSpec) => {
   const federation = getDelegate(aws.delegation, "aws-iam-federation");
   const provider = getDelegate(
     federation?.delegation,

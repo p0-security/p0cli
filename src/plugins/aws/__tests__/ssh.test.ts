@@ -150,6 +150,56 @@ describe("awsSshProvider.requestToSsh", () => {
       });
     });
 
+    it("builds a role request with the pool role of an AWS IAM Federation grant", () => {
+      const result = awsSshProvider.requestToSsh(
+        buildRequest([
+          {
+            key: "aws",
+            request: {
+              ...AWS_DELEGATE_ROLE,
+              generated: { name: "_unused" },
+              delegation: [
+                {
+                  key: "aws-iam-federation",
+                  request: {
+                    type: "aws-iam-federation",
+                    permission: {},
+                    generated: undefined,
+                    delegation: [
+                      {
+                        key: "okta-aws-iam-federation",
+                        request: {
+                          type: "okta-aws-iam-federation",
+                          permission: {},
+                          generated: undefined,
+                          delegation: [
+                            {
+                              key: "aws-iam-federation",
+                              request: {
+                                type: "aws-iam-federation",
+                                permission: {},
+                                generated: {
+                                  arn: "arn:aws:iam::111111111111:role/p0/federation/P0Pool-1",
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ])
+      );
+      expect(result).toMatchObject({
+        access: "role",
+        role: "p0/federation/P0Pool-1",
+      });
+    });
+
     it("produces the same output as the record form for equivalent input", () => {
       const recordResult = awsSshProvider.requestToSsh(
         buildRequest([{ key: "aws", request: AWS_DELEGATE_IDC }])
