@@ -19,6 +19,7 @@ import { getDelegate } from "../../types/delegation";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, newShellFormatter, throwAssertNever } from "../../util";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
+import { federationPoolRole } from "./auth";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
 import { ensureSsmInstall } from "./ssm/install";
@@ -48,7 +49,7 @@ const unprovisionedAccessPatterns = [
   // Note that the resource will randomly be either the SSM document or the EC2 instance
   {
     pattern:
-      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:.*:sts::.*:assumed-role\/P0GrantsRole.* is not authorized to perform: ssm:StartSession on resource: arn:.*:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
+      /An error occurred \(AccessDeniedException\) when calling the StartSession operation: User: arn:.*:sts::.*:assumed-role\/(P0GrantsRole|P0Federation).* is not authorized to perform: ssm:StartSession on resource: arn:.*:.*:.*:.* because no identity-based policy allows the ssm:StartSession action/,
   },
   /**
    * Matches the following error messages that AWS SSM pints when ssh authorized
@@ -180,7 +181,11 @@ export const awsSshProvider: SshProvider<
     if (!accountId) {
       throw "Backend did not provide an AWS account ID for SSH session.";
     }
-    const name = awsDelegate?.generated.name ?? generated?.resource?.name ?? "";
+    const name =
+      (awsDelegate && federationPoolRole(awsDelegate)) ??
+      awsDelegate?.generated.name ??
+      generated?.resource?.name ??
+      "";
     const common = {
       linuxUserName,
       accountId,
