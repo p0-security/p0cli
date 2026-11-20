@@ -58,10 +58,12 @@ export type AwsIamFederationLogin = {
   federation: string;
 };
 
+export type FederationProviderType = "okta" | "pingfederate" | "pingone";
+
 export type AwsIamFederationConfig = {
   federation: Record<
     string,
-    { provider: { type: "okta" | "pingone"; app: string } }
+    { provider: { type: FederationProviderType; app: string } }
   >;
 };
 
@@ -114,13 +116,23 @@ type AwsIamFederationPoolSpec = PermissionSpec<
   { arn: string }
 >;
 
+/** The integration that holds each provider's federation apps */
+export const FEDERATION_PROVIDER_INTEGRATIONS = {
+  okta: "okta-aws-iam-federation",
+  pingfederate: "pingfederate-aws-iam-federation",
+  pingone: "pingone-aws-iam-federation",
+} as const satisfies Record<FederationProviderType, string>;
+
+type FederationProviderIntegration =
+  (typeof FEDERATION_PROVIDER_INTEGRATIONS)[FederationProviderType];
+
 type AwsIamFederationSpec = PermissionSpec<
   "aws-iam-federation",
   Record<string, unknown>,
   undefined,
   {
-    "okta-aws-iam-federation"?: PermissionSpec<
-      "okta-aws-iam-federation",
+    [K in FederationProviderIntegration]?: PermissionSpec<
+      K,
       Record<string, unknown>,
       undefined,
       { "aws-iam-federation"?: AwsIamFederationPoolSpec }

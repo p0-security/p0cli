@@ -47,4 +47,23 @@ describe("withRedirectServer", () => {
     );
     expect(beginAuth).not.toHaveBeenCalled();
   });
+
+  it("gets the token from a form POST to the given path", async () => {
+    const result = withRedirectServer(
+      async (server) => {
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw new Error("server is not listening on a TCP port");
+        void fetch(`http://localhost:${address.port}/saml`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ SAMLResponse: "base64-saml" }),
+        });
+      },
+      async (_, token: { SAMLResponse: string }) => token.SAMLResponse,
+      { port: 0, post: "/saml" }
+    );
+
+    await expect(result).resolves.toBe("base64-saml");
+  });
 });
