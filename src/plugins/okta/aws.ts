@@ -9,7 +9,7 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { retryWithSleep } from "../../common/retry";
-import { parseXml } from "../../common/xml";
+import { samlAttributeValues } from "../../common/saml";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
@@ -24,7 +24,6 @@ import {
 } from "../aws/types";
 import { fetchPingFederateSamlForAws } from "../pingfederate/aws";
 import { fetchSamlAssertionForAws } from "./login";
-import { flatten } from "lodash";
 
 // Retry configuration for handling Okta eventual consistency
 // With exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s, 30s... ≈ 5 minutes total
@@ -38,35 +37,14 @@ const MAX_RETRY_DELAY_MS = 30000;
 // Capture group 1: partition; capture group 2: account ID.
 const ROLE_ARN_PATTERN = /^arn:(aws|aws-us-gov):iam::([^:]+):role\//;
 
-/** Gets the child element with this local name, whatever its namespace
- * prefix: Okta writes `saml2:`, PingFederate writes `saml:`. */
-const child = (element: any, localName: string) =>
-  element?.[
-    Object.keys(element).find((key) => key.split(":").pop() === localName) ?? ""
-  ];
-
 /** Extracts all roles from a SAML assertion */
 const rolesFromSaml = (account: string, saml: string) => {
-  const samlText = Buffer.from(saml, "base64").toString("ascii");
-  const samlObject = parseXml(samlText);
-  const samlAttributes = flatten([
-    child(
-      child(
-        child(child(samlObject, "Response"), "Assertion"),
-        "AttributeStatement"
-      ),
-      "Attribute"
-    ),
-  ]);
-  const roleAttribute = samlAttributes.find(
-    (a: any) =>
-      a?._attributes.Name === "https://aws.amazon.com/SAML/Attributes/Role"
-  );
   // Format:
   //   'arn:aws:iam::391052057035:saml-provider/p0dev-ext_okta_sso,arn:aws:iam::391052057035:role/path/to/role/SSOAmazonS3FullAccess'
-  const pairs = (
-    flatten([child(roleAttribute, "AttributeValue")]) as string[]
-  )?.map((r) => r.split(","));
+  const pairs = samlAttributeValues(
+    saml,
+    "https://aws.amazon.com/SAML/Attributes/Role"
+  ).map((r) => r.split(","));
   const arns = pairs.map((pair) => pair[1]!);
   const matched = pairs
     .map(([provider, arn]) => ({

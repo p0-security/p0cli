@@ -52,13 +52,15 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
 
 /** Waits for an OIDC authorization redirect using a locally mounted server
  *
+ * @param options.host Accepts connections only on this address, such as
+ *   `127.0.0.1`. Without it, the server accepts them on every interface.
  * @param options.post Gets the token from a form POST to this path, such as a
  *   SAML response, in place of the query of a GET to `/`
  */
 export const withRedirectServer = async <S, T, U>(
   beginAuth: (server: http.Server) => Promise<S>,
   completeAuth: (value: S, token: T) => Promise<U>,
-  options?: { port?: number; post?: string }
+  options?: { host?: string; port?: number; post?: string }
 ) => {
   const app = express();
 
@@ -102,7 +104,9 @@ export const withRedirectServer = async <S, T, U>(
   app.use(redirectRouter);
 
   const port = options?.port ?? 0;
-  const server = app.listen(port);
+  const server = options?.host
+    ? app.listen(port, options.host)
+    : app.listen(port);
 
   // Set up cleanup handler for process interruption
   const cleanup = async () => {
