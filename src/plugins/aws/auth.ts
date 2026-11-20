@@ -12,15 +12,18 @@ import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
 import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { assumeRoleWithIdc } from "./idc";
-import { AwsCredentials, AwsResourcePermissionSpec } from "./types";
+import {
+  AwsCredentials,
+  AwsResourcePermissionSpec,
+  FEDERATION_PROVIDER_INTEGRATIONS,
+} from "./types";
 
 /** Gets the role, as `path/Name`, of a grant through an AWS IAM Federation pool */
 export const federationPoolRole = (aws: AwsResourcePermissionSpec) => {
   const federation = getDelegate(aws.delegation, "aws-iam-federation");
-  const provider = getDelegate(
-    federation?.delegation,
-    "okta-aws-iam-federation"
-  );
+  const provider = Object.values(FEDERATION_PROVIDER_INTEGRATIONS)
+    .map((key) => getDelegate(federation?.delegation, key))
+    .find((delegate) => delegate !== undefined);
   const pool = getDelegate(provider?.delegation, "aws-iam-federation");
   return pool?.generated.arn.split("/").slice(1).join("/");
 };

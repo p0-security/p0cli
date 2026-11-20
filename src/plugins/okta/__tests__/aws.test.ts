@@ -13,6 +13,7 @@ import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
 import { assumeRoleWithSaml } from "../../aws/assumeRole";
 import { getAwsConfig } from "../../aws/config";
+import { fetchPingFederateSamlForAws } from "../../pingfederate/aws";
 import { assumeRoleWithOktaSaml } from "../aws";
 import { fetchSamlAssertionForAws } from "../login";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +31,9 @@ vi.mock("../../aws/assumeRole", () => ({
 }));
 vi.mock("../login", () => ({
   fetchSamlAssertionForAws: vi.fn(),
+}));
+vi.mock("../../pingfederate/aws", () => ({
+  fetchPingFederateSamlForAws: vi.fn(),
 }));
 vi.mock("../../../common/xml", () => ({
   parseXml: vi.fn(),
@@ -217,7 +221,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
         false
       );
       expect(fetchSamlAssertionForAws).toHaveBeenCalledWith(
-        {},
+        mockAuthn.identity,
         "0oa1234567890abcdefg",
         false
       );
@@ -227,6 +231,45 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
           saml: { providerName: "P0Federation-prod", response: "base64-saml" },
         })
       );
+    });
+
+    it("signs in through a PingFederate app, whose SAML uses other namespace prefixes, without retries", async () => {
+      mockFederation({ type: "pingfederate", app: "pf-prod" });
+      vi.mocked(fetchPingFederateSamlForAws).mockResolvedValue("pf-saml");
+      vi.mocked(parseXml).mockReturnValue({
+        "samlp:Response": {
+          "saml:Assertion": {
+            "saml:AttributeStatement": {
+              "saml:Attribute": {
+                _attributes: {
+                  Name: "https://aws.amazon.com/SAML/Attributes/Role",
+                },
+                "saml:AttributeValue": `arn:aws:iam::${MOCK_ACCOUNT_ID}:saml-provider/P0Federation-prod,arn:aws:iam::${MOCK_ACCOUNT_ID}:role/admin/Admin`,
+              },
+            },
+          },
+        },
+      });
+
+      await assumeRoleWithOktaSaml(mockAuthn, { role: "admin/Admin" }, false);
+
+      expect(fetchPingFederateSamlForAws).toHaveBeenCalledWith(
+        mockAuthn,
+        "pf-prod",
+        false
+      );
+      expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: "admin/Admin",
+          saml: { providerName: "P0Federation-prod", response: "pf-saml" },
+        })
+      );
+
+      vi.mocked(assumeRoleWithSaml).mockClear();
+      await expect(
+        assumeRoleWithOktaSaml(mockAuthn, { role: "other/Other" }, false)
+      ).rejects.toMatch("Role other/Other not available");
+      expect(fetchPingFederateSamlForAws).toHaveBeenCalledTimes(2);
     });
 
     it("refuses a PingOne federation", async () => {
