@@ -11,10 +11,10 @@ You should have received a copy of the GNU General Public License along with @p0
 import { parseXml } from "../../../common/xml";
 import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
-import { assumeRoleWithSaml } from "../../aws/assumeRole";
-import { getAwsConfig } from "../../aws/config";
-import { assumeRoleWithOktaSaml } from "../aws";
-import { fetchSamlAssertionForAws } from "../login";
+import { fetchSamlAssertionForAws } from "../../okta/login";
+import { assumeRoleWithSaml } from "../assumeRole";
+import { getAwsConfig } from "../config";
+import { assumeRoleWithSamlLogin } from "../saml";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock dependencies
@@ -22,13 +22,13 @@ vi.mock("../../../drivers/auth");
 vi.mock("../../../drivers/api", () => ({
   fetchIntegrationConfig: vi.fn(),
 }));
-vi.mock("../../aws/config", () => ({
+vi.mock("../config", () => ({
   getAwsConfig: vi.fn(),
 }));
-vi.mock("../../aws/assumeRole", () => ({
+vi.mock("../assumeRole", () => ({
   assumeRoleWithSaml: vi.fn(),
 }));
-vi.mock("../login", () => ({
+vi.mock("../../okta/login", () => ({
   fetchSamlAssertionForAws: vi.fn(),
 }));
 vi.mock("../../../common/xml", () => ({
@@ -38,7 +38,7 @@ vi.mock("../../../util", () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-describe("assumeRoleWithOktaSaml retry logic", () => {
+describe("assumeRoleWithSamlLogin retry logic", () => {
   const MOCK_ACCOUNT_ID = "1234";
 
   const mockAuthn: Authn = {
@@ -100,7 +100,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       createMockSamlWithRoles(["p0-grants/P0GrantsRole1"])
     );
 
-    const result = await assumeRoleWithOktaSaml(
+    const result = await assumeRoleWithSamlLogin(
       mockAuthn,
       { role: "p0-grants/P0GrantsRole1" },
       false
@@ -121,7 +121,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
         ])
       );
 
-    const result = await assumeRoleWithOktaSaml(
+    const result = await assumeRoleWithSamlLogin(
       mockAuthn,
       { role: "p0-grants/P0GrantsRole16" },
       false
@@ -137,7 +137,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       createMockSamlWithRoles(["p0-grants/P0GrantsRole1"], "aws")
     );
 
-    await assumeRoleWithOktaSaml(
+    await assumeRoleWithSamlLogin(
       mockAuthn,
       { role: "p0-grants/P0GrantsRole1" },
       false
@@ -153,7 +153,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       createMockSamlWithRoles(["p0-grants/P0GrantsRole12"], "aws-us-gov")
     );
 
-    const result = await assumeRoleWithOktaSaml(
+    const result = await assumeRoleWithSamlLogin(
       mockAuthn,
       { role: "p0-grants/P0GrantsRole12" },
       false
@@ -209,7 +209,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
     it("signs in to the federation's Okta app with the role's SAML provider", async () => {
       mockFederation({ type: "okta", app: "0oa1234567890abcdefg" });
 
-      await assumeRoleWithOktaSaml(mockAuthn, { role: "admin/Admin" }, false);
+      await assumeRoleWithSamlLogin(mockAuthn, { role: "admin/Admin" }, false);
 
       expect(fetchIntegrationConfig).toHaveBeenCalledWith(
         mockAuthn,
@@ -233,7 +233,7 @@ describe("assumeRoleWithOktaSaml retry logic", () => {
       mockFederation({ type: "pingone", app: "app-id" });
 
       await expect(
-        assumeRoleWithOktaSaml(mockAuthn, { role: "admin/Admin" }, false)
+        assumeRoleWithSamlLogin(mockAuthn, { role: "admin/Admin" }, false)
       ).rejects.toMatch("can't sign in to AWS through pingone");
       expect(fetchSamlAssertionForAws).not.toHaveBeenCalled();
     });

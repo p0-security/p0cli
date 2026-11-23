@@ -10,8 +10,8 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { getDelegate } from "../../types/delegation";
 import { Authn } from "../../types/identity";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { assumeRoleWithIdc } from "./idc";
+import { assumeRoleWithSamlLogin } from "./saml";
 import { AwsCredentials, AwsResourcePermissionSpec } from "./types";
 
 /** Gets the role, as `path/Name`, of a grant through an AWS IAM Federation pool */
@@ -39,7 +39,7 @@ export const awsCloudAuth = async (
       idc: { id: idcId, region: idcRegion },
     });
   } else {
-    return await assumeRoleWithOktaSaml(
+    return await assumeRoleWithSamlLogin(
       authn,
       {
         accountId: aws.permission.accountId,

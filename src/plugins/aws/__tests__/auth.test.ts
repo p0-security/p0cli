@@ -9,12 +9,12 @@ This file is part of @p0security/cli
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
 import { Authn } from "../../../types/identity";
-import { assumeRoleWithOktaSaml } from "../../okta/aws";
 import { awsCloudAuth } from "../auth";
+import { assumeRoleWithSamlLogin } from "../saml";
 import { AwsResourcePermissionSpec } from "../types";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../okta/aws");
+vi.mock("../saml");
 
 const authn = {} as Authn;
 
@@ -34,7 +34,7 @@ const aws: AwsResourcePermissionSpec = {
 describe("awsCloudAuth", () => {
   it("assumes the generated role", async () => {
     await awsCloudAuth(authn, aws);
-    expect(assumeRoleWithOktaSaml).toHaveBeenCalledWith(
+    expect(assumeRoleWithSamlLogin).toHaveBeenCalledWith(
       authn,
       { accountId: "123456789012", role: "P0GrantsRole" },
       undefined
@@ -78,7 +78,7 @@ describe("awsCloudAuth", () => {
         },
       ],
     });
-    expect(assumeRoleWithOktaSaml).toHaveBeenCalledWith(
+    expect(assumeRoleWithSamlLogin).toHaveBeenCalledWith(
       authn,
       { accountId: "123456789012", role: "p0/federation/P0Pool-1" },
       undefined

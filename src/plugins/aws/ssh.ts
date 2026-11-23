@@ -18,10 +18,10 @@ import { print2 } from "../../drivers/stdio";
 import { getDelegate } from "../../types/delegation";
 import { SshProvider } from "../../types/ssh";
 import { getAppName, newShellFormatter, throwAssertNever } from "../../util";
-import { assumeRoleWithOktaSaml } from "../okta/aws";
 import { federationPoolRole } from "./auth";
 import { getAwsConfig } from "./config";
 import { assumeRoleWithIdc } from "./idc";
+import { assumeRoleWithSamlLogin } from "./saml";
 import { ensureSsmInstall } from "./ssm/install";
 import {
   AwsCredentials,
@@ -79,7 +79,7 @@ export const awsSshProvider: SshProvider<
       ? await assumeRoleWithIdc(request as AwsSshIdcRequest)
       : config.login?.type === "federated" ||
           config.login?.type === "aws-iam-federation"
-        ? await assumeRoleWithOktaSaml(
+        ? await assumeRoleWithSamlLogin(
             authn,
             request as AwsSshRoleRequest,
             debug
