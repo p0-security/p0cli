@@ -125,7 +125,7 @@ export const assumeRoleWithSamlLogin = async (
   debug?: boolean
 ) =>
   await cached(
-    `aws-okta-${args.accountId}-${args.role}`,
+    `aws-saml-${args.accountId}-${args.role}`,
     async () => {
       const { account, appId, config, source } = await initSamlApp(
         authn,
