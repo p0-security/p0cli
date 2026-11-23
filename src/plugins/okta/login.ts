@@ -24,6 +24,7 @@ import {
 import { Identity } from "../../types/identity";
 import { AuthorizeResponse, TokenResponse } from "../../types/oidc";
 import { OrgData } from "../../types/org";
+import { SamlSource } from "../aws/types";
 import {
   oidcLogin,
   oidcLoginSteps,
@@ -200,4 +201,12 @@ export const fetchSamlAssertionForAws = async (
     throw "No SAML assertion obtained from Okta.";
   }
   return samlResponse;
+};
+
+export const oktaSamlSource: SamlSource = {
+  fetch: async (authn, appId, debug) =>
+    await fetchSamlAssertionForAws(authn.identity, appId, debug),
+  // (Speculative) Okta can show a new role in its SAML response only after a
+  // delay. 14 retries with the backoff wait approximately 5 minutes.
+  retries: 14,
 };

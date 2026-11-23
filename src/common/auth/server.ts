@@ -50,11 +50,17 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
   return bytes;
 };
 
-/** Waits for an OIDC authorization redirect using a locally mounted server */
+/** Waits for an OIDC authorization redirect using a locally mounted server
+ *
+ * @param options.host Accepts connections only on this address, such as
+ *   `127.0.0.1`. Without it, the server accepts them on every interface.
+ * @param options.post Gets the token from a form POST to this path, such as a
+ *   SAML response, in place of the query of a GET to `/`
+ */
 export const withRedirectServer = async <S, T, U>(
   beginAuth: (server: http.Server) => Promise<S>,
   completeAuth: (value: S, token: T) => Promise<U>,
-  options?: { port?: number }
+  options?: { host?: string; port?: number; post?: string }
 ) => {
   const app = express();
 
@@ -74,8 +80,7 @@ export const withRedirectServer = async <S, T, U>(
   });
 
   const redirectRouter = express.Router();
-  redirectRouter.get("/", (req, res) => {
-    const token = req.query as T;
+  const onRedirect = (token: T, res: express.Response) => {
     completeAuth(value, token)
       .then((result) => {
         pipeToResponse(pageBytes, res, "text/html; charset=utf-8");
@@ -85,12 +90,23 @@ export const withRedirectServer = async <S, T, U>(
         res.status(500).send(error?.message ?? error);
         redirectReject(error);
       });
-  });
+  };
+  if (options?.post) {
+    redirectRouter.post(
+      options.post,
+      express.urlencoded({ extended: false }),
+      (req, res) => onRedirect(req.body as T, res)
+    );
+  } else {
+    redirectRouter.get("/", (req, res) => onRedirect(req.query as T, res));
+  }
 
   app.use(redirectRouter);
 
   const port = options?.port ?? 0;
-  const server = app.listen(port);
+  const server = options?.host
+    ? app.listen(port, options.host)
+    : app.listen(port);
 
   // Set up cleanup handler for process interruption
   const cleanup = async () => {

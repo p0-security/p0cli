@@ -68,9 +68,7 @@ describe("aws role", () => {
         const command = "aws role assume Role1";
         it("should print a friendly error message", async () => {
           const error = await failure(awsCommand(yargs()), command);
-          expect(error).toBe(
-            "Account test is not configured for Okta SAML login."
-          );
+          expect(error).toBe("Account test is not configured for SAML login.");
         });
       });
     });

@@ -11,7 +11,8 @@ You should have received a copy of the GNU General Public License along with @p0
 import { parseXml } from "../../../common/xml";
 import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
-import { fetchSamlAssertionForAws } from "../../okta/login";
+import { oktaSamlSource } from "../../okta/login";
+import { pingFederateSamlSource } from "../../pingfederate/aws";
 import { assumeRoleWithSaml } from "../assumeRole";
 import { getAwsConfig } from "../config";
 import { assumeRoleWithSamlLogin } from "../saml";
@@ -29,7 +30,10 @@ vi.mock("../assumeRole", () => ({
   assumeRoleWithSaml: vi.fn(),
 }));
 vi.mock("../../okta/login", () => ({
-  fetchSamlAssertionForAws: vi.fn(),
+  oktaSamlSource: { fetch: vi.fn(), retries: 14 },
+}));
+vi.mock("../../pingfederate/aws", () => ({
+  pingFederateSamlSource: { fetch: vi.fn(), retries: 0 },
 }));
 vi.mock("../../../common/xml", () => ({
   parseXml: vi.fn(),
@@ -86,7 +90,7 @@ describe("assumeRoleWithSamlLogin retry logic", () => {
       identity: {} as any,
       config: mockConfig as any,
     });
-    vi.mocked(fetchSamlAssertionForAws).mockResolvedValue("base64-saml");
+    vi.mocked(oktaSamlSource.fetch).mockResolvedValue("base64-saml");
     vi.mocked(assumeRoleWithSaml).mockResolvedValue({
       AWS_ACCESS_KEY_ID: "key",
       AWS_SECRET_ACCESS_KEY: "secret",
@@ -107,7 +111,7 @@ describe("assumeRoleWithSamlLogin retry logic", () => {
     );
 
     expect(result).toBeDefined();
-    expect(fetchSamlAssertionForAws).toHaveBeenCalledTimes(1);
+    expect(oktaSamlSource.fetch).toHaveBeenCalledTimes(1);
     expect(parseXml).toHaveBeenCalledTimes(1);
   });
 
@@ -128,7 +132,7 @@ describe("assumeRoleWithSamlLogin retry logic", () => {
     );
 
     expect(result).toBeDefined();
-    expect(fetchSamlAssertionForAws).toHaveBeenCalledTimes(2);
+    expect(oktaSamlSource.fetch).toHaveBeenCalledTimes(2);
     expect(parseXml).toHaveBeenCalledTimes(2);
   });
 
@@ -216,8 +220,8 @@ describe("assumeRoleWithSamlLogin retry logic", () => {
         "aws-iam-federation",
         false
       );
-      expect(fetchSamlAssertionForAws).toHaveBeenCalledWith(
-        {},
+      expect(oktaSamlSource.fetch).toHaveBeenCalledWith(
+        mockAuthn,
         "0oa1234567890abcdefg",
         false
       );
@@ -229,13 +233,53 @@ describe("assumeRoleWithSamlLogin retry logic", () => {
       );
     });
 
+    it("signs in through a PingFederate app, whose SAML uses other namespace prefixes, without retries", async () => {
+      mockFederation({ type: "pingfederate", app: "pf-prod" });
+      vi.mocked(pingFederateSamlSource.fetch).mockResolvedValue("pf-saml");
+      vi.mocked(parseXml).mockReturnValue({
+        "samlp:Response": {
+          "saml:Assertion": {
+            "saml:AttributeStatement": {
+              "saml:Attribute": {
+                _attributes: {
+                  Name: "https://aws.amazon.com/SAML/Attributes/Role",
+                },
+                // PingFederate puts the role first
+                "saml:AttributeValue": `arn:aws:iam::${MOCK_ACCOUNT_ID}:role/admin/Admin,arn:aws:iam::${MOCK_ACCOUNT_ID}:saml-provider/P0Federation-prod`,
+              },
+            },
+          },
+        },
+      });
+
+      await assumeRoleWithSamlLogin(mockAuthn, { role: "admin/Admin" }, false);
+
+      expect(pingFederateSamlSource.fetch).toHaveBeenCalledWith(
+        mockAuthn,
+        "pf-prod",
+        false
+      );
+      expect(assumeRoleWithSaml).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: "admin/Admin",
+          saml: { providerName: "P0Federation-prod", response: "pf-saml" },
+        })
+      );
+
+      vi.mocked(assumeRoleWithSaml).mockClear();
+      await expect(
+        assumeRoleWithSamlLogin(mockAuthn, { role: "other/Other" }, false)
+      ).rejects.toMatch("Role other/Other not available");
+      expect(pingFederateSamlSource.fetch).toHaveBeenCalledTimes(2);
+    });
+
     it("refuses a PingOne federation", async () => {
       mockFederation({ type: "pingone", app: "app-id" });
 
       await expect(
         assumeRoleWithSamlLogin(mockAuthn, { role: "admin/Admin" }, false)
       ).rejects.toMatch("can't sign in to AWS through pingone");
-      expect(fetchSamlAssertionForAws).not.toHaveBeenCalled();
+      expect(oktaSamlSource.fetch).not.toHaveBeenCalled();
     });
   });
 });
