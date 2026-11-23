@@ -43,7 +43,7 @@ describe("withRedirectServer", () => {
     const beginAuth = vi.fn();
 
     await expect(withRedirectServer(beginAuth, vi.fn(), { port })).rejects.toBe(
-      `Login failed: port ${port} is already in use, probably by another \`p0 login\` waiting for browser approval.\nFinish or cancel that login (Ctrl+C in its terminal), then run this command again.`
+      `Sign-in failed: port ${port} is already in use, probably by another \`p0\` sign-in waiting for the browser.\nFinish or cancel that sign-in (Ctrl+C in its terminal), then run this command again.`
     );
     expect(beginAuth).not.toHaveBeenCalled();
   });
@@ -65,5 +65,56 @@ describe("withRedirectServer", () => {
     );
 
     await expect(result).resolves.toBe("base64-saml");
+  });
+
+  it("answers a token that it doesn't accept with a 400, and keeps waiting", async () => {
+    const statuses: number[] = [];
+    const result = withRedirectServer(
+      async (server) => {
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw new Error("server is not listening on a TCP port");
+        const post = async (RelayState: string) =>
+          await fetch(`http://127.0.0.1:${address.port}/saml`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ RelayState, SAMLResponse: RelayState }),
+          });
+        void (async () => {
+          statuses.push((await post("other")).status);
+          statuses.push((await post("nonce")).status);
+        })();
+      },
+      async (_, token: { RelayState: string; SAMLResponse: string }) =>
+        token.SAMLResponse,
+      {
+        accepts: (token) => token.RelayState === "nonce",
+        host: "127.0.0.1",
+        port: 0,
+        post: "/saml",
+      }
+    );
+
+    await expect(result).resolves.toBe("nonce");
+    expect(statuses[0]).toBe(400);
+  });
+
+  it("stops waiting when the form POST can't be read", async () => {
+    const result = withRedirectServer(
+      async (server) => {
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw new Error("server is not listening on a TCP port");
+        void fetch(`http://127.0.0.1:${address.port}/saml`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "SAMLResponse=" + "a".repeat(2_000_000),
+        });
+      },
+      async (_, token: { SAMLResponse: string }) => token.SAMLResponse,
+      { host: "127.0.0.1", port: 0, post: "/saml" }
+    );
+
+    await expect(result).rejects.toThrow("request entity too large");
   });
 });

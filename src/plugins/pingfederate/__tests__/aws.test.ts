@@ -34,15 +34,12 @@ const samlFor = (sourceIdentity: string) =>
     `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:Assertion><saml:AttributeStatement><saml:Attribute Name="https://aws.amazon.com/SAML/Attributes/SourceIdentity"><saml:AttributeValue>${sourceIdentity}</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>`
   ).toString("base64");
 
-/** Runs the sign-in, and posts `form` to the local server, with the sign-in's
- * own nonce as `RelayState` unless `form` sets one */
-const signIn = async (form: { RelayState?: string; SAMLResponse?: string }) => {
+/** Runs the sign-in, and posts `form` to the local server */
+const signIn = async (form: { SAMLResponse?: string }) => {
   vi.mocked(withRedirectServer).mockImplementation(
     async (beginAuth, completeAuth) => {
       await beginAuth({} as any);
-      const url = new URL(vi.mocked(osSafeOpen).mock.calls[0]![0]);
-      const nonce = url.searchParams.get("TargetResource");
-      return await completeAuth(undefined, { RelayState: nonce, ...form });
+      return await completeAuth(undefined, form);
     }
   );
   return await pingFederateSamlSource.fetch(authn, "pf-prod");
@@ -68,20 +65,15 @@ describe("pingFederateSamlSource", () => {
     expect(url.searchParams.get("PartnerSpId")).toBe("urn:amazon:webservices");
     expect(url.searchParams.get("ACSIdx")).toBe("1");
     expect(url.searchParams.get("TargetResource")).toMatch(/^[0-9a-f]{64}$/);
-    expect(vi.mocked(withRedirectServer).mock.calls[0]![2]).toEqual({
+    const options = vi.mocked(withRedirectServer).mock.calls[0]![2]!;
+    expect(options).toMatchObject({
       host: "127.0.0.1",
       port: 52702,
       post: "/saml",
     });
-  });
-
-  it("refuses a response from another sign-in", async () => {
-    await expect(
-      signIn({
-        RelayState: "other",
-        SAMLResponse: samlFor("alice@example.com"),
-      })
-    ).rejects.toBe("The SAML response isn't from this sign-in.");
+    const nonce = url.searchParams.get("TargetResource")!;
+    expect(options.accepts!({ RelayState: nonce })).toBe(true);
+    expect(options.accepts!({ RelayState: "other" })).toBe(false);
   });
 
   it("refuses a response for another user", async () => {

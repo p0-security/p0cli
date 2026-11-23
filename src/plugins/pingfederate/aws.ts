@@ -78,9 +78,7 @@ const fetchPingFederateSamlForAws = async (
         print2(`Visit this URL to sign in to PingFederate:\n  ${url}`);
       }
     },
-    async (_, { RelayState, SAMLResponse }) => {
-      if (RelayState !== nonce)
-        throw "The SAML response isn't from this sign-in.";
+    async (_, { SAMLResponse }) => {
       if (!SAMLResponse) throw "PingFederate sent no SAML response.";
       const [sourceIdentity] = samlAttributeValues(
         SAMLResponse,
@@ -90,7 +88,12 @@ const fetchPingFederateSamlForAws = async (
         throw `PingFederate signed in ${sourceIdentity ?? "a user without a SourceIdentity"}, not ${email}.`;
       return SAMLResponse;
     },
-    { host: SAML_HOST, port: SAML_PORT, post: SAML_PATH }
+    {
+      accepts: ({ RelayState }) => RelayState === nonce,
+      host: SAML_HOST,
+      port: SAML_PORT,
+      post: SAML_PATH,
+    }
   );
 };
 

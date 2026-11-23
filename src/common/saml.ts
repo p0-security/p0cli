@@ -20,7 +20,7 @@ const child = (element: any, localName: string) =>
 
 /** Gets the values of an attribute of a base64 SAML response's assertion */
 export const samlAttributeValues = (saml: string, name: string): string[] => {
-  const samlText = Buffer.from(saml, "base64").toString("ascii");
+  const samlText = Buffer.from(saml, "base64").toString("utf8");
   const statement = child(
     child(child(parseXml(samlText), "Response"), "Assertion"),
     "AttributeStatement"

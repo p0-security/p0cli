@@ -50,8 +50,11 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
   return bytes;
 };
 
-/** Waits for an OIDC authorization redirect using a locally mounted server
+/** Waits for an authorization redirect, or a form POST, using a locally
+ * mounted server
  *
+ * @param options.accepts Answers a token that fails this check with a 400
+ *   response, and keeps waiting
  * @param options.host Accepts connections only on this address, such as
  *   `127.0.0.1`. Without it, the server accepts them on every interface.
  * @param options.post Gets the token from a form POST to this path, such as a
@@ -60,7 +63,12 @@ const loadStaticAsset = async (path: string): Promise<Buffer> => {
 export const withRedirectServer = async <S, T, U>(
   beginAuth: (server: http.Server) => Promise<S>,
   completeAuth: (value: S, token: T) => Promise<U>,
-  options?: { host?: string; port?: number; post?: string }
+  options?: {
+    accepts?: (token: T) => boolean;
+    host?: string;
+    port?: number;
+    post?: string;
+  }
 ) => {
   const app = express();
 
@@ -81,6 +89,10 @@ export const withRedirectServer = async <S, T, U>(
 
   const redirectRouter = express.Router();
   const onRedirect = (token: T, res: express.Response) => {
+    if (options?.accepts && !options.accepts(token)) {
+      res.status(400).send("This response isn't for this sign-in.");
+      return;
+    }
     completeAuth(value, token)
       .then((result) => {
         pipeToResponse(pageBytes, res, "text/html; charset=utf-8");
@@ -94,8 +106,19 @@ export const withRedirectServer = async <S, T, U>(
   if (options?.post) {
     redirectRouter.post(
       options.post,
-      express.urlencoded({ extended: false }),
+      express.urlencoded({ extended: false, limit: "1mb" }),
       (req, res) => onRedirect(req.body as T, res)
+    );
+    redirectRouter.use(
+      (
+        error: any,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction
+      ) => {
+        res.status(400).send(error?.message ?? error);
+        redirectReject(error);
+      }
     );
   } else {
     redirectRouter.get("/", (req, res) => onRedirect(req.query as T, res));
@@ -133,7 +156,7 @@ export const withRedirectServer = async <S, T, U>(
     server.once("error", (error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") {
         reject(
-          `Login failed: port ${port} is already in use, probably by another \`${getAppName()} login\` waiting for browser approval.\nFinish or cancel that login (Ctrl+C in its terminal), then run this command again.`
+          `Sign-in failed: port ${port} is already in use, probably by another \`${getAppName()}\` sign-in waiting for the browser.\nFinish or cancel that sign-in (Ctrl+C in its terminal), then run this command again.`
         );
       } else {
         reject(error);
