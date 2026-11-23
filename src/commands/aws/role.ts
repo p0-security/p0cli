@@ -8,6 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
+import { getAwsConfig } from "../../plugins/aws/config";
 import { assumeRoleWithSamlLogin } from "../../plugins/aws/saml";
 import { Authn } from "../../types/identity";
 import { getAppName } from "../../util";
@@ -62,6 +63,10 @@ const oktaAwsAssumeRole = async (
   argv: yargs.ArgumentsCamelCase<AssumeRoleCommandArgs>,
   authn: Authn
 ) => {
+  const { config } = await getAwsConfig(authn, argv.account, argv.debug);
+  if (config.login?.type === "idc")
+    throw `Account ${config.label ?? config.id} uses IAM Identity Center. Use \`${getAppName()} aws permission-set assume\`.`;
+
   if (argv.request) {
     const requestCommand = buildRoleRequestCommand(argv);
 

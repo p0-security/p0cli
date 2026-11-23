@@ -12,6 +12,8 @@ import { awsCommand } from "..";
 import { fetchIntegrationConfig } from "../../../drivers/api";
 import { print1, print2 } from "../../../drivers/stdio";
 import { failure } from "../../../testing/yargs";
+import { provisionRequest } from "../../shared/request";
+import { permissionSet } from "../permission-set";
 import { samlResponse } from "./__input__/saml-response";
 import { stsResponse } from "./__input__/sts-response";
 import { afterEach, beforeEach, describe, expect, it, vi, Mock } from "vitest";
@@ -29,6 +31,10 @@ Object.defineProperty(process.stdout, "isTTY", {
 vi.mock("../../shared/request", () => ({
   provisionRequest: vi.fn(),
 }));
+vi.mock("../permission-set", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../permission-set")>();
+  return { permissionSet: vi.fn(actual.permissionSet) };
+});
 vi.mock("../../../util", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../util")>()),
   getAppName: () => "p0",
@@ -112,6 +118,55 @@ describe("aws role", () => {
           expect(mockPrint1.mock.calls).toMatchSnapshot("stdout");
         });
       });
+    });
+  });
+
+  describe("an Identity Center account installed before a federated account", () => {
+    beforeEach(() => {
+      mockIntegrationConfigFetch.mockResolvedValue({
+        config: {
+          "iam-write": {
+            "0": { label: "idc", state: "installed", login: { type: "idc" } },
+            "1": {
+              label: "federated",
+              state: "installed",
+              login: {
+                type: "federated",
+                provider: {
+                  type: "okta",
+                  appId: "0oabcdefgh",
+                  identityProvider: "okta",
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it("should assume a role in the federated account", async () => {
+      await awsCommand(yargs()).parse(
+        "aws --account federated role assume Role1"
+      );
+      expect(mockPrint1).toHaveBeenCalled();
+    });
+
+    it("should offer permission sets too", async () => {
+      await awsCommand(yargs()).parse(
+        "aws --account federated role assume Role1"
+      );
+      expect(permissionSet).toHaveBeenCalled();
+    });
+
+    it("should refuse a role in the Identity Center account before requesting it", async () => {
+      const error = await failure(
+        awsCommand(yargs()),
+        "aws --account idc role assume Role1"
+      );
+      expect(error).toBe(
+        "Account idc uses IAM Identity Center. Use `p0 aws permission-set assume`."
+      );
+      expect(provisionRequest).not.toHaveBeenCalled();
     });
   });
 });
