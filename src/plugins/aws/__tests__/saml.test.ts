@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with @p0
 import { parseXml } from "../../../common/xml";
 import { fetchIntegrationConfig } from "../../../drivers/api";
 import { Authn } from "../../../types/identity";
-import { oktaSamlSource } from "../../okta/login";
+import { oktaSamlSource } from "../../okta/aws";
 import { pingFederateSamlSource } from "../../pingfederate/aws";
 import { assumeRoleWithSaml } from "../assumeRole";
 import { getAwsConfig } from "../config";
@@ -29,7 +29,7 @@ vi.mock("../config", () => ({
 vi.mock("../assumeRole", () => ({
   assumeRoleWithSaml: vi.fn(),
 }));
-vi.mock("../../okta/login", () => ({
+vi.mock("../../okta/aws", () => ({
   oktaSamlSource: { fetch: vi.fn(), retries: 14 },
 }));
 vi.mock("../../pingfederate/aws", () => ({

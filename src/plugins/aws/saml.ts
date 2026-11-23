@@ -13,7 +13,7 @@ import { samlAttributeValues } from "../../common/saml";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
-import { oktaSamlSource } from "../okta/login";
+import { oktaSamlSource } from "../okta/aws";
 import { pingFederateSamlSource } from "../pingfederate/aws";
 import { assumeRoleWithSaml } from "./assumeRole";
 import { getAwsConfig } from "./config";
