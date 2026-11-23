@@ -40,12 +40,13 @@ const awsArgs = async (yargs: yargs.Argv) => {
       })
       .env("P0_AWS");
 
-    rds(base, authn);
+    const withRds = rds(base, authn);
     // Each assume command checks the login type of the account it gets
     if (configs.some(({ login }) => login?.type === "idc"))
-      permissionSet(base, authn);
-    if (configs.some(({ login }) => login?.type !== "idc")) role(base, authn);
-    return base;
+      permissionSet(withRds, authn);
+    if (configs.some(({ login }) => login?.type !== "idc"))
+      role(withRds, authn);
+    return withRds;
   } catch (error) {
     // Handle authentication errors here, since
     // this occurs during command building
