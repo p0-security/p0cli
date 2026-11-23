@@ -8,7 +8,7 @@ This file is part of @p0security/cli
 
 You should have received a copy of the GNU General Public License along with @p0security/cli. If not, see <https://www.gnu.org/licenses/>.
 **/
-import { assumeRoleWithOktaSaml } from "../../plugins/okta/aws";
+import { assumeRoleWithSamlLogin } from "../../plugins/aws/saml";
 import { Authn } from "../../types/identity";
 import { getAppName } from "../../util";
 import { provisionRequest } from "../shared/request";
@@ -68,7 +68,7 @@ const oktaAwsAssumeRole = async (
     await provisionRequest(requestCommand, authn);
   }
 
-  const awsCredential = await assumeRoleWithOktaSaml(
+  const awsCredential = await assumeRoleWithSamlLogin(
     authn,
     {
       accountId: argv.account,

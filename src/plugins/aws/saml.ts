@@ -13,15 +13,15 @@ import { parseXml } from "../../common/xml";
 import { fetchIntegrationConfig } from "../../drivers/api";
 import { cached } from "../../drivers/auth";
 import { Authn } from "../../types/identity";
-import { assumeRoleWithSaml } from "../aws/assumeRole";
-import { getAwsConfig } from "../aws/config";
+import { fetchSamlAssertionForAws } from "../okta/login";
+import { assumeRoleWithSaml } from "./assumeRole";
+import { getAwsConfig } from "./config";
 import {
   AwsFederatedLogin,
   AwsIamFederationConfig,
   AwsIamFederationLogin,
   AwsItem,
-} from "../aws/types";
-import { fetchSamlAssertionForAws } from "./login";
+} from "./types";
 import { flatten } from "lodash";
 
 // Retry configuration for handling Okta eventual consistency
@@ -123,7 +123,7 @@ const initOktaSaml = async (
   };
 };
 
-export const assumeRoleWithOktaSaml = async (
+export const assumeRoleWithSamlLogin = async (
   authn: Authn,
   args: { accountId?: string; role: string },
   debug?: boolean
