@@ -13,21 +13,21 @@ import { Authn } from "../../types/identity";
 import { AwsConfig } from "./types";
 import { sortBy } from "lodash";
 
-export const getFirstAwsConfig = async (authn: Authn, debug?: boolean) => {
-  const { identity } = authn;
+/** Gets the config of every AWS account that P0 is installed on */
+export const getInstalledAwsConfigs = async (authn: Authn, debug?: boolean) => {
   const { config } = await fetchIntegrationConfig<{ config: AwsConfig }>(
     authn,
     "aws",
     debug
   );
 
-  const item = Object.entries(config?.["iam-write"] ?? {}).find(
-    ([_id, { state }]) => state === "installed"
-  );
+  const items = Object.entries(config?.["iam-write"] ?? {})
+    .filter(([_id, { state }]) => state === "installed")
+    .map(([id, item]) => ({ id, ...item }));
 
-  if (!item) throw `P0 is not installed on any AWS account`;
+  if (!items.length) throw `P0 is not installed on any AWS account`;
 
-  return { identity, config: { id: item[0], ...item[1] } };
+  return items;
 };
 
 export const getAwsConfig = async (

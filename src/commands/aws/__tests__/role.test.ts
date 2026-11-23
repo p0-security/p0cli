@@ -114,4 +114,35 @@ describe("aws role", () => {
       });
     });
   });
+
+  describe("an Identity Center account installed before a federated account", () => {
+    beforeEach(() => {
+      mockIntegrationConfigFetch.mockResolvedValue({
+        config: {
+          "iam-write": {
+            "0": { label: "idc", state: "installed", login: { type: "idc" } },
+            "1": {
+              label: "federated",
+              state: "installed",
+              login: {
+                type: "federated",
+                provider: {
+                  type: "okta",
+                  appId: "0oabcdefgh",
+                  identityProvider: "okta",
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it("should assume a role in the federated account", async () => {
+      await awsCommand(yargs()).parse(
+        "aws --account federated role assume Role1"
+      );
+      expect(mockPrint1).toHaveBeenCalled();
+    });
+  });
 });

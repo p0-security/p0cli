@@ -10,7 +10,7 @@ You should have received a copy of the GNU General Public License along with @p0
 **/
 import { authenticate } from "../../drivers/auth";
 import { print2 } from "../../drivers/stdio";
-import { getFirstAwsConfig } from "../../plugins/aws/config";
+import { getInstalledAwsConfigs } from "../../plugins/aws/config";
 import { permissionSet } from "./permission-set";
 import { rds } from "./rds";
 import { role } from "./role";
@@ -20,7 +20,7 @@ const awsArgs = async (yargs: yargs.Argv) => {
   try {
     const authn = await authenticate();
 
-    const { config } = await getFirstAwsConfig(authn);
+    const configs = await getInstalledAwsConfigs(authn);
 
     const base = yargs
       // This parent command hangs without a handler, if we require at
@@ -41,12 +41,12 @@ const awsArgs = async (yargs: yargs.Argv) => {
       .env("P0_AWS");
 
     const withRds = rds(base, authn);
-    const withCommand =
-      config.login?.type === "idc"
-        ? permissionSet(withRds, authn)
-        : role(withRds, authn);
-
-    return withCommand;
+    // Each assume command checks the login type of the account it gets
+    if (configs.some(({ login }) => login?.type === "idc"))
+      permissionSet(withRds, authn);
+    if (configs.some(({ login }) => login?.type !== "idc"))
+      role(withRds, authn);
+    return withRds;
   } catch (error) {
     // Handle authentication errors here, since
     // this occurs during command building
